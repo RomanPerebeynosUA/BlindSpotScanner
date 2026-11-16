@@ -47,3 +47,13 @@ byte-identical. Equivalence is: canonical serialize → store → read → deser
 identical bytes, and the canonical JSON is semantically equal (`JsonNode.DeepEquals`) to the
 source file. `ReportJsonSerializer` (Domain) is the only owner of the canonical options.
 `delta` is always written (`null` on a first scan), as in `examples/sample-report-previous.json`.
+
+## D11 — JsonSchema.Net validates reports (2026-11-16)
+The report schema is draft 2020-12 (`$defs`, `const`, type arrays), which NJsonSchema doesn't fully
+support. `ReportSchemaValidator` (Infrastructure) uses JsonSchema.Net with format assertion on, so
+`uuid`, `date-time` and `uri` are enforced. The schema is embedded; a test keeps it equal to
+`BlindSpotScanner-Blueprint/contracts/`.
+
+## D12 — Infrastructure test project (2026-11-16)
+`tests/BlindSpotScanner.Infrastructure.Tests` holds Infrastructure unit tests and the Testcontainers
+persistence tests. `Api.IntegrationTests` stays for HTTP-level tests.

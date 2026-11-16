@@ -29,7 +29,8 @@ src/
 tests/
   BlindSpotScanner.Domain.Tests/
   BlindSpotScanner.Application.Tests/
-  BlindSpotScanner.Api.IntegrationTests/
+  BlindSpotScanner.Infrastructure.Tests/   Infrastructure units + Testcontainers persistence (D12)
+  BlindSpotScanner.Api.IntegrationTests/   HTTP-level tests
 BlindSpotScanner.slnx
 global.json                         pins the .NET SDK (10.0.102, latestFeature)
 Directory.Build.props               Nullable, ImplicitUsings, TreatWarningsAsErrors for all projects
