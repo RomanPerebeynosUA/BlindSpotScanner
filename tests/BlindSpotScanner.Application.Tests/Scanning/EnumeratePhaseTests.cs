@@ -104,11 +104,41 @@ public class EnumeratePhaseTests
     }
 
     [Fact]
-    public async Task Enumerate_SubtreeStillTruncated_RecordsUnverifiedReason()
+    public async Task Enumerate_TruncatedRoot_ReadsEachTopLevelSubtreeRecursively()
     {
         // Arrange
         var repo = Repo(Bookstore);
         repo.TruncatedRecursive.Add(string.Empty);
+        var phase = new EnumeratePhase(repo);
+
+        // Act
+        await phase.EnumerateAsync(Run, Profile, CancellationToken.None);
+
+        // Assert (root recursive + root flat + one recursive read each for src/ and tests/)
+        repo.TreeRequests.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task Enumerate_Submodule_RecordsUnverifiedReason()
+    {
+        // Arrange
+        var repo = Repo(Bookstore);
+        repo.Submodules.Add("libs/payments");
+        var phase = new EnumeratePhase(repo);
+
+        // Act
+        var inventory = await phase.EnumerateAsync(Run, Profile, CancellationToken.None);
+
+        // Assert
+        inventory.UnverifiedReasons.Should().Equal("submodule at 'libs/payments' was not enumerated");
+    }
+
+    [Fact]
+    public async Task Enumerate_SubtreeStillTruncated_RecordsUnverifiedReason()
+    {
+        // Arrange (every read on the path down to tests/Api.UnitTests is truncated)
+        var repo = Repo(Bookstore);
+        repo.TruncatedRecursive.UnionWith([string.Empty, "tests", "tests/Api.UnitTests"]);
         repo.TruncatedFlat.Add("tests/Api.UnitTests");
         var phase = new EnumeratePhase(repo);
 

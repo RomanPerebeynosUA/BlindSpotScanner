@@ -30,51 +30,58 @@ public sealed class EnumeratePhase(IGitHubClient github)
     }
 
     /// <summary>
-    /// One recursive read; if GitHub truncates it, walk tree by tree without recursion. A single
-    /// tree that is still truncated is recorded, never silently counted as complete.
+    /// Recursive read first. Only a tree whose recursive read is truncated is opened one level
+    /// (its children are each tried recursively again), so a huge repo costs requests only along the
+    /// truncated paths, not one per directory. A tree that is still truncated, and every submodule,
+    /// is recorded: never silently counted as complete.
     /// </summary>
     private async Task<(Dictionary<string, GitTreeEntry> Blobs, List<string> UnverifiedReasons)> ListBlobsAsync(RunContext run, CancellationToken ct)
     {
         var blobs = new Dictionary<string, GitTreeEntry>(StringComparer.Ordinal);
         var reasons = new List<string>();
+        await ReadTreeAsync(run, prefix: string.Empty, run.CommitSha, blobs, reasons, ct);
+        return (blobs, reasons);
+    }
 
-        var recursive = await github.GetTreeAsync(run.Owner, run.Name, run.CommitSha, recursive: true, ct);
+    private async Task ReadTreeAsync(RunContext run, string prefix, string sha, Dictionary<string, GitTreeEntry> blobs, List<string> reasons, CancellationToken ct)
+    {
+        var recursive = await github.GetTreeAsync(run.Owner, run.Name, sha, recursive: true, ct);
         if (!recursive.Truncated)
         {
-            foreach (var entry in recursive.Entries.Where(e => e.Type == GitEntryType.Blob))
-            {
-                blobs[entry.Path] = entry;
-            }
-
-            return (blobs, reasons);
+            Collect(prefix, recursive.Entries, blobs, reasons);
+            return;
         }
 
-        var pending = new Queue<(string Prefix, string Sha)>([(string.Empty, run.CommitSha)]);
-        while (pending.TryDequeue(out var tree))
+        var level = await github.GetTreeAsync(run.Owner, run.Name, sha, recursive: false, ct);
+        if (level.Truncated)
         {
-            var level = await github.GetTreeAsync(run.Owner, run.Name, tree.Sha, recursive: false, ct);
-            if (level.Truncated)
-            {
-                var at = tree.Prefix.Length == 0 ? "(root)" : tree.Prefix.TrimEnd('/');
-                reasons.Add($"tree truncated at '{at}'; files below it were not enumerated");
-            }
-
-            foreach (var entry in level.Entries)
-            {
-                var path = tree.Prefix + entry.Path;
-                switch (entry.Type)
-                {
-                    case GitEntryType.Blob:
-                        blobs[path] = entry with { Path = path };
-                        break;
-                    case GitEntryType.Tree:
-                        pending.Enqueue((path + "/", entry.Sha));
-                        break;
-                }
-            }
+            var at = prefix.Length == 0 ? "(root)" : prefix.TrimEnd('/');
+            reasons.Add($"tree truncated at '{at}'; files below it were not enumerated");
         }
 
-        return (blobs, reasons);
+        Collect(prefix, level.Entries, blobs, reasons);
+        foreach (var subtree in level.Entries.Where(e => e.Type == GitEntryType.Tree))
+        {
+            await ReadTreeAsync(run, $"{prefix}{subtree.Path}/", subtree.Sha, blobs, reasons, ct);
+        }
+    }
+
+    private static void Collect(string prefix, IEnumerable<GitTreeEntry> entries, Dictionary<string, GitTreeEntry> blobs, List<string> reasons)
+    {
+        foreach (var entry in entries)
+        {
+            var path = prefix + entry.Path;
+            switch (entry.Type)
+            {
+                case GitEntryType.Blob:
+                    blobs[path] = entry with { Path = path };
+                    break;
+                case GitEntryType.Commit:
+                    // Submodule content lives in another repository; it is not read (principle 1: say so).
+                    reasons.Add($"submodule at '{path}' was not enumerated");
+                    break;
+            }
+        }
     }
 
     private static HashSet<string> Match(IEnumerable<string> paths, IEnumerable<string> includes, IEnumerable<string> excludes)

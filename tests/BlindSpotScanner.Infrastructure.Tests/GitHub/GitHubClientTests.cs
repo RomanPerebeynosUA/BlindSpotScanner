@@ -70,6 +70,47 @@ public sealed class GitHubClientTests : IDisposable
     }
 
     [Fact]
+    public async Task GetBranchHeadSha_BranchNotFound_NamesTheBranch()
+    {
+        // Arrange
+        Respond("/repos/example-org/bookstore-api/branches/*", 404, new { message = "Branch not found" });
+
+        // Act
+        var act = () => CreateClient().GetBranchHeadShaAsync("example-org", "bookstore-api", "mian", CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<GitHubNotFoundException>())
+            .Which.Message.Should().Be("Branch 'mian' was not found in example-org/bookstore-api (or the repository is empty).");
+    }
+
+    [Fact]
+    public async Task GetRepository_Forbidden_ThrowsAccessDenied()
+    {
+        // Arrange
+        Respond("/repos/example-org/bookstore-api", 403, new { message = "Resource protected by organization SAML enforcement." });
+
+        // Act
+        var act = () => CreateClient().GetRepositoryAsync("example-org", "bookstore-api", CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<GitHubAuthenticationException>())
+            .Which.Message.Should().Be("GitHub denied access to example-org/bookstore-api; the token lacks permission or SSO authorization.");
+    }
+
+    [Fact]
+    public async Task GetTree_EmptyRepository_ThrowsNotFound()
+    {
+        // Arrange
+        Respond("/repos/example-org/bookstore-api/git/trees/abc", 409, new { message = "Git Repository is empty." });
+
+        // Act
+        var act = () => CreateClient().GetTreeAsync("example-org", "bookstore-api", "abc", recursive: true, CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<GitHubNotFoundException>()).Which.Message.Should().Be("Repository example-org/bookstore-api is empty.");
+    }
+
+    [Fact]
     public async Task AnyRequest_WithToken_SendsBearerAndApiHeaders()
     {
         // Arrange

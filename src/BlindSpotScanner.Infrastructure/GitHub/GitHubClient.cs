@@ -41,7 +41,12 @@ public sealed class GitHubClient : IGitHubClient
     }
 
     public async Task<string> GetBranchHeadShaAsync(string owner, string name, string branch, CancellationToken ct) =>
-        (await GetAsync<BranchDto>(owner, name, $"{Repo(owner, name)}/branches/{Uri.EscapeDataString(branch)}", ct)).Commit.Sha;
+        (await GetAsync<BranchDto>(
+            owner,
+            name,
+            $"{Repo(owner, name)}/branches/{Uri.EscapeDataString(branch)}",
+            ct,
+            notFound: $"Branch '{branch}' was not found in {owner}/{name} (or the repository is empty).")).Commit.Sha;
 
     public async Task<GitTree> GetTreeAsync(string owner, string name, string treeSha, bool recursive, CancellationToken ct)
     {
@@ -61,15 +66,21 @@ public sealed class GitHubClient : IGitHubClient
 
     private static string Repo(string owner, string name) => $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}";
 
-    private async Task<T> GetAsync<T>(string owner, string name, string path, CancellationToken ct)
+    /// <param name="notFound">The 404 message for this call; defaults to the repository message.</param>
+    private async Task<T> GetAsync<T>(string owner, string name, string path, CancellationToken ct, string? notFound = null)
     {
         using var response = await _http.GetAsync(path, ct);
         switch (response.StatusCode)
         {
             case HttpStatusCode.NotFound:
-                throw new GitHubNotFoundException($"Repository {owner}/{name} was not found or the token has no access to it.");
+                throw new GitHubNotFoundException(notFound ?? $"Repository {owner}/{name} was not found or the token has no access to it.");
             case HttpStatusCode.Unauthorized:
                 throw new GitHubAuthenticationException("GitHub rejected the credentials; check the configured token.");
+            case HttpStatusCode.Forbidden:
+                // Rate-limit 403s were already handled by GitHubRateLimitHandler; this is missing permission or SSO.
+                throw new GitHubAuthenticationException($"GitHub denied access to {owner}/{name}; the token lacks permission or SSO authorization.");
+            case HttpStatusCode.Conflict:
+                throw new GitHubNotFoundException($"Repository {owner}/{name} is empty.");
         }
 
         response.EnsureSuccessStatusCode();
