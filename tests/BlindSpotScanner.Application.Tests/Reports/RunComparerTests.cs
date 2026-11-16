@@ -76,6 +76,33 @@ public class RunComparerTests
     }
 
     [Fact]
+    public void Compare_UnverifiedBecomesCovered_IsConfidenceChangedNotNewlyCovered()
+    {
+        // Arrange
+        var previous = Fixtures.Previous.WithEndpoint("GET", "api/books", e => e with { Status = CoverageStatus.Unverified });
+
+        // Act
+        var delta = RunComparer.Compare(previous, Fixtures.Current);
+
+        // Assert
+        new { delta.Endpoints.ConfidenceChanged, delta.Endpoints.NewlyCovered }
+            .Should().BeEquivalentTo(new { ConfidenceChanged = new[] { "GET api/books" }, NewlyCovered = new[] { "POST api/orders" } });
+    }
+
+    [Fact]
+    public void Compare_WeakBecomesCovered_IsNewlyCovered()
+    {
+        // Arrange
+        var current = Fixtures.Current.WithEndpoint("GET", "api/books/{id}", e => e with { Status = CoverageStatus.Covered });
+
+        // Act
+        var delta = RunComparer.Compare(Fixtures.Previous, current);
+
+        // Assert
+        delta.Endpoints.NewlyCovered.Should().Equal("GET api/books/{id}", "POST api/orders");
+    }
+
+    [Fact]
     public void Compare_CoveredBecomesNone_IsRegressed()
     {
         // Arrange

@@ -18,6 +18,7 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
     private const int MaxHeadlineChars = 200;
     private const int MaxWhyItMattersWords = 35;
     private const int MaxWhyItMattersChars = 280;
+    private const decimal WeightSumTolerance = 0.0001m;
 
     public IReadOnlyList<string> Validate(IntegrationReport report, IntegrationReport? previous)
     {
@@ -81,8 +82,9 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
             }
         }
 
+        // Weights like 1/3 can't be exact decimals, so allow a rounding tolerance.
         var sum = scorecard.Sum(d => d.Weight);
-        if (sum != 1m)
+        if (Math.Abs(sum - 1m) > WeightSumTolerance)
         {
             violations.Add($"scorecard: weights sum to {Invariant(sum)}, not 1");
         }

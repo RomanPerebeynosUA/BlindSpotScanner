@@ -78,3 +78,9 @@ Doc 08 normalizes `{param}` *names* to `{}`. Route constraints are kept (`{id:in
 `GET items/{id:int}` and `GET items/{slug}` (both legal ASP.NET routes) stay distinct endpoints.
 If the same identity still occurs twice in one report (a route declared in two controllers),
 occurrences are paired in order rather than failing the comparison.
+
+## D15 — Nothing assessable: honest wording, weak verdict (2026-11-16)
+The schema's verdict enum has no "unknown" value, so a report with zero endpoints, or with every
+endpoint unverified, keeps `verdict: weak`. Its Overall bullet doesn't claim weakness: it says
+"Integration testing could not be assessed: …" (principle 1: never present unverified as a
+finding). Scorecard weights must sum to 1 within 0.0001, so weights like thirds can pass.

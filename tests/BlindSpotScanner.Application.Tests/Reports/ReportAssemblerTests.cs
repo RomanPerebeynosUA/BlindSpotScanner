@@ -92,6 +92,19 @@ public class ReportAssemblerTests
         new { summary.Verdict, summary.Endpoints.Total }.Should().BeEquivalentTo(new { Verdict = Verdict.Weak, Total = 0 });
     }
 
+    [Fact]
+    public void Assemble_AllEndpointsUnverified_OverallSaysNotAssessed()
+    {
+        // Arrange
+        var detail = CurrentDetail.WithStatusCounts(covered: 0, weak: 0, none: 0, unverified: 3);
+
+        // Act
+        var summary = ReportAssembler.Assemble(detail, previous: null).Summary;
+
+        // Assert
+        summary.Bullets[0].Text.Should().Be("Integration testing could not be assessed: none of the 3 API operations could be checked.");
+    }
+
     [Theory]
     [InlineData(80, Verdict.Strong)]
     [InlineData(79, Verdict.Moderate)]

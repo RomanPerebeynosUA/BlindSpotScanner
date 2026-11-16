@@ -148,6 +148,19 @@ public static class ReportAssembler
 
     private static SummaryBullet OverallBullet(Verdict verdict, StatusCounts endpoints)
     {
+        // The verdict enum has no "unknown" value (it stays weak), but the sentence must not claim
+        // testing is weak when nothing could be assessed (D15, principle 1).
+        if (endpoints.Total == 0)
+        {
+            return Bullet("Overall", "Integration testing could not be assessed: no API operations were found.");
+        }
+
+        if (endpoints.Unverified == endpoints.Total)
+        {
+            return Bullet("Overall", string.Create(Invariant,
+                $"Integration testing could not be assessed: none of the {endpoints.Total} API operations could be checked."));
+        }
+
         var text = string.Create(Invariant,
             $"Integration testing is {verdict.ToString().ToLowerInvariant()}: {endpoints.Covered} of {endpoints.Total} API operations are properly tested; {endpoints.Weak} more lightly tested.");
         var lowConfidence = endpoints.Total > 0 && (decimal)endpoints.Unverified / endpoints.Total > LowConfidenceUnverifiedShare;

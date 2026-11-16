@@ -142,6 +142,51 @@ public class ReportValidatorTests
     }
 
     [Fact]
+    public void Validate_WeightsSummingToOneWithinRounding_AreAccepted()
+    {
+        // Arrange
+        var original = Fixtures.Current;
+        var scorecard = original.Scorecard.ToList();
+        scorecard[6] = scorecard[6] with { Weight = 0.04999m };
+        var report = original with { Scorecard = scorecard };
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().NotContainMatch("scorecard: weights*");
+    }
+
+    [Fact]
+    public void Validate_TamperedRiskRank_IsReported()
+    {
+        // Arrange
+        var original = Fixtures.Current;
+        var risks = original.TopRisks.ToList();
+        risks[0] = risks[0] with { Rank = 2 };
+        var report = original with { TopRisks = risks };
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("topRisks/0/rank: expected 1, found 2");
+    }
+
+    [Fact]
+    public void Validate_StoredDeltaWithoutPreviousRun_IsReported()
+    {
+        // Arrange
+        var report = Fixtures.Current;
+
+        // Act
+        var violations = _validator.Validate(report, previous: null);
+
+        // Assert
+        violations.Should().ContainMatch("delta: expected null, found *");
+    }
+
+    [Fact]
     public void Validate_CoveredEndpointNotVerified_IsReported()
     {
         // Arrange
