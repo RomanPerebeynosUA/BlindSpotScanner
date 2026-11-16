@@ -1,4 +1,4 @@
-# TestWorker1.0
+# BlindSpotScanner
 
 Web application: Angular frontend + ASP.NET Core (.NET 10, C#) backend.
 
@@ -10,7 +10,7 @@ src/
   Api/            ASP.NET Core Web API (.NET 10)
   Api.Tests/      xUnit tests for Api
   web/            Angular app (standalone components)
-TestWorker.sln
+BlindSpotScanner.sln
 ```
 
 ## Commands
