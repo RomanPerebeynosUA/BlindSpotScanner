@@ -1,0 +1,234 @@
+{
+ "sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+ "truncated": false,
+ "tree": [
+  {
+   "path": "README.md",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "8ec9a00bfd09b3190ac6b22251dbb1aa95a0579d",
+   "size": 1000
+  },
+  {
+   "path": "src",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "0c76ed371877981d7f6f2d5df35033b860e3a6be"
+  },
+  {
+   "path": "src/Bookstore.Api",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "8bd71bb6d8cbe5205dae678dfa2f41a8bf988f8f"
+  },
+  {
+   "path": "src/Bookstore.Api/Controllers",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "c69be35cc749c43355defb1289b67cdc15b93b27"
+  },
+  {
+   "path": "src/Bookstore.Api/Controllers/BooksController.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "80ac94fdd9682dcf4da4f52a83910e6d5e9cdecd",
+   "size": 1000
+  },
+  {
+   "path": "src/Bookstore.Api/Controllers/OrdersController.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "eb2f63b8fec6c9a27cbd4c787b288dc7a3f29f04",
+   "size": 1000
+  },
+  {
+   "path": "src/Bookstore.Api/Generated",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "918593d339e290747c9e61c2929a95988fb3c635"
+  },
+  {
+   "path": "src/Bookstore.Api/Generated/Controllers",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "58b3400cd4d3969ecf4054d4db588fbdc456f180"
+  },
+  {
+   "path": "src/Bookstore.Api/Generated/Controllers/ClientController.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "23dab0c688116aef730381cd6d4be5b0f19a22a6",
+   "size": 1000
+  },
+  {
+   "path": "src/Bookstore.Api/Program.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "8b6618b3af65a2943edd73cd7f8c2b6c4e10810d",
+   "size": 1000
+  },
+  {
+   "path": "src/Bookstore.Api/Services",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "a1620ee783bcae0f809709212da5936ec34adc77"
+  },
+  {
+   "path": "src/Bookstore.Api/Services/PaymentGateway.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "93012a957c1c87a959a712e47a3aca04c0732e76",
+   "size": 1000
+  },
+  {
+   "path": "src/Bookstore.Api/obj",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "08a56b201c19a9f45fd6e883df5e0dd9d148fbc5"
+  },
+  {
+   "path": "src/Bookstore.Api/obj/Debug",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "ec63e1307bc8cbdc8bc27e62d176ca2d8d5cba14"
+  },
+  {
+   "path": "src/Bookstore.Api/obj/Debug/net10.0",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "20c07f676eed88fc8b3832760d6c858f5d231258"
+  },
+  {
+   "path": "src/Bookstore.Api/obj/Debug/net10.0/Controllers",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "e4b9a40e3655d0fcfbbd0a3930b086f295dd907a"
+  },
+  {
+   "path": "src/Bookstore.Api/obj/Debug/net10.0/Controllers/ScaffoldController.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "1b4700b0e71f0b99272a73359710d42d47ede26e",
+   "size": 1000
+  },
+  {
+   "path": "tests",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "01efda7d15396e5a2b80c53a517e603ddf3614f4"
+  },
+  {
+   "path": "tests/Bookstore.IntegrationTests",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "dd9cf7a232eea5a2ae6620eaef1d72b252db7183"
+  },
+  {
+   "path": "tests/Bookstore.IntegrationTests/ApiFactory.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "e2493f2b435153c652e3d17ae5b4d3f4a1f41f5e",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.IntegrationTests/BooksApiTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "7833c50c167fea0021e1d9817bd2a3dab9481ef0",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.IntegrationTests/Controllers",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "86e10eeeaaee44cade8ec8ed130b8bf452ee800f"
+  },
+  {
+   "path": "tests/Bookstore.IntegrationTests/Controllers/FakeGatewayController.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "c1d7df59377b9deff147e7a98693835a11c673ce",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.IntegrationTests/OrdersApiTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "bc059788bab3840ce2d626eb214c0f610fd862ec",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.UnitTests",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "984809f1faf00a0a46720e76ebb9797c7cbd70c8"
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/BookMapperTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "326d70dc4942b3496011dec1b63f3552572d38d2",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/DiscountTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "32e0d1cd1891527e909a56b7a868a87b8cb2dfc0",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/IsbnTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "0f6c921b4ec2923313ae5eee6465b96d3029376d",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/OrderValidatorTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "6770f71270a8ae54720318270514ae966287a33d",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/PriceCalculatorTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "887fb59cfe5dc0d35c63be11de4c01d4e797c4ca",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/StockTests.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "14c65c230ad16216b30b60ff6909b247a4baa0ca",
+   "size": 1000
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/bin",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "88d1abdd8d3586514dff0bbe0574ecabe46cd48f"
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/bin/Debug",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "cf19948db066d374ae9e7c0fee94af1df07a3b16"
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/bin/Debug/net10.0",
+   "mode": "040000",
+   "type": "tree",
+   "sha": "0ad0fb30ee0c832cd820d8f7d48376ce56f18a9d"
+  },
+  {
+   "path": "tests/Bookstore.UnitTests/bin/Debug/net10.0/Copied.cs",
+   "mode": "100644",
+   "type": "blob",
+   "sha": "d406eb19ae17e39e8aac184f3d8506a3ac6d6de8",
+   "size": 1000
+  }
+ ]
+}
