@@ -26,7 +26,7 @@ public sealed record ReportMeta
     public required ReportRepo Repo { get; init; }
     public required string Branch { get; init; }
     public required string CommitSha { get; init; }
-    public required DateTime GeneratedAt { get; init; }
+    public required DateTimeOffset GeneratedAt { get; init; }
     public required string ModelId { get; init; }
     public required string PromptSetVersion { get; init; }
     public required int ProfileVersion { get; init; }

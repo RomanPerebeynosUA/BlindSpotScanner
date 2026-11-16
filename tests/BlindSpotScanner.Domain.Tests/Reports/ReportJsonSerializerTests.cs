@@ -65,6 +65,34 @@ public class ReportJsonSerializerTests
     }
 
     [Fact]
+    public void Serialize_GeneratedAtWithOffset_IsWrittenAsUtc()
+    {
+        // Arrange
+        var node = JsonNode.Parse(Fixture("sample-report.json"))!;
+        node["meta"]!["generatedAt"] = "2026-11-15T10:00:00+02:00";
+
+        // Act
+        var canonical = ReportJsonSerializer.Serialize(ReportJsonSerializer.Deserialize(node.ToJsonString()));
+
+        // Assert
+        canonical.Should().Contain("\"generatedAt\":\"2026-11-15T08:00:00Z\"");
+    }
+
+    [Fact]
+    public void Deserialize_GeneratedAtWithoutOffset_Throws()
+    {
+        // Arrange
+        var node = JsonNode.Parse(Fixture("sample-report.json"))!;
+        node["meta"]!["generatedAt"] = "2026-11-15T10:00:00";
+
+        // Act
+        var act = () => ReportJsonSerializer.Deserialize(node.ToJsonString());
+
+        // Assert
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
     public void Deserialize_UnknownProperty_Throws()
     {
         // Arrange

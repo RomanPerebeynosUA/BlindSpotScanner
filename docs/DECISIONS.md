@@ -47,6 +47,8 @@ byte-identical. Equivalence is: canonical serialize → store → read → deser
 identical bytes, and the canonical JSON is semantically equal (`JsonNode.DeepEquals`) to the
 source file. `ReportJsonSerializer` (Domain) is the only owner of the canonical options.
 `delta` is always written (`null` on a first scan), as in `examples/sample-report-previous.json`.
+Report timestamps must carry an explicit offset and are always written as UTC (`…Z`), so the
+canonical bytes never depend on the machine's time zone.
 
 ## D11 — JsonSchema.Net validates reports (2026-11-16)
 The report schema is draft 2020-12 (`$defs`, `const`, type arrays), which NJsonSchema doesn't fully

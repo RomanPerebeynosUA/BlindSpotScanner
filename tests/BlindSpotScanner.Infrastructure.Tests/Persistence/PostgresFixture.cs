@@ -52,8 +52,10 @@ public sealed class PostgresFixture : IAsyncLifetime
     public async Task<ScanRun> AddRunWithReportAsync(string fixture, bool succeed)
     {
         var repository = await AddRepositoryAsync();
-        var run = new ScanRun(Guid.NewGuid(), repository.Id, "main", "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", "claude-sonnet-x", "1.0.0", 1);
-        run.RecordReport(LoadReport(fixture, run.Id));
+        var report = LoadReport(fixture, Guid.NewGuid());
+        var meta = report.Meta;
+        var run = new ScanRun(meta.RunId, repository.Id, meta.Branch, meta.CommitSha, meta.ModelId, meta.PromptSetVersion, meta.ProfileVersion);
+        run.RecordReport(report);
         if (succeed)
         {
             run.Succeed();

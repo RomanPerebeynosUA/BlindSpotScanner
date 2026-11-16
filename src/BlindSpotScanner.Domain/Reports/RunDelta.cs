@@ -8,7 +8,7 @@ public sealed record RunDelta
 {
     public required Guid BaseRunId { get; init; }
     public required string BaseCommitSha { get; init; }
-    public required DateTime BaseGeneratedAt { get; init; }
+    public required DateTimeOffset BaseGeneratedAt { get; init; }
     public required bool Comparable { get; init; }
     public required IReadOnlyList<string> Comparability { get; init; }
     public required IReadOnlyList<DeltaMetric> Metrics { get; init; }

@@ -53,8 +53,18 @@ public class ScanRun
             throw new InvalidOperationException($"The report belongs to run {report.Meta.RunId}, not to run {Id}.");
         }
 
+        // Citations are verified at the run's pinned commit, so the report must describe exactly that run.
+        var meta = report.Meta;
+        if (meta.CommitSha != CommitSha || meta.Branch != Branch || meta.ModelId != ModelId
+            || meta.PromptSetVersion != PromptSetVersion || meta.ProfileVersion != ProfileVersion)
+        {
+            throw new InvalidOperationException(
+                $"The report's pinned identity ({meta.Branch}@{meta.CommitSha}, {meta.ModelId}, prompts {meta.PromptSetVersion}, profile v{meta.ProfileVersion}) " +
+                $"doesn't match run {Id} ({Branch}@{CommitSha}, {ModelId}, prompts {PromptSetVersion}, profile v{ProfileVersion}).");
+        }
+
         ReportJson = ReportJsonSerializer.Serialize(report);
-        GeneratedAt = new DateTimeOffset(report.Meta.GeneratedAt, TimeSpan.Zero);
+        GeneratedAt = report.Meta.GeneratedAt.ToUniversalTime();
         CostUsd = report.Meta.CostUsd ?? 0m;
         PreviousRunId = report.Summary.PreviousRunId;
 

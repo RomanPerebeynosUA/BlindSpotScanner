@@ -72,6 +72,36 @@ public class ScanRunTests
     }
 
     [Fact]
+    public void RecordReport_ReportAtAnotherCommit_Throws()
+    {
+        // Arrange
+        var run = NewRun(SampleRunId);
+        var report = SampleReport();
+        var atOtherCommit = report with { Meta = report.Meta with { CommitSha = "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567" } };
+
+        // Act
+        var act = () => run.RecordReport(atOtherCommit);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void RecordReport_GeneratedAtWithOffset_StoresSameInstant()
+    {
+        // Arrange
+        var run = NewRun(SampleRunId);
+        var report = SampleReport();
+        var withOffset = report with { Meta = report.Meta with { GeneratedAt = new DateTimeOffset(2026, 11, 15, 10, 0, 0, TimeSpan.FromHours(2)) } };
+
+        // Act
+        run.RecordReport(withOffset);
+
+        // Assert
+        run.GeneratedAt.Should().Be(new DateTimeOffset(2026, 11, 15, 8, 0, 0, TimeSpan.Zero));
+    }
+
+    [Fact]
     public void Succeed_WithoutReport_Throws()
     {
         // Arrange

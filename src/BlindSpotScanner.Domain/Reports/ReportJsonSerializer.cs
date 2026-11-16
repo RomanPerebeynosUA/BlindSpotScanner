@@ -32,6 +32,7 @@ public static class ReportJsonSerializer
             WriteIndented = false,
         };
         options.Converters.Add(new JsonStringEnumConverter());
+        options.Converters.Add(new UtcTimestampConverter());
         options.MakeReadOnly(populateMissingResolver: true);
         return options;
     }

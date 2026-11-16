@@ -218,15 +218,14 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                 table: "scan_steps",
                 column: "scan_run_id");
 
-            // Reports are immutable (principle 7): once a run has succeeded, neither its report nor
-            // its status may change, so the report can't be edited by moving the status back first.
+            // Reports are immutable (principle 7): once a run has succeeded, no column may change.
+            // That covers the report, its status (no two-step bypass) and the headline columns the
+            // UI lists, which must always equal the immutable report.
             migrationBuilder.Sql("""
                 CREATE FUNCTION scan_runs_report_immutable() RETURNS trigger AS $$
                 BEGIN
-                    IF OLD.status = 'Succeeded'
-                       AND (NEW.report_json IS DISTINCT FROM OLD.report_json
-                            OR NEW.status IS DISTINCT FROM OLD.status) THEN
-                        RAISE EXCEPTION 'scan run % is succeeded; its report is immutable', OLD.id;
+                    IF OLD.status = 'Succeeded' THEN
+                        RAISE EXCEPTION 'scan run % is succeeded; it is immutable', OLD.id;
                     END IF;
                     RETURN NEW;
                 END;
