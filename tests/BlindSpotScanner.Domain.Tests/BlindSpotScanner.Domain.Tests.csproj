@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\BlindSpotScanner-Blueprint\examples\*.json" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\BlindSpotScanner.Domain\BlindSpotScanner.Domain.csproj" />
   </ItemGroup>
 
