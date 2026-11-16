@@ -33,6 +33,7 @@ tests/
   BlindSpotScanner.Api.IntegrationTests/   HTTP-level tests
 BlindSpotScanner.slnx
 global.json                         pins the .NET SDK (10.0.102, latestFeature)
+dotnet-tools.json                   local tools (dotnet-ef); run `dotnet tool restore`
 Directory.Build.props               Nullable, ImplicitUsings, TreatWarningsAsErrors for all projects
 docker-compose.yml                  db, api, worker, web
 .env.example                        copy to .env (gitignored) before docker compose
@@ -46,7 +47,8 @@ The Api and Worker each have a `Dockerfile` (build context: repo root). `src/web
 |---|---|---|
 | Restore/install | `dotnet restore` | `npm ci` |
 | Build | `dotnet build` | `npx ng build` |
-| Test | `dotnet test` (integration tests need Docker running) | `npx ng test --watch=false` |
+| Test | `dotnet test` (Infrastructure and Api integration tests need Docker running) | `npx ng test --watch=false` |
+| Migrations | `dotnet tool restore`, then `dotnet ef migrations add <Name> --project src/BlindSpotScanner.Infrastructure --output-dir Persistence/Migrations` | |
 | Run | `dotnet run --project src/BlindSpotScanner.Api` and `--project src/BlindSpotScanner.Worker` | `npx ng serve` |
 | Lint/format | `dotnet format --verify-no-changes` | `npx ng lint` |
 | Everything | copy `.env.example` to `.env`, then `docker compose up --build` (web: http://localhost:8080, api: http://localhost:5080/health) | |

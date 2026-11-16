@@ -51,6 +51,20 @@ public class ReportJsonSerializerTests
     }
 
     [Fact]
+    public void Serialize_ClassificationKeysInAnotherOrder_ProducesSameBytes()
+    {
+        // Arrange
+        var node = JsonNode.Parse(Fixture("sample-report.json"))!;
+        node["inventory"]!["classification"] = new JsonObject { ["unit"] = 6, ["other"] = 1, ["integration"] = 3 };
+
+        // Act
+        var reordered = ReportJsonSerializer.Serialize(ReportJsonSerializer.Deserialize(node.ToJsonString()));
+
+        // Assert
+        reordered.Should().Be(CanonicalSample());
+    }
+
+    [Fact]
     public void Deserialize_UnknownProperty_Throws()
     {
         // Arrange

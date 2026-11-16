@@ -47,7 +47,15 @@ public sealed record ReportInventory
     public required int EndpointsTotal { get; init; }
     public required int TestFilesTotal { get; init; }
     public required int IntegrationTestFiles { get; init; }
-    public IReadOnlyDictionary<string, int>? Classification { get; init; }
+    /// <summary>
+    /// Kept in ordinal key order so the canonical bytes don't depend on input order
+    /// (jsonb sorts object keys, so a stored report comes back in a different order).
+    /// </summary>
+    public IReadOnlyDictionary<string, int>? Classification
+    {
+        get;
+        init => field = value is null ? null : new SortedDictionary<string, int>(value.ToDictionary(), StringComparer.Ordinal);
+    }
     public int? ReadInFull { get; init; }
     public IReadOnlyList<string>? UnverifiedReasons { get; init; }
 }
