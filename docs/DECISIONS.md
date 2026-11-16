@@ -59,3 +59,16 @@ support. `ReportSchemaValidator` (Infrastructure) uses JsonSchema.Net with forma
 ## D12 — Infrastructure test project (2026-11-16)
 `tests/BlindSpotScanner.Infrastructure.Tests` holds Infrastructure unit tests and the Testcontainers
 persistence tests. `Api.IntegrationTests` stays for HTTP-level tests.
+
+## D13 — Summary derivation choices the spec leaves open (2026-11-16)
+`ReportAssembler` (Application) derives the summary from the detail:
+- `falsePositiveCount`, `skippedTestCount` and `uncoveredRealSeams` count findings of kind
+  `FalsePositive`, `SkippedTest` and `UncoveredSeam`.
+- Rounding is `MidpointRounding.AwayFromZero` (score to 0.1, assessable % to whole numbers).
+- Texts not fixed by doc 06/07: a null score labels "Not scorable"; a non-`real-seam` mapping
+  appends " — not comparable to real-seam scores ({mapping})"; more than 25% unverified appends
+  " (low confidence: many endpoints unverified)" to the Overall bullet; a null score in
+  "Since last scan" prints "N/A".
+- `examples/sample-report-previous.json` had `summary.uncoveredRealSeams: 1` with no
+  `UncoveredSeam` finding (the current report's delta lists that seam as new). It was corrected
+  to `0`, so both examples assemble exactly.

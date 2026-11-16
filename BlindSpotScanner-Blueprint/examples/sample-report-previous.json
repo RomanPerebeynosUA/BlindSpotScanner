@@ -74,7 +74,7 @@
     "qualityScore": 4.7, "weightAssessablePct": 90,
     "scoreLabel": "4.7 / 10 across scored dimensions (90% of weight assessable)",
     "integrationMappedTo": "real-seam",
-    "falsePositiveCount": 1, "skippedTestCount": 0, "uncoveredRealSeams": 1,
+    "falsePositiveCount": 1, "skippedTestCount": 0, "uncoveredRealSeams": 0,
     "verdict": "partial",
     "bullets": [
       { "label": "Overall", "text": "Integration testing is partial: 2 of 5 API operations are properly tested; 1 more lightly tested." },
