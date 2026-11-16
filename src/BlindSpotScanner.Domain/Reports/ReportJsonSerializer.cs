@@ -31,7 +31,8 @@ public static class ReportJsonSerializer
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             WriteIndented = false,
         };
-        options.Converters.Add(new JsonStringEnumConverter());
+        // Enum values must be the schema's strings; numeric values are rejected.
+        options.Converters.Add(new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false));
         options.Converters.Add(new UtcTimestampConverter());
         options.MakeReadOnly(populateMissingResolver: true);
         return options;
