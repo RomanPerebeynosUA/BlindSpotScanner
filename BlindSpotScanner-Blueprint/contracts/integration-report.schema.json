@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "integration-report.schema.json",
+  "title": "Integration Coverage Report",
+  "type": "object",
+  "required": ["meta", "inventory", "endpointCoverage", "scorecard", "findings", "topRisks", "summary", "validation"],
+  "$defs": {
+    "status": { "enum": ["covered", "weak", "skipped", "none", "unverified"] },
+    "citation": { "type": "string", "pattern": "^[^:]+\\.[A-Za-z0-9]+::[A-Za-z_][\\w.]*$" },
+    "counts": {
+      "type": "object",
+      "required": ["total", "covered", "weak", "skipped", "none", "unverified"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 }, "covered": { "type": "integer", "minimum": 0 },
+        "weak": { "type": "integer", "minimum": 0 }, "skipped": { "type": "integer", "minimum": 0 },
+        "none": { "type": "integer", "minimum": 0 }, "unverified": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "severity": { "enum": ["Critical", "High", "Medium", "Low"] }
+  },
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["schemaVersion", "runId", "repo", "branch", "commitSha", "generatedAt", "modelId", "promptSetVersion", "profileVersion", "integrationMappedTo"],
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "runId": { "type": "string", "format": "uuid" },
+        "repo": { "type": "object", "required": ["owner", "name", "url"], "properties": { "owner": { "type": "string" }, "name": { "type": "string" }, "url": { "type": "string", "format": "uri" } } },
+        "branch": { "type": "string" },
+        "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "modelId": { "type": "string" },
+        "promptSetVersion": { "type": "string" },
+        "profileVersion": { "type": "integer" },
+        "integrationMappedTo": { "enum": ["real-seam", "e2e-mocked-data", "e2e-real-backend", "contract", "other"] },
+        "costUsd": { "type": "number" }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "required": ["controllerFiles", "endpointsTotal", "testFilesTotal", "integrationTestFiles"],
+      "properties": {
+        "controllerFiles": { "type": "integer" }, "endpointsTotal": { "type": "integer" },
+        "testFilesTotal": { "type": "integer" }, "integrationTestFiles": { "type": "integer" },
+        "classification": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "readInFull": { "type": "integer" },
+        "unverifiedReasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "endpointCoverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["controller", "sourcePath", "status", "endpoints"],
+        "properties": {
+          "controller": { "type": "string" }, "sourcePath": { "type": "string" }, "routePrefix": { "type": "string" },
+          "status": { "$ref": "#/$defs/status" },
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["method", "route", "status", "verified", "evidence"],
+              "properties": {
+                "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
+                "route": { "type": "string" },
+                "status": { "$ref": "#/$defs/status" },
+                "verified": { "type": "boolean" },
+                "evidence": { "type": "array", "items": { "$ref": "#/$defs/citation" } },
+                "falsePositive": { "type": "boolean" },
+                "notes": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "scorecard": {
+      "type": "array", "minItems": 7, "maxItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["id", "dimension", "weight", "score", "scorable", "justificationBullets"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1, "maximum": 7 },
+          "dimension": { "type": "string" },
+          "weight": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+          "score": { "type": ["integer", "null"], "minimum": 1, "maximum": 10 },
+          "scorable": { "type": "boolean" },
+          "confidence": { "enum": ["High", "Med", "Low"] },
+          "justificationBullets": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "string" } },
+          "evidence": { "type": "array", "items": { "$ref": "#/$defs/citation" } }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "severity", "stableKey", "headline", "evidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "enum": ["UncoveredEndpoint", "WeakTest", "FalsePositive", "SkippedTest", "UncoveredSeam", "Risk"] },
+          "severity": { "$ref": "#/$defs/severity" },
+          "stableKey": { "type": "string" },
+          "headline": { "type": "string" },
+          "detail": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "topRisks": {
+      "type": "array", "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["rank", "headline", "whyItMatters", "severity", "detail"],
+        "properties": {
+          "rank": { "type": "integer", "minimum": 1 },
+          "headline": { "type": "string", "maxLength": 200 },
+          "whyItMatters": { "type": "string", "maxLength": 280 },
+          "severity": { "$ref": "#/$defs/severity" },
+          "detail": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string" } },
+          "evidence": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["endpoints", "controllers", "qualityScore", "weightAssessablePct", "scoreLabel", "integrationMappedTo", "verdict", "bullets"],
+      "properties": {
+        "endpoints": { "$ref": "#/$defs/counts" },
+        "controllers": { "$ref": "#/$defs/counts" },
+        "qualityScore": { "type": ["number", "null"] },
+        "weightAssessablePct": { "type": "number" },
+        "scoreLabel": { "type": "string" },
+        "integrationMappedTo": { "type": "string" },
+        "falsePositiveCount": { "type": "integer" },
+        "skippedTestCount": { "type": "integer" },
+        "uncoveredRealSeams": { "type": "integer" },
+        "verdict": { "enum": ["strong", "moderate", "partial", "weak"] },
+        "bullets": { "type": "array", "items": { "type": "object", "required": ["label", "text"], "properties": { "label": { "type": "string" }, "text": { "type": "string" } } } },
+        "previousRunId": { "type": ["string", "null"] }
+      }
+    },
+    "delta": { "type": ["object", "null"], "description": "See docs/08-run-comparison.md" },
+    "validation": {
+      "type": "object",
+      "required": ["passed", "method", "violations"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "method": { "const": "script" },
+        "violations": { "type": "array", "items": { "type": "string" } },
+        "citationsChecked": { "type": "integer" },
+        "citationsResolved": { "type": "integer" }
+      }
+    }
+  }
+}

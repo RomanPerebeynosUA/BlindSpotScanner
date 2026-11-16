@@ -1,0 +1,87 @@
+openapi: 3.1.0
+info:
+  title: Integration Coverage Analyzer API
+  version: 1.0.0
+servers:
+  - url: /api
+paths:
+  /repositories:
+    get:
+      summary: List repositories with latest run headline
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/RepositorySummary' } } } } } }
+    post:
+      summary: Register a repository by GitHub URL
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateRepository' } } } }
+      responses: { '201': { description: Created }, '400': { description: Invalid URL }, '404': { description: Repo not accessible } }
+  /repositories/{repoId}:
+    get: { summary: Repository details, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: OK } } }
+  /repositories/{repoId}/profile:
+    get: { summary: Current profile, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: OK } } }
+    put: { summary: Save new profile version, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: OK } } }
+  /repositories/{repoId}/profile/draft:
+    post: { summary: AI-draft a profile, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: Draft markdown + open questions } } }
+  /repositories/{repoId}/scans:
+    post:
+      summary: Start a scan (async)
+      parameters: [ { $ref: '#/components/parameters/repoId' } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { branch: { type: string }, maxCostUsd: { type: number } } } } } }
+      responses: { '202': { description: Accepted, content: { application/json: { schema: { type: object, properties: { runId: { type: string, format: uuid } } } } } } }
+  /repositories/{repoId}/runs:
+    get: { summary: Run history (headline columns), parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: OK } } }
+  /runs/{runId}:
+    get:
+      summary: Full report (integration-report.schema.json) or run status if not finished
+      parameters: [ { $ref: '#/components/parameters/runId' } ]
+      responses: { '200': { description: OK }, '404': { description: Not found } }
+  /runs/{runId}/steps:
+    get: { summary: Per-phase steps (status, tokens, cost, notes), parameters: [ { $ref: '#/components/parameters/runId' } ], responses: { '200': { description: OK } } }
+  /runs/{runId}/cancel:
+    post: { summary: Cancel a running scan, parameters: [ { $ref: '#/components/parameters/runId' } ], responses: { '202': { description: Accepted } } }
+  /runs/{runId}/export:
+    get:
+      summary: Export report
+      parameters: [ { $ref: '#/components/parameters/runId' }, { name: format, in: query, schema: { enum: [json, html] } } ]
+      responses: { '200': { description: File } }
+  /runs/compare:
+    get:
+      summary: Compute delta between two runs of the same repo
+      parameters: [ { name: base, in: query, required: true, schema: { type: string, format: uuid } }, { name: target, in: query, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Delta (see docs/08) }, '400': { description: Runs from different repos } }
+  /runs/{runId}/findings/{findingId}/jira-preview:
+    post: { summary: Build editable Jira draft, parameters: [ { $ref: '#/components/parameters/runId' }, { $ref: '#/components/parameters/findingId' } ], responses: { '200': { description: JiraDraft } } }
+  /runs/{runId}/findings/{findingId}/jira:
+    post: { summary: Create Jira issue from (edited) draft, parameters: [ { $ref: '#/components/parameters/runId' }, { $ref: '#/components/parameters/findingId' } ], responses: { '201': { description: RemediationAction }, '409': { description: Ticket already exists for stableKey } } }
+  /runs/{runId}/findings/{findingId}/fix-preview:
+    post: { summary: Generate fix test files + diff, parameters: [ { $ref: '#/components/parameters/runId' }, { $ref: '#/components/parameters/findingId' } ], responses: { '200': { description: FixDraft } } }
+  /runs/{runId}/findings/{findingId}/pull-request:
+    post: { summary: Open draft PR from (edited) fix draft, parameters: [ { $ref: '#/components/parameters/runId' }, { $ref: '#/components/parameters/findingId' } ], responses: { '201': { description: RemediationAction }, '403': { description: PR feature disabled / read-only } } }
+  /settings/connections:
+    get: { summary: Connection settings (secrets masked), responses: { '200': { description: OK } } }
+    put: { summary: Update connection settings, responses: { '200': { description: OK } } }
+  /settings/connections/{kind}/test:
+    post:
+      summary: Test a connection
+      parameters: [ { name: kind, in: path, required: true, schema: { enum: [github, jira, llm] } } ]
+      responses: { '200': { description: OK }, '502': { description: Failed } }
+components:
+  parameters:
+    repoId: { name: repoId, in: path, required: true, schema: { type: string, format: uuid } }
+    runId: { name: runId, in: path, required: true, schema: { type: string, format: uuid } }
+    findingId: { name: findingId, in: path, required: true, schema: { type: string } }
+  schemas:
+    CreateRepository:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, example: 'https://github.com/example-org/bookstore-api' }
+        defaultBranch: { type: string }
+    RepositorySummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        lastRunId: { type: [string, 'null'] }
+        lastScore: { type: [number, 'null'] }
+        lastCoveredShare: { type: [number, 'null'] }
+        lastScanAt: { type: [string, 'null'], format: date-time }
+# SignalR hub /hubs/scans: server→client ScanProgress(runId, phase, percent, message), ScanCompleted(runId, status)

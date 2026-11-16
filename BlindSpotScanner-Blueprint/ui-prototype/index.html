@@ -1,0 +1,294 @@
+<title>Integration Coverage Analyzer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: app shell — left nav rail + main workspace; every view is a mock of an Angular route */
+:root{
+  --bg:#f4f6f7; --surface:#ffffff; --sunk:#eaeef0; --line:#d6dde1; --fg:#17242b; --muted:#5b6b74;
+  --accent:#0f6f73; --accent-ink:#ffffff; --accent-soft:#dcefef;
+  --ok:#1f7a3f; --ok-bg:#e1f2e6; --warn:#9a6200; --warn-bg:#fbf0d9; --bad:#b3261e; --bad-bg:#fbe3e1; --skip:#5b5f9a; --skip-bg:#e6e7f6; --unk:#5b6b74; --unk-bg:#e8ecee;
+  --add:#e3f3e6; --del:#fbe5e3;
+  --display:"Space Grotesk",system-ui,sans-serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1619; --surface:#162126; --sunk:#1c2a30; --line:#2a3b42; --fg:#e3ecef; --muted:#93a6ae;
+  --accent:#4fc0c0; --accent-ink:#06282a; --accent-soft:#173a3d;
+  --ok:#6fd38f; --ok-bg:#16301f; --warn:#f0b54a; --warn-bg:#33270f; --bad:#ff8a80; --bad-bg:#3a1a18; --skip:#a9adf0; --skip-bg:#24264a; --unk:#a2b3ba; --unk-bg:#22313a;
+  --add:#173222; --del:#3a1d1b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1619; --surface:#162126; --sunk:#1c2a30; --line:#2a3b42; --fg:#e3ecef; --muted:#93a6ae;
+  --accent:#4fc0c0; --accent-ink:#06282a; --accent-soft:#173a3d;
+  --ok:#6fd38f; --ok-bg:#16301f; --warn:#f0b54a; --warn-bg:#33270f; --bad:#ff8a80; --bad-bg:#3a1a18; --skip:#a9adf0; --skip-bg:#24264a; --unk:#a2b3ba; --unk-bg:#22313a;
+  --add:#173222; --del:#3a1d1b; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.5}
+h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;text-wrap:balance}
+h1{font-size:1.45rem} h2{font-size:1.1rem} h3{font-size:.95rem}
+code,.mono{font-family:var(--mono);font-size:.85em}
+a{color:var(--accent)}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shell{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:100vh}
+nav.rail{background:var(--surface);border-right:1px solid var(--line);padding:20px 12px;display:flex;flex-direction:column;gap:4px}
+.brand{font-family:var(--display);font-weight:600;font-size:1rem;padding:0 8px 16px;display:flex;gap:8px;align-items:center}
+.brand i{width:22px;height:22px;border-radius:6px;background:var(--accent);display:inline-block;position:relative}
+.brand i::after{content:"";position:absolute;inset:6px;border:2px solid var(--accent-ink);border-radius:2px;border-right-color:transparent}
+.navbtn{background:none;border:0;text-align:left;padding:8px 10px;border-radius:6px;color:var(--muted)}
+.navbtn[aria-current="page"]{background:var(--accent-soft);color:var(--fg);font-weight:600}
+.navbtn:hover{color:var(--fg)}
+.rail .tag{margin-top:auto;font-size:.75rem;color:var(--muted);padding:8px 10px;border-top:1px solid var(--line)}
+main{padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:20px;max-width:1200px;width:100%;min-width:0}
+.route{font-family:var(--mono);font-size:.75rem;color:var(--muted);letter-spacing:.02em}
+.head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:7px 12px;border-radius:6px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.sm{padding:3px 8px;font-size:.8rem}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.muted{color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:99px;font-size:.78rem;font-weight:500;white-space:nowrap}
+.s-covered{background:var(--ok-bg);color:var(--ok)} .s-weak{background:var(--warn-bg);color:var(--warn)} .s-none{background:var(--bad-bg);color:var(--bad)}
+.s-skipped{background:var(--skip-bg);color:var(--skip)} .s-unverified{background:var(--unk-bg);color:var(--unk)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.kpi .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi .val{font-family:var(--display);font-size:1.6rem;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi .sub{font-size:.78rem;color:var(--muted)}
+.delta{font-size:.75rem;font-weight:600;margin-left:6px}
+.up{color:var(--ok)} .down{color:var(--bad)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px}
+.bullets{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.bullets b{display:inline-block;min-width:118px;color:var(--muted);font-weight:500;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500;padding:8px;border-bottom:1px solid var(--line)}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.ctrl td{background:var(--sunk);font-weight:600}
+.ev{font-family:var(--mono);font-size:.78rem;color:var(--accent);word-break:break-all}
+details.risk{border:1px solid var(--line);border-radius:8px;padding:10px 12px;border-left:4px solid var(--warn)}
+details.risk.High{border-left-color:var(--bad)}
+details.risk summary{cursor:pointer;font-weight:600;list-style:none}
+details.risk summary::-webkit-details-marker{display:none}
+details.risk ul{margin:8px 0;padding-left:18px}
+.stack{display:flex;flex-direction:column;gap:10px}
+.bar{height:8px;background:var(--sunk);border-radius:99px;overflow:hidden;min-width:80px}
+.bar span{display:block;height:100%;background:var(--accent)}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.filters button{border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:3px 10px;border-radius:99px;font-size:.8rem}
+.filters button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:.7rem}
+.dot.done{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.dot.run{border-color:var(--accent);border-top-color:transparent;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.dot.run{animation:none}}
+.log{font-family:var(--mono);font-size:.78rem;background:var(--sunk);border-radius:8px;padding:12px;max-height:180px;overflow:auto;color:var(--muted)}
+.banner{border:1px solid var(--warn);background:var(--warn-bg);color:var(--fg);border-radius:8px;padding:10px 12px}
+.banner.ok{border-color:var(--ok);background:var(--ok-bg)}
+.cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.cols3 ul{margin:6px 0 0;padding-left:18px}
+.overlay{position:fixed;inset:0;background:rgba(10,20,25,.55);display:grid;place-items:center;padding:16px;z-index:20}
+.dialog{background:var(--surface);color:var(--fg);border-radius:12px;border:1px solid var(--line);width:min(760px,100%);max-height:90vh;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+label{font-size:.8rem;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+textarea{min-height:110px;font-family:var(--mono);font-size:.8rem}
+.form2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.diff{font-family:var(--mono);font-size:.76rem;background:var(--sunk);border-radius:8px;overflow-x:auto;white-space:pre;padding:10px 0}
+.diff div{padding:0 12px}
+.diff .a{background:var(--add)} .diff .h{color:var(--muted)}
+.wizard{display:flex;gap:8px;font-size:.78rem;color:var(--muted)} .wizard .on{color:var(--accent);font-weight:600}
+.spark{display:block}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:8px;z-index:30}
+.note{font-size:.78rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+@media (max-width:800px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  nav.rail{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line);padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+  .brand{width:100%;padding-bottom:6px} .rail .tag{display:none}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+}
+</style>
+
+<div class="shell">
+  <nav class="rail" aria-label="Main">
+    <div class="brand"><i aria-hidden="true"></i>Coverage Analyzer</div>
+    <button class="navbtn" data-view="repos">Repositories</button>
+    <button class="navbtn" data-view="scan">Live scan</button>
+    <button class="navbtn" data-view="report">Report</button>
+    <button class="navbtn" data-view="compare">Compare runs</button>
+    <button class="navbtn" data-view="settings">Settings</button>
+    <div class="tag">Prototype of the Angular UI · sample data (fictional "bookstore-api")</div>
+  </nav>
+  <main id="main"></main>
+</div>
+<div id="modal"></div>
+
+<script>
+const RUNS = {
+  prev:{id:"11111111",date:"01 Nov 2026",sha:"0f1e2d3",score:4.7,covered:2,weak:1,none:2,unv:0,skipped:0,total:5},
+  curr:{id:"22222222",date:"15 Nov 2026",sha:"a1b2c3d",score:5.1,covered:3,weak:1,none:1,unv:0,skipped:0,total:5}
+};
+const ENDPOINTS = [
+  {c:"BooksController",prefix:"api/books",rows:[
+    {m:"GET",r:"api/books",s:"covered",ev:"tests/Bookstore.IntegrationTests/BooksApiTests.cs::List_returns_seeded_books",n:""},
+    {m:"GET",r:"api/books/{id}",s:"weak",ev:"tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok",n:"Asserts only 200 OK (false positive)."},
+    {m:"POST",r:"api/books",s:"covered",ev:"tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_persists_book",n:""}]},
+  {c:"OrdersController",prefix:"api/orders",rows:[
+    {m:"POST",r:"api/orders",s:"covered",ev:"tests/Bookstore.IntegrationTests/OrdersApiTests.cs::Place_order_persists_lines_and_total",n:"Newly covered since 01 Nov."},
+    {m:"POST",r:"api/orders/{id}/cancel",s:"none",ev:"",n:"No integration test calls this route."}]}
+];
+const SCORE = [
+  ["Integration-point coverage",.20,6,"HTTP pipeline and PostgreSQL are real; payment gateway never crossed.","OrdersApiTests.cs::Place_order_persists_lines_and_total"],
+  ["Critical-path coverage",.20,4,"Catalogue and order placement run end-to-end; cancellation journey missing.","OrdersApiTests.cs::Place_order_persists_lines_and_total"],
+  ["Failure & edge paths",.15,3,"One validation failure; no timeouts, conflicts or rollback.","BooksApiTests.cs::Create_rejects_missing_title"],
+  ["Environmental fidelity",.15,7,"Real PostgreSQL container; payment provider faked in memory.","ApiFactory.cs::InitializeAsync"],
+  ["Assertion strength",.15,5,"Mostly persisted-value assertions; one status-only test.","BooksApiTests.cs::Get_by_id_returns_ok"],
+  ["Determinism / reliability",.10,null,"N/A — no CI run history available.",""],
+  ["Diagnosability / maintainability",.05,6,"Shared factory and clear names; no custom failure messages.","ApiFactory.cs::InitializeAsync"]
+];
+const RISKS = [
+  {sev:"High",h:"Nothing tests a real charge with the payment provider",w:"A change in how payments are sent could break checkout without any test noticing.",d:["Payment gateway seam crossed by no test (coveredByNoneRealSeam = 1).","ApiFactory replaces the gateway client with an in-memory fake."],jira:"BOOK-142"},
+  {sev:"Medium",h:"Some tests pass even when the wrong data comes back",w:"They give a false sense of safety for the book details page.",d:["Get_by_id_returns_ok asserts only the HTTP status."],pr:"#87"},
+  {sev:"High",h:"Order cancellation is not tested at all",w:"Customers might be unable to cancel, or be refunded wrongly, without warning.",d:["POST api/orders/{id}/cancel has no integration test."]}
+];
+const LABEL = {covered:"✓ Covered",weak:"! Weak",none:"✕ None",skipped:"⏭ Skipped",unverified:"? Unverified"};
+let view="report", filter="all";
+
+const $ = s => document.querySelector(s);
+const chip = s => `<span class="chip s-${s}">${LABEL[s]}</span>`;
+const esc = s => s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+function spark(){ const pts=[3.9,4.2,4.7,5.1], w=120,h=34, max=10;
+  const xy=pts.map((v,i)=>[6+i*(w-12)/(pts.length-1), h-4-(v/max)*(h-8)]);
+  const d=xy.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const last=xy[xy.length-1];
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-label="score trend 3.9 to 5.1"><path d="${d} L${last[0]} ${h} L6 ${h} Z" fill="var(--accent-soft)"/><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2"/><circle cx="${last[0]}" cy="${last[1]}" r="3.2" fill="var(--accent)"/></svg>`;}
+
+const views = {
+repos(){ return `
+  <div class="route">/  ·  RepositoriesPageComponent</div>
+  <div class="head"><div><h1>Repositories</h1><div class="muted">Each scan is kept, so trends and comparisons are always available.</div></div>
+  <button class="btn primary" data-act="add">Add repository</button></div>
+  <div class="panel tablewrap"><table>
+   <thead><tr><th>Repository</th><th>Last scan</th><th>Quality score</th><th>Covered operations</th><th>Trend</th><th>Status</th><th></th></tr></thead>
+   <tbody>
+    <tr><td><b>example-org/bookstore-api</b><div class="muted mono">main</div></td><td>15 Nov 2026</td><td><b>5.1</b>/10 <span class="delta up">▲ 0.4</span></td><td>3 / 5</td><td>${spark()}</td><td><span class="chip s-weak">Moderate</span></td><td><button class="btn sm" data-go="report">Open</button></td></tr>
+    <tr><td><b>example-org/payments-service</b><div class="muted mono">main</div></td><td>12 Nov 2026</td><td><b>7.4</b>/10 <span class="delta down">▼ 0.2</span></td><td>31 / 36</td><td class="muted">—</td><td><span class="chip s-covered">Strong</span></td><td><button class="btn sm" data-go="report">Open</button></td></tr>
+    <tr><td><b>example-org/inventory-api</b><div class="muted mono">develop</div></td><td>Running…</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td><span class="chip s-unverified">Scanning 4/7</span></td><td><button class="btn sm" data-go="scan">Watch</button></td></tr>
+   </tbody></table></div>`;},
+
+scan(){ const st=[["P1 Resolve","Branch develop → commit 9c4e1a0",1],["P2 Enumerate","412 files · 14 controllers · 23 test files",1],["P3 Endpoint extraction","61 endpoints (Roslyn)",1],["P4 Test classification","9 integration · 12 unit · 2 other",2],["P5 Coverage mapping","",0],["P6 Quality grading","",0],["P7 Assemble · validate · verify citations · compare","",0]];
+  return `<div class="route">/runs/:runId/live  ·  LiveScanComponent (SignalR /hubs/scans)</div>
+  <div class="head"><div><h1>Scanning example-org/inventory-api</h1><div class="muted">Started 14:02 · pinned to <span class="mono">9c4e1a0</span> · cost so far $0.21 of $5.00 cap</div></div><button class="btn" data-act="toast:Scan cancelled">Cancel scan</button></div>
+  <div class="grid2"><div class="panel"><div class="steps">${st.map(s=>`<div class="step"><span class="dot ${s[2]==1?"done":s[2]==2?"run":""}">${s[2]==1?"✓":""}</span><div><b>${s[0]}</b><div class="muted">${s[1]||"Waiting"}</div></div><span class="muted mono">${s[2]==1?"done":s[2]==2?"57%":""}</span></div>`).join("")}</div></div>
+  <div class="panel stack"><h2>Activity</h2><div class="log">14:02:01 resolved develop → 9c4e1a0<br>14:02:03 tree: 412 entries (not truncated)<br>14:02:09 extracted 61 endpoints from 14 controllers<br>14:02:11 rule-classified 19/23 test files<br>14:02:12 LLM classify: 4 ambiguous files (prompt classify-tests v1.0.0)<br>14:02:18 StockApiTests.cs → integration (WebApplicationFactory + Testcontainers)</div>
+  <div class="note">Items the scan cannot finish within the budget become <b>Unverified</b>. They are never guessed.</div></div></div>`;},
+
+report(){ const rows=ENDPOINTS.map(c=>{ const vis=c.rows.filter(r=>filter=="all"||r.s==filter); if(!vis.length) return "";
+   return `<tr class="ctrl"><td colspan="4">${c.c} <span class="muted mono">${c.prefix}</span></td><td>${chip("weak")}</td></tr>`+
+   vis.map(r=>`<tr><td class="mono">${r.m}</td><td class="mono">${esc(r.r)}</td><td>${chip(r.s)}</td><td>${r.ev?`<a class="ev" href="#report">${esc(r.ev)}</a>`:""}${r.n?`<div class="muted">${r.n}</div>`:""}</td><td class="row">${r.s!="covered"?`<button class="btn sm" data-act="jira" data-t="${esc(r.m+" "+r.r)}">Jira</button><button class="btn sm" data-act="pr" data-t="${esc(r.m+" "+r.r)}">Fix with PR</button>`:""}</td></tr>`).join("")}).join("");
+  return `<div class="route">/runs/:runId  ·  ReportPageComponent</div>
+  <div class="head"><div><h1>example-org/bookstore-api</h1>
+   <div class="row muted">main · <a class="mono" href="#report">a1b2c3d</a> · model claude-sonnet · prompts v1.0.0 · <span class="chip s-skipped">real-seam integration</span></div></div>
+   <div class="row"><button class="btn sm" aria-label="Previous run" data-act="toast:Showing run of 01 Nov 2026">◀</button><select id="runpick" aria-label="Run"><option>15 Nov 2026 · a1b2c3d</option><option>01 Nov 2026 · 0f1e2d3</option></select><button class="btn sm" aria-label="Next run" disabled>▶</button><button class="btn" data-go="compare">Compare with…</button><button class="btn" data-act="toast:Report JSON exported">Export</button></div></div>
+  <div class="kpis">
+   <div class="kpi"><div class="lbl">Quality score</div><div class="val">5.1<span class="muted" style="font-size:.9rem">/10</span><span class="delta up">▲ 0.4</span></div><div class="sub">90% of rubric weight assessable</div></div>
+   <div class="kpi"><div class="lbl">Covered operations</div><div class="val">3<span class="muted" style="font-size:.9rem"> / 5</span><span class="delta up">▲ 1</span></div><div class="sub">Verdict: moderate</div></div>
+   <div class="kpi"><div class="lbl">Weak</div><div class="val">1</div><div class="sub">status-only or partial</div></div>
+   <div class="kpi"><div class="lbl">Untested</div><div class="val">1<span class="delta up">▼ 1</span></div><div class="sub">confirmed none</div></div>
+   <div class="kpi"><div class="lbl">Unverified</div><div class="val">0</div><div class="sub">all tests read in full</div></div>
+  </div>
+  <div class="grid2">
+   <div class="panel"><h2>Summary</h2><ul class="bullets">
+    <li><b>Overall</b>Integration testing is moderate: 3 of 5 API operations are properly tested; 1 more lightly tested.</li>
+    <li><b>Coverage</b>1 operation(s) have no integration test; 0 could not be checked.</li>
+    <li><b>Test quality</b>Test quality scores 5.1 out of 10 (90% of the rubric could be assessed); 1 test(s) only check that the request succeeded.</li>
+    <li><b>Since last scan</b>Since 01 Nov 2026: score 4.7 → 5.1; 1 operation(s) newly covered, 0 regressed.</li></ul>
+    <div class="note">Every sentence is generated by code from the numbers. Citations: 8 checked, 8 resolved at a1b2c3d.</div></div>
+   <div class="panel stack"><h2>Top risks</h2>${RISKS.map((r,i)=>`<details class="risk ${r.sev}" ${i==0?"open":""}><summary>${i+1}. ${r.h}</summary><div class="muted">${r.w}</div><ul>${r.d.map(x=>`<li>${esc(x)}</li>`).join("")}</ul><div class="row">${r.jira?`<a class="chip s-skipped" href="#report">Jira ${r.jira} · In progress</a>`:`<button class="btn sm" data-act="jira" data-t="${esc(r.h)}">Create Jira</button>`}${r.pr?`<a class="chip s-covered" href="#report">PR ${r.pr} · draft, checks passing</a>`:`<button class="btn sm" data-act="pr" data-t="${esc(r.h)}">Fix with PR</button>`}</div></details>`).join("")}</div>
+  </div>
+  <div class="panel stack"><div class="head"><h2>Endpoint coverage</h2><div class="filters">${["all","covered","weak","none","skipped","unverified"].map(f=>`<button aria-pressed="${filter==f}" data-filter="${f}">${f=="all"?"All 5":LABEL[f]}</button>`).join("")}</div></div>
+   <div class="tablewrap"><table><thead><tr><th>Method</th><th>Route</th><th>Status</th><th>Evidence</th><th>Actions</th></tr></thead><tbody>${rows||`<tr><td colspan="5" class="muted">No endpoints with this status.</td></tr>`}</tbody></table></div></div>
+  <div class="panel stack"><h2>Quality scorecard</h2><div class="tablewrap"><table><thead><tr><th>Dimension</th><th>Weight</th><th>Score</th><th>Why</th></tr></thead><tbody>
+   ${SCORE.map(s=>`<tr><td><b>${s[0]}</b></td><td>${Math.round(s[1]*100)}%</td><td>${s[2]==null?`<span class="chip s-unverified">N/A</span>`:`<div class="row"><div class="bar" style="width:90px"><span style="width:${s[2]*10}%"></span></div><b>${s[2]}</b></div>`}</td><td>${s[3]}${s[4]?`<div class="ev">${esc(s[4])}</div>`:""}</td></tr>`).join("")}
+  </tbody></table></div><div class="note">5.1 / 10 across scored dimensions (90% of weight assessable). The score is computed by the backend, not by the AI.</div></div>`;},
+
+compare(){ return `<div class="route">/compare?base=&target=  ·  ComparePageComponent</div>
+  <div class="head"><div><h1>Compare runs</h1><div class="muted">example-org/bookstore-api · main</div></div>
+  <div class="row"><label>Baseline<select id="cmpbase"><option>01 Nov 2026 · 0f1e2d3</option></select></label><label>Target<select id="cmptarget"><option>15 Nov 2026 · a1b2c3d</option></select></label></div></div>
+  <div class="banner ok">These runs are like-for-like: same endpoint list, same definition of integration, same profile and prompt version.</div>
+  <div class="panel tablewrap"><table><thead><tr><th>Metric</th><th>01 Nov</th><th>15 Nov</th><th>Change</th></tr></thead><tbody>
+   <tr><td>Quality score</td><td>4.7</td><td>5.1</td><td class="up">▲ 0.4 improved</td></tr>
+   <tr><td>Covered operations</td><td>2</td><td>3</td><td class="up">▲ 1 improved</td></tr>
+   <tr><td>Weak</td><td>1</td><td>1</td><td class="muted">unchanged</td></tr>
+   <tr><td>Untested</td><td>2</td><td>1</td><td class="up">▼ 1 improved</td></tr>
+   <tr><td>Critical-path coverage</td><td>3</td><td>4</td><td class="up">▲ 1</td></tr>
+   <tr><td>Assertion strength</td><td>4</td><td>5</td><td class="up">▲ 1</td></tr></tbody></table></div>
+  <div class="cols3">
+   <div class="panel"><h3>Newly covered</h3><ul><li class="mono">POST api/orders</li></ul></div>
+   <div class="panel"><h3>Regressed</h3><p class="muted">None.</p></div>
+   <div class="panel"><h3>Findings</h3><ul><li><span class="up">Fixed:</span> uncovered POST api/orders</li><li><span class="down">New:</span> payment gateway never crossed</li></ul></div>
+   <div class="panel"><h3>Risks</h3><ul><li><span class="muted">Dropped:</span> Nothing tests that orders are really placed and charged</li><li><span class="muted">New:</span> Nothing tests a real charge with the payment provider</li><li><span class="muted">New:</span> Order cancellation is not tested at all</li></ul></div>
+  </div><div class="note">Risks match on exact wording. A reworded risk appears as dropped plus new, never as "resolved".</div>`;},
+
+settings(){ return `<div class="route">/settings  ·  SettingsPageComponent</div><h1>Settings</h1>
+  <div class="cols3">
+   <div class="panel stack"><h2>GitHub</h2><label>Mode<select id="ghmode"><option>GitHub App</option><option>Personal access token</option></select></label><label>Installation<input id="ghinst" value="example-org"></label><label>Token<input id="ghtok" value="••••••••3f9a"></label><div class="row"><span class="chip s-covered">Connected · read + PR write</span><button class="btn sm" data-act="toast:GitHub connection OK">Test</button></div></div>
+   <div class="panel stack"><h2>Jira Cloud</h2><label>Site<input id="jsite" value="https://example.atlassian.net"></label><label>Default project<input id="jproj" value="BOOK"></label><label>Labels<input id="jlab" value="integration-coverage"></label><div class="row"><span class="chip s-covered">Connected</span><button class="btn sm" data-act="toast:Jira connection OK">Test</button></div></div>
+   <div class="panel stack"><h2>Claude</h2><label>Model<select id="llm"><option>Latest Sonnet (default)</option><option>Latest Opus</option></select></label><label>Cost cap per scan (USD)<input id="cap" value="5.00"></label><label>API key<input id="llmkey" value="••••••••a21c"></label><div class="row"><span class="chip s-covered">Connected</span><button class="btn sm" data-act="toast:Claude connection OK">Test</button></div></div>
+  </div>`;}
+};
+
+function render(){ $("#main").innerHTML = views[view]();
+  document.querySelectorAll(".navbtn").forEach(b=>b.toggleAttribute("aria-current",false)||b.dataset.view==view&&b.setAttribute("aria-current","page"));}
+
+function toast(t){ const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),2200);}
+function close(){ $("#modal").innerHTML=""; }
+
+function jira(t){ $("#modal").innerHTML=`<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="jt">
+  <h2 id="jt">Create Jira ticket</h2><div class="muted">Preview from finding · nothing is created until you confirm.</div>
+  <div class="form2"><label>Project<input id="jp" value="BOOK"></label><label>Issue type<select id="ji"><option>Task</option><option>Bug</option><option>Story</option></select></label><label>Priority<select id="jpr"><option>High</option><option>Medium</option></select></label><label>Labels<input id="jl" value="integration-coverage"></label></div>
+  <label>Summary<input id="js" value="[Integration coverage] ${esc(t)}"></label>
+  <label>Description<textarea id="jd">Problem: ${esc(t)}\nWhy it matters: a regression here would reach customers without any test failing.\n\nAcceptance criteria:\n- An integration test exercises this behaviour against a real database\n- It asserts persisted values, not only the HTTP status\n\nEvidence: report run 15 Nov 2026 (a1b2c3d)</textarea></label>
+  <div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="jiradone">Create ticket</button></div></div></div>`;}
+
+function pr(t){ $("#modal").innerHTML=`<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pt">
+  <div class="wizard"><span>1 Generate</span>›<span class="on">2 Review diff</span>›<span>3 Open draft PR</span></div>
+  <h2 id="pt">Fix with pull request</h2><div class="muted">${esc(t)} · generated in the style of OrdersApiTests.cs · cost $0.06</div>
+  <div class="diff"><div class="h">+++ tests/Bookstore.IntegrationTests/Orders/CancelOrderApiTests.cs (new)</div>${[
+   "public class CancelOrderApiTests : IClassFixture&lt;ApiFactory&gt;",
+   "{",
+   "    [Fact]",
+   "    public async Task Cancel_sets_status_and_persists()",
+   "    {",
+   "        var order = await _factory.SeedOrderAsync(total: 42.50m);",
+   "        var resp = await _client.PostAsync($\"api/orders/{order.Id}/cancel\", null);",
+   "        resp.StatusCode.Should().Be(HttpStatusCode.OK);",
+   "        var saved = await _factory.Db.Orders.FindAsync(order.Id);",
+   "        saved!.Status.Should().Be(OrderStatus.Cancelled);",
+   "    }",
+   "",
+   "    [Fact]",
+   "    public async Task Cancel_unknown_order_returns_404() { ... }",
+   "}"].map(l=>`<div class="a">+ ${l}</div>`).join("")}</div>
+  <div class="form2"><label>Branch<input id="pb" value="coverage/fix-cancel-order-a1b2c3d"></label><label>Title<input id="ptl" value="test: add integration test for POST api/orders/{id}/cancel"></label></div>
+  <div class="note">Only test files can change. The app does not run the test; CI on the draft PR verifies it, and the next scan shows it as newly covered.</div>
+  <div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Cancel</button><button class="btn" data-act="toast:Regenerating…">Regenerate</button><button class="btn primary" data-act="prdone">Open draft PR</button></div></div></div>`;}
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) { if(e.target.classList.contains("overlay")) close(); return; }
+  if(b.dataset.view){ view=b.dataset.view; render(); return; }
+  if(b.dataset.go){ view=b.dataset.go; render(); return; }
+  if(b.dataset.filter){ filter=b.dataset.filter; render(); return; }
+  const a=b.dataset.act; if(!a) return;
+  if(a=="jira") jira(b.dataset.t); else if(a=="pr") pr(b.dataset.t);
+  else if(a=="close") close();
+  else if(a=="jiradone"){ close(); toast("Created BOOK-151 · linked to this finding"); }
+  else if(a=="prdone"){ close(); toast("Opened draft PR #88 · linked to this finding"); }
+  else if(a=="add"){ $("#modal").innerHTML=`<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="at"><h2 id="at">Add repository</h2><label>GitHub URL<input id="repourl" value="https://github.com/example-org/shipping-api"></label><label>Branch<input id="repobr" value="main"></label><div class="muted">Next, the app drafts a repo profile (how integration tests look here) for you to confirm.</div><div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="added">Add and draft profile</button></div></div></div>`; }
+  else if(a=="added"){ close(); toast("Repository added · profile draft ready to review"); }
+  else if(a.startsWith("toast:")) toast(a.slice(6));
+});
+document.addEventListener("keydown",e=>{ if(e.key=="Escape") close(); });
+render();
+</script>
