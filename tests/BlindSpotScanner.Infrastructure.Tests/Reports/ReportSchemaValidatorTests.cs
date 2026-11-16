@@ -111,3 +111,23 @@ public class ReportSchemaValidatorTests
         embedded.Should().Be(blueprint);
     }
 }
+
+public class ReportValidatorWithSchemaTests
+{
+    private static BlindSpotScanner.Domain.Reports.IntegrationReport Load(string name) =>
+        BlindSpotScanner.Domain.Reports.ReportJsonSerializer.Deserialize(
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name)));
+
+    [Fact]
+    public void Validate_CurrentExampleWithRealSchemaValidator_ReturnsNoViolations()
+    {
+        // Arrange
+        var validator = new BlindSpotScanner.Application.Reports.ReportValidator(new ReportSchemaValidator());
+
+        // Act
+        var violations = validator.Validate(Load("sample-report.json"), Load("sample-report-previous.json"));
+
+        // Assert
+        violations.Should().BeEmpty();
+    }
+}
