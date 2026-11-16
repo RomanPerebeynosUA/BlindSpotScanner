@@ -1,10 +1,11 @@
 using System.Text.Json;
+using BlindSpotScanner.Application.Reports;
 using Json.Schema;
 
 namespace BlindSpotScanner.Infrastructure.Reports;
 
 /// <summary>Validates report JSON against contracts/integration-report.schema.json (draft 2020-12).</summary>
-public sealed class ReportSchemaValidator
+public sealed class ReportSchemaValidator : IReportSchemaValidator
 {
     private const string SchemaResourceName = "integration-report.schema.json";
 
