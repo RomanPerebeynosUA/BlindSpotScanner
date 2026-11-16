@@ -1,3 +1,5 @@
+> **Reference only.** The root `CLAUDE.md` and `docs/DECISIONS.md` override this file (see D2).
+
 # CLAUDE.md — rules for generating the Integration Coverage Analyzer
 
 This folder is a **blueprint**, not code. Generate the application from it. Where this file
