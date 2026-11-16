@@ -93,6 +93,20 @@ public class ReportJsonSerializerTests
     }
 
     [Fact]
+    public void Deserialize_NumericEnumValue_Throws()
+    {
+        // Arrange
+        var node = JsonNode.Parse(Fixture("sample-report.json"))!;
+        node["endpointCoverage"]![0]!["status"] = 1;
+
+        // Act
+        var act = () => ReportJsonSerializer.Deserialize(node.ToJsonString());
+
+        // Assert
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
     public void Deserialize_UnknownProperty_Throws()
     {
         // Arrange
