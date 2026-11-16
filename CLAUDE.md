@@ -91,7 +91,7 @@ schema (max 2 retries). Prompts load from `prompts/`, and their version is store
 ## Frontend (Angular)
 - Standalone components, signals for local state, `inject()` for DI. Angular Material.
 - Strict TypeScript; no `any` without a comment explaining why.
-- One component per folder (`name.component.ts/.html/.scss/.spec.ts`).
+- One component per folder (`name.ts/.html/.scss/.spec.ts`, the Angular 2025 style; see D7).
 - HTTP calls go through services, never directly from components.
 - Visual target: `BlindSpotScanner-Blueprint/ui-prototype/index.html`.
 
