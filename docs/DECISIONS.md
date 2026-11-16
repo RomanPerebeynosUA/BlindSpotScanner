@@ -35,3 +35,15 @@ FluentAssertions v8+ needs a paid license for commercial use. We pin the last Ap
 ## D7 — Angular 2025 file naming (2026-11-16)
 Angular 22 generates `name.ts/.html/.scss/.spec.ts` (no `.component` suffix) by default. We keep
 that style. CLAUDE.md's frontend rule was updated to match.
+
+## D9 — Full doc 03 domain model in M1 (2026-11-16)
+M1 builds all doc 03 entities and tables (Repository, RepoProfile, ScanRun, ScanStep, Finding,
+RemediationAction, file_cache, llm_cache) plus the scan_runs headline columns. The job-queue
+lease columns (M6) and connection settings (M9) are not in doc 03 and arrive with their milestones.
+
+## D10 — "Byte-equivalent round-trip" means canonical bytes (2026-11-16)
+PostgreSQL jsonb reorders keys and drops whitespace, so the source file can't come back
+byte-identical. Equivalence is: canonical serialize → store → read → deserialize → serialize gives
+identical bytes, and the canonical JSON is semantically equal (`JsonNode.DeepEquals`) to the
+source file. `ReportJsonSerializer` (Domain) is the only owner of the canonical options.
+`delta` is always written (`null` on a first scan), as in `examples/sample-report-previous.json`.
