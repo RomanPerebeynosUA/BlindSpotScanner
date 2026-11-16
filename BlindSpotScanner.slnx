@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BlindSpotScanner.Api/BlindSpotScanner.Api.csproj" />
+    <Project Path="src/BlindSpotScanner.Application/BlindSpotScanner.Application.csproj" />
+    <Project Path="src/BlindSpotScanner.Domain/BlindSpotScanner.Domain.csproj" />
+    <Project Path="src/BlindSpotScanner.Infrastructure/BlindSpotScanner.Infrastructure.csproj" />
+    <Project Path="src/BlindSpotScanner.Worker/BlindSpotScanner.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BlindSpotScanner.Api.IntegrationTests/BlindSpotScanner.Api.IntegrationTests.csproj" />
+    <Project Path="tests/BlindSpotScanner.Application.Tests/BlindSpotScanner.Application.Tests.csproj" />
+    <Project Path="tests/BlindSpotScanner.Domain.Tests/BlindSpotScanner.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

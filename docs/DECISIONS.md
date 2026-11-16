@@ -27,3 +27,11 @@ the PR footer and docs.
 ## D6 — Credentials when needed (2026-11-16)
 Build with fakes. Get a Claude API key (billed separately from a Claude Pro plan) at M5 for the
 opt-in live test, and a free Jira Cloud site at M9.
+
+## D8 — FluentAssertions 7.x (2026-11-16)
+FluentAssertions v8+ needs a paid license for commercial use. We pin the last Apache-2.0 major
+(7.x) at an exact version (7.2.2), so the CLAUDE.md test stack stays as written.
+
+## D7 — Angular 2025 file naming (2026-11-16)
+Angular 22 generates `name.ts/.html/.scss/.spec.ts` (no `.component` suffix) by default. We keep
+that style. CLAUDE.md's frontend rule was updated to match.

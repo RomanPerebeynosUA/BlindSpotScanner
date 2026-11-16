@@ -17,8 +17,6 @@ Docker Compose · Claude API.
 When a requirement is genuinely open, ask instead of assuming, and record the answer in
 `docs/DECISIONS.md`.
 
-> Layout and commands below are the intended defaults. Update them once the solution is scaffolded.
-
 ## Layout
 ```
 src/
@@ -32,9 +30,15 @@ tests/
   BlindSpotScanner.Domain.Tests/
   BlindSpotScanner.Application.Tests/
   BlindSpotScanner.Api.IntegrationTests/
-BlindSpotScanner.sln
+BlindSpotScanner.slnx
+global.json                         pins the .NET SDK (10.0.102, latestFeature)
+Directory.Build.props               Nullable, ImplicitUsings, TreatWarningsAsErrors for all projects
 docker-compose.yml                  db, api, worker, web
+.env.example                        copy to .env (gitignored) before docker compose
+.github/workflows/ci.yml            backend, frontend and docker build jobs
 ```
+The Api and Worker each have a `Dockerfile` (build context: repo root). `src/web` has its own
+`Dockerfile` and `nginx.conf` (serves the SPA, proxies `/api` and `/hubs` to the api).
 
 ## Commands
 | Task | Backend (repo root) | Frontend (`src/web`) |
@@ -44,7 +48,7 @@ docker-compose.yml                  db, api, worker, web
 | Test | `dotnet test` (integration tests need Docker running) | `npx ng test --watch=false` |
 | Run | `dotnet run --project src/BlindSpotScanner.Api` and `--project src/BlindSpotScanner.Worker` | `npx ng serve` |
 | Lint/format | `dotnet format --verify-no-changes` | `npx ng lint` |
-| Everything | `docker compose up` | |
+| Everything | copy `.env.example` to `.env`, then `docker compose up --build` (web: http://localhost:8080, api: http://localhost:5080/health) | |
 
 Run backend and frontend tests before saying a change is done.
 
@@ -91,7 +95,7 @@ schema (max 2 retries). Prompts load from `prompts/`, and their version is store
 ## Frontend (Angular)
 - Standalone components, signals for local state, `inject()` for DI. Angular Material.
 - Strict TypeScript; no `any` without a comment explaining why.
-- One component per folder (`name.component.ts/.html/.scss/.spec.ts`).
+- One component per folder (`name.ts/.html/.scss/.spec.ts`, the Angular 2025 style; see D7).
 - HTTP calls go through services, never directly from components.
 - Visual target: `BlindSpotScanner-Blueprint/ui-prototype/index.html`.
 
