@@ -28,6 +28,25 @@ internal static class Fixtures
                 .ToList(),
         };
 
+    /// <summary>Appends GET endpoints (route, status) to the last controller; covered/weak ones get a valid citation.</summary>
+    public static IntegrationReport WithExtraEndpoints(this IntegrationReport report, params (string Route, CoverageStatus Status)[] extra)
+    {
+        var coverage = report.EndpointCoverage.ToList();
+        var last = coverage[^1];
+        coverage[^1] = last with
+        {
+            Endpoints = last.Endpoints.Concat(extra.Select(x => new EndpointResult
+            {
+                Method = EndpointMethod.Get,
+                Route = x.Route,
+                Status = x.Status,
+                Verified = true,
+                Evidence = x.Status is CoverageStatus.Covered or CoverageStatus.Weak ? ["tests/Api/ItemsTests.cs::Items_work"] : [],
+            })).ToList(),
+        };
+        return report with { EndpointCoverage = coverage };
+    }
+
     /// <summary>A detail whose endpoints are one controller with the given status counts (routes api/e0, api/e1, …).</summary>
     public static ReportDetail WithStatusCounts(this ReportDetail detail, int covered, int weak, int none, int unverified)
     {

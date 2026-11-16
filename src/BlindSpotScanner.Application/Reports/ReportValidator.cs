@@ -56,11 +56,28 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
 
     private static void CheckWeights(IReadOnlyList<ScoreDimension> scorecard, List<string> violations)
     {
+        var seenIds = new HashSet<int>();
         for (var i = 0; i < scorecard.Count; i++)
         {
-            if (scorecard[i].Weight is <= 0 or > 1)
+            var dimension = scorecard[i];
+            if (dimension.Weight is <= 0 or > 1)
             {
-                violations.Add($"scorecard/{i}/weight: must be in (0, 1], found {Invariant(scorecard[i].Weight)}");
+                violations.Add($"scorecard/{i}/weight: must be in (0, 1], found {Invariant(dimension.Weight)}");
+            }
+
+            if (!seenIds.Add(dimension.Id))
+            {
+                violations.Add($"scorecard/{i}/id: duplicate dimension id {dimension.Id}");
+            }
+
+            // Doc 06: unscorable means N/A, so scorable and "has a score" must agree.
+            if (dimension.Scorable && dimension.Score is null)
+            {
+                violations.Add($"scorecard/{i}: scorable dimension has no score");
+            }
+            else if (!dimension.Scorable && dimension.Score is not null)
+            {
+                violations.Add($"scorecard/{i}: unscorable dimension has a score");
             }
         }
 
@@ -118,14 +135,15 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
     {
         for (var i = 0; i < risks.Count; i++)
         {
-            CheckPlainLanguage(risks[i].Headline, $"topRisks/{i}/headline", MaxHeadlineWords, MaxHeadlineChars, violations);
-            CheckPlainLanguage(risks[i].WhyItMatters, $"topRisks/{i}/whyItMatters", MaxWhyItMattersWords, MaxWhyItMattersChars, violations);
+            // Doc 07 check 6 bans "/" in headlines only; whyItMatters may say "24/7" or "and/or".
+            CheckPlainLanguage(risks[i].Headline, $"topRisks/{i}/headline", HeadlineTechnicalReference(), MaxHeadlineWords, MaxHeadlineChars, violations);
+            CheckPlainLanguage(risks[i].WhyItMatters, $"topRisks/{i}/whyItMatters", TechnicalReference(), MaxWhyItMattersWords, MaxWhyItMattersChars, violations);
         }
     }
 
-    private static void CheckPlainLanguage(string text, string path, int maxWords, int maxChars, List<string> violations)
+    private static void CheckPlainLanguage(string text, string path, Regex technical, int maxWords, int maxChars, List<string> violations)
     {
-        if (TechnicalReference().IsMatch(text))
+        if (technical.IsMatch(text))
         {
             violations.Add($"{path}: contains a path, citation or file name");
         }
@@ -220,7 +238,11 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
     [GeneratedRegex(@"^[^:]+\.[A-Za-z0-9]+::[A-Za-z_][\w.]*$")]
     private static partial Regex Citation();
 
-    /// <summary>Doc 07 check 6: risk text stays plain language (no paths, citations or file names).</summary>
+    /// <summary>Doc 07 check 6 for headlines: no "/", citations or file names.</summary>
     [GeneratedRegex(@"/|::|\w\.(cs|ts|js|py|java|go|rb|json|ya?ml|xml)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex HeadlineTechnicalReference();
+
+    /// <summary>Plain language for other risk text: no citations or file names.</summary>
+    [GeneratedRegex(@"::|\w\.(cs|ts|js|py|java|go|rb|json|ya?ml|xml)\b", RegexOptions.IgnoreCase)]
     private static partial Regex TechnicalReference();
 }

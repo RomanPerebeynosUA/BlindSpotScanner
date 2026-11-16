@@ -34,6 +34,34 @@ public class RunComparerTests
     }
 
     [Fact]
+    public void Compare_RoutesDifferingOnlyByConstraint_AreDistinctEndpoints()
+    {
+        // Arrange
+        var previous = Fixtures.Previous.WithExtraEndpoints(("api/items/{id:int}", CoverageStatus.None), ("api/items/{slug}", CoverageStatus.None));
+        var current = Fixtures.Current.WithExtraEndpoints(("api/items/{id:int}", CoverageStatus.Covered), ("api/items/{slug}", CoverageStatus.None));
+
+        // Act
+        var delta = RunComparer.Compare(previous, current);
+
+        // Assert
+        delta.Endpoints.NewlyCovered.Should().Equal("POST api/orders", "GET api/items/{id:int}");
+    }
+
+    [Fact]
+    public void Compare_SameRouteInTwoControllers_DoesNotThrow()
+    {
+        // Arrange
+        var previous = Fixtures.Previous.WithExtraEndpoints(("api/books", CoverageStatus.Covered));
+        var current = Fixtures.Current.WithExtraEndpoints(("api/books", CoverageStatus.Covered));
+
+        // Act
+        var act = () => RunComparer.Compare(previous, current);
+
+        // Assert
+        act.Should().NotThrow();
+    }
+
+    [Fact]
     public void Compare_CoveredBecomesUnverified_IsConfidenceChangedNotRegressed()
     {
         // Arrange

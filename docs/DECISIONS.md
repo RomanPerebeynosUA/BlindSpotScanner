@@ -72,3 +72,9 @@ persistence tests. `Api.IntegrationTests` stays for HTTP-level tests.
 - `examples/sample-report-previous.json` had `summary.uncoveredRealSeams: 1` with no
   `UncoveredSeam` finding (the current report's delta lists that seam as new). It was corrected
   to `0`, so both examples assemble exactly.
+
+## D14 — Endpoint identity keeps route constraints (2026-11-16)
+Doc 08 normalizes `{param}` *names* to `{}`. Route constraints are kept (`{id:int}` → `{:int}`), so
+`GET items/{id:int}` and `GET items/{slug}` (both legal ASP.NET routes) stay distinct endpoints.
+If the same identity still occurs twice in one report (a route declared in two controllers),
+occurrences are paired in order rather than failing the comparison.

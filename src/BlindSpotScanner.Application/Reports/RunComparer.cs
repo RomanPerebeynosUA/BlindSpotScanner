@@ -117,8 +117,9 @@ public static class RunComparer
 
     private static DeltaEndpoints Endpoints(IntegrationReport previous, IntegrationReport current)
     {
-        var before = Flatten(previous).ToDictionary(e => e.Key);
-        var after = Flatten(current).ToList();
+        var beforeList = Flatten(previous);
+        var before = beforeList.ToDictionary(e => e.Key);
+        var after = Flatten(current);
         var afterKeys = after.Select(e => e.Key).ToHashSet();
 
         var newlyCovered = new List<string>();
@@ -150,7 +151,7 @@ public static class RunComparer
             NewlyCovered = newlyCovered,
             Regressed = regressed,
             Added = added,
-            Removed = before.Values.Where(e => !afterKeys.Contains(e.Key)).Select(e => e.Display).ToList(),
+            Removed = beforeList.Where(e => !afterKeys.Contains(e.Key)).Select(e => e.Display).ToList(),
             ConfidenceChanged = confidenceChanged,
         };
     }
@@ -163,14 +164,29 @@ public static class RunComparer
             _ => false,
         };
 
-    private static IEnumerable<(string Key, string Display, CoverageStatus Status)> Flatten(IntegrationReport report) =>
-        report.EndpointCoverage
-            .SelectMany(controller => controller.Endpoints)
-            .Select(e => (EndpointKey.Of(e.Method, e.Route), EndpointKey.Display(e.Method, e.Route), e.Status));
+    /// <summary>
+    /// Endpoints in report order. An identity that occurs more than once (the same route declared in
+    /// two controllers) is paired by occurrence, so the n-th occurrence matches the n-th one before.
+    /// </summary>
+    private static List<(string Key, string Display, CoverageStatus Status)> Flatten(IntegrationReport report)
+    {
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var result = new List<(string Key, string Display, CoverageStatus Status)>();
+        foreach (var endpoint in report.EndpointCoverage.SelectMany(controller => controller.Endpoints))
+        {
+            var identity = EndpointKey.Of(endpoint.Method, endpoint.Route);
+            var occurrence = seen[identity] = seen.GetValueOrDefault(identity) + 1;
+            var key = occurrence == 1 ? identity : $"{identity}#{occurrence}";
+            result.Add((key, EndpointKey.Display(endpoint.Method, endpoint.Route), endpoint.Status));
+        }
+
+        return result;
+    }
 
     private static List<DeltaScorecardItem> Scorecard(IntegrationReport previous, IntegrationReport current)
     {
-        var before = previous.Scorecard.ToDictionary(d => d.Id);
+        // Duplicate ids are a validator violation; here the first occurrence wins so comparing never throws.
+        var before = previous.Scorecard.GroupBy(d => d.Id).ToDictionary(g => g.Key, g => g.First());
         return current.Scorecard
             .Where(d => before.TryGetValue(d.Id, out var old) && old.Score != d.Score)
             .OrderBy(d => d.Id)

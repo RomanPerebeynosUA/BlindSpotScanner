@@ -194,6 +194,54 @@ public class ReportValidatorTests
     }
 
     [Fact]
+    public void Validate_WhyItMattersWithSlash_IsAccepted()
+    {
+        // Arrange
+        var original = Fixtures.Current;
+        var risks = original.TopRisks.ToList();
+        risks[0] = risks[0] with { WhyItMatters = "Checkout must work 24/7, and a broken payment call would reach customers." };
+        var report = original with { TopRisks = risks };
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_ScorableDimensionWithoutScore_IsReported()
+    {
+        // Arrange
+        var original = Fixtures.Current;
+        var scorecard = original.Scorecard.ToList();
+        scorecard[0] = scorecard[0] with { Score = null };
+        var report = original with { Scorecard = scorecard };
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("scorecard/0: scorable dimension has no score");
+    }
+
+    [Fact]
+    public void Validate_DuplicateScorecardId_IsReported()
+    {
+        // Arrange
+        var original = Fixtures.Current;
+        var scorecard = original.Scorecard.ToList();
+        scorecard[1] = scorecard[1] with { Id = 1 };
+        var report = original with { Scorecard = scorecard };
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("scorecard/1/id: duplicate dimension id 1");
+    }
+
+    [Fact]
     public void Validate_MethodNotScript_IsReported()
     {
         // Arrange

@@ -3,15 +3,18 @@ using BlindSpotScanner.Domain.Enums;
 
 namespace BlindSpotScanner.Application.Reports;
 
-/// <summary>Endpoint identity across runs (doc 08): METHOD + route, lower-cased, with {param} names normalized to {}.</summary>
+/// <summary>
+/// Endpoint identity across runs (doc 08): METHOD + route, lower-cased, with {param} names normalized
+/// to {}. Route constraints are kept ({id:int} → {:int}), so {id:int} and {slug} stay distinct.
+/// </summary>
 internal static partial class EndpointKey
 {
     public static string Of(EndpointMethod method, string route) =>
-        RouteParameter().Replace(Display(method, route).ToLowerInvariant(), "{}");
+        RouteParameter().Replace(Display(method, route).ToLowerInvariant(), "{$1}");
 
     /// <summary>The endpoint as people read it, for example "POST api/orders/{id}/cancel".</summary>
     public static string Display(EndpointMethod method, string route) => $"{method.ToString().ToUpperInvariant()} {route}";
 
-    [GeneratedRegex(@"\{[^}]*\}")]
+    [GeneratedRegex(@"\{[^}:]*(:[^}]*)?\}")]
     private static partial Regex RouteParameter();
 }
