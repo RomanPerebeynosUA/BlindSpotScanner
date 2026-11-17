@@ -17,6 +17,10 @@ services:
     build:
       context: .
       dockerfile: src/BlindSpotScanner.Api/Dockerfile
+    environment:
+      ConnectionStrings__Postgres: "Host=db;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      GitHub__Token: ${GITHUB_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "5080:8080"
     depends_on:
@@ -27,6 +31,10 @@ services:
     build:
       context: .
       dockerfile: src/BlindSpotScanner.Worker/Dockerfile
+    environment:
+      ConnectionStrings__Postgres: "Host=db;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      GitHub__Token: ${GITHUB_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

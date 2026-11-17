@@ -66,6 +66,14 @@ public static class DependencyInjection
         services.AddScoped<IScanStore, EfScanStore>();
         services.AddScoped<IScanQueue, PostgresScanQueue>();
         services.AddScoped<IScanEvents, PostgresScanEvents>();
+        services.AddScoped<IScanRequestStore, EfScanRequestStore>();
+        services.AddScoped(sp =>
+        {
+            var llm = sp.GetRequiredService<IOptions<LlmOptions>>().Value;
+            return new ScanRequests(
+                sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IScanQueue>(), sp.GetRequiredService<IScanEvents>(), sp.GetRequiredService<TimeProvider>(),
+                new ScanRequestOptions(llm.Model, llm.PromptSetVersion, llm.MaxCostUsdPerScan));
+        });
         services.AddScoped(sp => new ScanOrchestrator(
             sp.GetRequiredService<IScanStore>(),
             sp.GetRequiredService<IScanEvents>(),
