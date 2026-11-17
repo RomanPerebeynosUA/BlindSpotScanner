@@ -110,3 +110,13 @@ the denominator source), `IntegrationGlobs` (folders and naming), `IntegrationAt
 without brackets, e.g. `Trait("Category","Integration")`; an entry without `(` matches by name),
 `IntegrationBaseTypes` (an entry without `<` matches any generic arity) and `NotIntegrationGlobs`
 (never integration, even inside an integration folder). All default to empty.
+
+## D19 — Endpoint extraction scope (2026-11-17)
+`AspNetCoreEndpointExtractor` reads C# syntax with Roslyn (no compilation). Supported: attribute
+routing (class `[Route]`, `[controller]`/`[action]` tokens, `Http*` verbs, method `[Route]`,
+absolute `/` and `~/` templates) and minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapPatch`/
+`MapDelete`, with `MapGroup` prefixes through call chains and local variables). Not supported:
+conventional routing, `[Area]`, `[Route]` inherited from a base class, `MapMethods`. A route that
+isn't a string literal, and a controller with no attribute-routed actions, become unverified
+reasons; nothing is dropped silently. A file's minimal APIs form one controller row named after
+the file. Roslyn is pinned to 5.0.0 to match EF Core Design's exact dependency.
