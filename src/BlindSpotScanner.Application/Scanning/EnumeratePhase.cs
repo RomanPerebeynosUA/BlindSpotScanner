@@ -22,7 +22,7 @@ public sealed class EnumeratePhase(IGitHubClient github)
         var (blobs, unverifiedReasons) = await ListBlobsAsync(run, ct);
         var candidates = Match(blobs.Keys, ["**/*"], DefaultExcludes);
         var testPaths = Match(candidates, profile.TestGlobs, []);
-        var controllerPaths = Match(candidates, profile.ControllerGlobs, []).Except(testPaths);
+        var controllerPaths = Match(candidates, [.. profile.ControllerGlobs, .. profile.MinimalApiGlobs], []).Except(testPaths);
 
         return new RepositoryInventory(
             Files(controllerPaths, blobs),

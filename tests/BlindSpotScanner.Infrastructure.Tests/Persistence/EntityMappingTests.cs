@@ -39,6 +39,40 @@ public class EntityMappingTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task RepoProfile_ClassificationRules_RoundTrip()
+    {
+        // Arrange
+        var repository = await db.AddRepositoryAsync();
+        var profile = new RepoProfile
+        {
+            RepositoryId = repository.Id,
+            Version = 1,
+            Markdown = "# Profile",
+            IntegrationMappedTo = IntegrationMappedTo.RealSeam,
+            TestGlobs = ["tests/**/*.cs"],
+            ControllerGlobs = ["src/**/Controllers/**/*Controller.cs"],
+            MinimalApiGlobs = ["src/**/Endpoints/**/*.cs"],
+            IntegrationGlobs = ["tests/*.IntegrationTests/**"],
+            IntegrationAttributes = ["Trait(\"Category\",\"Integration\")"],
+            IntegrationBaseTypes = ["WebApplicationFactory"],
+            NotIntegrationGlobs = ["**/*Fixture.cs"],
+        };
+        await using (var write = db.CreateContext())
+        {
+            write.RepoProfiles.Add(profile);
+            await write.SaveChangesAsync();
+        }
+
+        // Act
+        await using var read = db.CreateContext();
+        var loaded = await read.RepoProfiles.AsNoTracking()
+            .SingleAsync(p => p.RepositoryId == repository.Id && p.Version == 1);
+
+        // Assert
+        loaded.Should().BeEquivalentTo(profile);
+    }
+
+    [Fact]
     public async Task Save_RunWithStepAndFinding_RoundTripsChildren()
     {
         // Arrange

@@ -102,3 +102,11 @@ The user's choice: profiles don't carry exclude globs, so the `Exclude` line was
 `third_party`, `dist`, `wwwroot/lib`, `Generated`/`generated`, `*.Designer.cs` and `*.g.cs`.
 Symlinks (mode 120000) are not counted. Blob text is UTF-8 without its BOM; content that isn't
 valid UTF-8 decodes as Latin-1.
+
+## D18 — Profile classification rules are typed columns (2026-11-17)
+The user's choice: P4's rules live in `string[]` columns on `repo_profiles`, not parsed from the
+profile Markdown. `MinimalApiGlobs` (files with minimal API routes; they join `ControllerGlobs` as
+the denominator source), `IntegrationGlobs` (folders and naming), `IntegrationAttributes` (written
+without brackets, e.g. `Trait("Category","Integration")`; an entry without `(` matches by name),
+`IntegrationBaseTypes` (an entry without `<` matches any generic arity) and `NotIntegrationGlobs`
+(never integration, even inside an integration folder). All default to empty.
