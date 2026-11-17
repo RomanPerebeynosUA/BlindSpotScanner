@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { Profile } from '../../core/api/api-types';
 import { ProfileEditor } from './profile-editor';
@@ -26,6 +27,7 @@ describe('ProfileEditor', () => {
   const open = vi.fn();
 
   beforeEach(() => {
+    latest = () => profile();
     saveProfile.mockReset();
     draftProfile.mockReset();
     open.mockReset();
@@ -40,7 +42,7 @@ describe('ProfileEditor', () => {
         {
           provide: RepositoriesApi,
           useValue: {
-            profile: (_id: string, version?: number) => of(version === 1 ? profile({ version: 1, markdown: '# Old' }) : profile()),
+            profile: (_id: string, version?: number) => of(version === 1 ? profile({ version: 1, markdown: '# Old' }) : latest()),
             profileVersions: () => of([2, 1]),
             saveProfile,
             draftProfile,
@@ -60,6 +62,8 @@ describe('ProfileEditor', () => {
     };
     return { el, settle };
   }
+
+  let latest = () => profile();
 
   const field = (el: HTMLElement, name: string) => el.querySelector(`[name=${name}]`) as HTMLTextAreaElement;
 
@@ -145,6 +149,56 @@ describe('ProfileEditor', () => {
     expect(field(el, 'markdown').value).toBe('# Drafted');
     expect(el.querySelector('.questions li')?.textContent?.trim()).toBe('Is Redis a real seam?');
     expect(saveProfile).not.toHaveBeenCalled();
+  });
+
+  it('switching versions with unsaved edits asks first and keeps them on cancel', async () => {
+    // Arrange
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { el, settle } = await render();
+    type(el, 'markdown', '# My unsaved edit');
+    await settle();
+
+    // Act
+    (el.querySelector('.versions button[data-version="1"]') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect(confirm).toHaveBeenCalled();
+    expect(field(el, 'markdown').value).toBe('# My unsaved edit');
+    confirm.mockRestore();
+  });
+
+  it('switching versions without edits does not ask', async () => {
+    // Arrange
+    const confirm = vi.spyOn(window, 'confirm');
+    const { el, settle } = await render();
+
+    // Act
+    (el.querySelector('.versions button[data-version="1"]') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it('after a 409 Reload latest loads the newer version as the base', async () => {
+    // Arrange
+    saveProfile.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 409 })));
+    const { el, settle } = await render();
+    (el.querySelector('button.save') as HTMLButtonElement).click();
+    await settle();
+    latest = () => profile({ version: 3, markdown: '# Theirs' });
+
+    // Act
+    (el.querySelector('button.reload') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect(field(el, 'markdown').value).toBe('# Theirs');
+    saveProfile.mockReturnValue(of(profile({ version: 4 })));
+    (el.querySelector('button.save') as HTMLButtonElement).click();
+    expect(saveProfile).toHaveBeenLastCalledWith('r1', 3, expect.anything());
   });
 
   it('older version is read-only until restored', async () => {

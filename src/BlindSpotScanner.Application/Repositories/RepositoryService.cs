@@ -1,6 +1,7 @@
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Domain;
 using BlindSpotScanner.Domain.Entities;
+using BlindSpotScanner.Domain.Enums;
 
 namespace BlindSpotScanner.Application.Repositories;
 
@@ -37,7 +38,10 @@ public interface IRepositoryStore
 /// <summary>A row of the repositories page (OpenAPI <c>RepositorySummary</c>, plus D22's additions).</summary>
 /// <param name="LastCoveredShare">Covered endpoints / total of the latest succeeded run; null when it had none.</param>
 /// <param name="ActiveRunId">The newest queued or running run.</param>
-public sealed record RepositorySummary(Guid Id, string FullName, string DefaultBranch, Guid? LastRunId, decimal? LastScore, decimal? LastCoveredShare, DateTimeOffset? LastScanAt, Guid? ActiveRunId);
+/// <param name="LatestRunStatus">The newest run's status, whatever it is (so a repository whose scans all failed doesn't look unscanned).</param>
+public sealed record RepositorySummary(
+    Guid Id, string FullName, string DefaultBranch, Guid? LastRunId, decimal? LastScore, decimal? LastCoveredShare, DateTimeOffset? LastScanAt, Guid? ActiveRunId,
+    RunStatus? LatestRunStatus = null);
 
 /// <summary>Registers GitHub repositories (D22): GitHub's canonical names, a branch that exists, and profile v1.</summary>
 public sealed class RepositoryService(IRepositoryStore store, IGitHubClient github)
@@ -66,9 +70,9 @@ public sealed class RepositoryService(IRepositoryStore store, IGitHubClient gith
         {
             return new AddRepositoryResult(AddRepositoryStatus.NotFound, Error: ex.Message);
         }
-        catch (Exception ex) when (ex is GitHubAuthenticationException or GitHubRateLimitException)
+        catch (Exception ex) when (GitHubFailures.IsUnavailable(ex))
         {
-            return new AddRepositoryResult(AddRepositoryStatus.GitHubUnavailable, Error: ex.Message);
+            return Unavailable(ex);
         }
 
         // GitHub's names are canonical, so URLs that differ by case or form find the same row.
@@ -86,6 +90,10 @@ public sealed class RepositoryService(IRepositoryStore store, IGitHubClient gith
         {
             return new AddRepositoryResult(AddRepositoryStatus.BranchNotFound, Error: $"Branch '{branch}' doesn't exist in {remote.Owner}/{remote.Name}.");
         }
+        catch (Exception ex) when (GitHubFailures.IsUnavailable(ex))
+        {
+            return Unavailable(ex);
+        }
 
         var repository = new Repository { Id = Guid.NewGuid(), Owner = remote.Owner, Name = remote.Name, DefaultBranch = branch, HtmlUrl = remote.HtmlUrl };
         if (!await store.TryAddAsync(repository, ProfileTemplate.Default(repository.Id, $"{remote.Owner}/{remote.Name}"), ct))
@@ -96,4 +104,8 @@ public sealed class RepositoryService(IRepositoryStore store, IGitHubClient gith
 
         return new AddRepositoryResult(AddRepositoryStatus.Created, repository);
     }
+
+    /// <remarks>An HTTP error's message can echo a URL, so only GitHub's own exceptions pass their message on.</remarks>
+    private static AddRepositoryResult Unavailable(Exception ex) => new(
+        AddRepositoryStatus.GitHubUnavailable, Error: ex is HttpRequestException ? "GitHub did not answer; try again later." : ex.Message);
 }

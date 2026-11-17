@@ -65,9 +65,9 @@ public sealed class ProfileDrafter(IRepositoryStore repositories, IGitHubClient 
                     .Take(MaxSampleTests),
                 ct);
         }
-        catch (Exception ex) when (ex is GitHubNotFoundException or GitHubAuthenticationException or GitHubRateLimitException)
+        catch (Exception ex) when (ex is GitHubNotFoundException || GitHubFailures.IsUnavailable(ex))
         {
-            return new DraftProfileResult(DraftProfileStatus.GitHubFailed, Errors: [ex.Message]);
+            return new DraftProfileResult(DraftProfileStatus.GitHubFailed, Errors: [ex is HttpRequestException ? "GitHub did not answer; try again later." : ex.Message]);
         }
 
         var input = JsonSerializer.Serialize(new { rootTree = paths, buildFiles, sampleTests });

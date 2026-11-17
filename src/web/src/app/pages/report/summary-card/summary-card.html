@@ -4,7 +4,7 @@
     <div class="lbl">Quality score</div>
     @if (summary.qualityScore === null) {
       <div class="val">N/A</div>
-      <div class="sub">Not scorable</div>
+      <div class="sub">Not scorable · {{ summary.weightAssessablePct }}% of weight assessable</div>
     } @else {
       <div class="val">{{ summary.qualityScore | number: '1.1-1' }}<span class="muted unit">/10</span></div>
       <div class="sub">{{ summary.weightAssessablePct }}% of weight assessable</div>

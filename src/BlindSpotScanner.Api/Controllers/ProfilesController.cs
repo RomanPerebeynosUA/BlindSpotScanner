@@ -15,7 +15,7 @@ public sealed record ProfileResponse(
 
 /// <param name="BaseVersion">The version the user edited; 409 when another save came first.</param>
 public sealed record SaveProfileRequest(
-    int BaseVersion, string? Markdown, string? IntegrationMappedTo, string[]? TestGlobs, string[]? ControllerGlobs, string[]? MinimalApiGlobs,
+    int? BaseVersion, string? Markdown, string? IntegrationMappedTo, string[]? TestGlobs, string[]? ControllerGlobs, string[]? MinimalApiGlobs,
     string[]? IntegrationGlobs, string[]? IntegrationAttributes, string[]? IntegrationBaseTypes, string[]? NotIntegrationGlobs);
 
 [ApiController]
@@ -55,7 +55,16 @@ public sealed class ProfilesController(ProfileService profiles, ProfileDrafter d
             request.Markdown ?? string.Empty, request.IntegrationMappedTo ?? string.Empty, request.TestGlobs ?? [], request.ControllerGlobs ?? [],
             request.MinimalApiGlobs ?? [], request.IntegrationGlobs ?? [], request.IntegrationAttributes ?? [], request.IntegrationBaseTypes ?? [],
             request.NotIntegrationGlobs ?? []);
-        var result = await profiles.SaveAsync(repoId, request.BaseVersion, input, ct);
+        if (request.BaseVersion is not { } baseVersion)
+        {
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["baseVersion"] = ["baseVersion is required."] })
+            {
+                Title = "Invalid profile",
+                Detail = "baseVersion is required.",
+            });
+        }
+
+        var result = await profiles.SaveAsync(repoId, baseVersion, input, ct);
         return result.Status switch
         {
             SaveProfileStatus.Saved => Ok(ProfileResponse.From(result.Profile!)),

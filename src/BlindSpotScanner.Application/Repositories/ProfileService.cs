@@ -58,6 +58,11 @@ public sealed class ProfileService(IProfileStore profiles, IRepositoryStore repo
         var controllerGlobs = Clean(input.ControllerGlobs);
         var minimalApiGlobs = Clean(input.MinimalApiGlobs);
         var errors = new List<string>();
+        if (baseVersion < 0)
+        {
+            errors.Add("baseVersion must be 0 (no profile yet) or the version being edited.");
+        }
+
         if (string.IsNullOrWhiteSpace(input.Markdown))
         {
             errors.Add("Markdown must not be empty.");
@@ -83,7 +88,9 @@ public sealed class ProfileService(IProfileStore profiles, IRepositoryStore repo
             return new SaveProfileResult(SaveProfileStatus.Invalid, Errors: errors);
         }
 
-        if (await profiles.GetAsync(repositoryId, null, ct) is { } latest && latest.Version != baseVersion)
+        // The base must be the latest version, or 0 when the repository has no profile yet.
+        var latestVersion = (await profiles.GetAsync(repositoryId, null, ct))?.Version ?? 0;
+        if (latestVersion != baseVersion)
         {
             return new SaveProfileResult(SaveProfileStatus.Conflict);
         }
@@ -110,7 +117,7 @@ public sealed class ProfileService(IProfileStore profiles, IRepositoryStore repo
     }
 
     private static string[] Clean(string[]? entries) =>
-        (entries ?? []).Select(e => e.Trim()).Where(e => e.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
+        (entries ?? []).Where(e => e is not null).Select(e => e.Trim()).Where(e => e.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
 
     private static bool TryParseMapping(string? text, out IntegrationMappedTo mapping)
     {

@@ -11,6 +11,9 @@ public sealed class EfRepositoryStore(BlindSpotScannerDbContext db) : IRepositor
 {
     private const string UniqueViolation = "23505";
 
+    /// <summary>The unique (Owner, Name) index; any other violation is a bug, not "already registered".</summary>
+    private const string NameIndex = "ix_repositories_owner_name";
+
     public Task<Repository?> FindAsync(Guid id, CancellationToken ct) => db.Repositories.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id, ct);
 
     public Task<Repository?> FindByNameAsync(string owner, string name, CancellationToken ct) =>
@@ -25,7 +28,7 @@ public sealed class EfRepositoryStore(BlindSpotScannerDbContext db) : IRepositor
             await db.SaveChangesAsync(ct);
             return true;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: UniqueViolation })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: UniqueViolation, ConstraintName: NameIndex })
         {
             db.ChangeTracker.Clear();
             return false;
@@ -38,15 +41,19 @@ public sealed class EfRepositoryStore(BlindSpotScannerDbContext db) : IRepositor
         var latest = await db.ScanRuns.AsNoTracking()
             .Where(r => r.Status == RunStatus.Succeeded)
             .GroupBy(r => r.RepositoryId)
-            .Select(g => g.OrderByDescending(r => r.GeneratedAt)
+            .Select(g => g.OrderByDescending(r => r.GeneratedAt).ThenByDescending(r => r.Id)
                 .Select(r => new { r.RepositoryId, r.Id, r.Score, r.EndpointsCovered, r.EndpointsTotal, r.GeneratedAt })
                 .First())
             .ToDictionaryAsync(r => r.RepositoryId, ct);
         var active = await db.ScanRuns.AsNoTracking()
             .Where(r => r.Status == RunStatus.Queued || r.Status == RunStatus.Running)
             .GroupBy(r => r.RepositoryId)
-            .Select(g => g.OrderByDescending(r => r.QueuedAt).Select(r => new { r.RepositoryId, r.Id }).First())
+            .Select(g => g.OrderByDescending(r => r.QueuedAt).ThenByDescending(r => r.Id).Select(r => new { r.RepositoryId, r.Id }).First())
             .ToDictionaryAsync(r => r.RepositoryId, r => r.Id, ct);
+        var newest = await db.ScanRuns.AsNoTracking()
+            .GroupBy(r => r.RepositoryId)
+            .Select(g => g.OrderByDescending(r => r.GeneratedAt ?? r.QueuedAt).ThenByDescending(r => r.Id).Select(r => new { r.RepositoryId, r.Status }).First())
+            .ToDictionaryAsync(r => r.RepositoryId, r => r.Status, ct);
 
         return repositories
             .Select(r =>
@@ -55,7 +62,8 @@ public sealed class EfRepositoryStore(BlindSpotScannerDbContext db) : IRepositor
                 return new RepositorySummary(
                     r.Id, $"{r.Owner}/{r.Name}", r.DefaultBranch, last?.Id, last?.Score,
                     last is { EndpointsTotal: > 0 } ? (decimal)last.EndpointsCovered!.Value / last.EndpointsTotal.Value : null,
-                    last?.GeneratedAt, active.TryGetValue(r.Id, out var runId) ? runId : null);
+                    last?.GeneratedAt, active.TryGetValue(r.Id, out var runId) ? runId : null,
+                    newest.TryGetValue(r.Id, out var status) ? status : null);
             })
             .OrderBy(r => r.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();

@@ -1,3 +1,6 @@
+@if (loadError(); as error) {
+<div class="panel"><h1>{{ error }}</h1></div>
+} @else {
 <div class="head">
   <div>
     <h1>Scan in progress</h1>
@@ -10,7 +13,7 @@
 
 @if (outcome(); as done) {
   <div class="panel outcome stack" role="status">
-    <h2>Scan {{ done.status === 'Failed' ? 'failed' : 'cancelled' }}</h2>
+    <h2>{{ done.status === 'Succeeded' ? 'Scan finished, but its report is missing' : done.status === 'Failed' ? 'Scan failed' : 'Scan cancelled' }}</h2>
     @if (done.failureReasons.length > 0) {
       <ul>
         @for (reason of done.failureReasons; track $index) {
@@ -59,3 +62,4 @@
     <div class="note">Items the scan cannot finish within the budget become <b>Unverified</b>. They are never guessed.</div>
   </div>
 </div>
+}

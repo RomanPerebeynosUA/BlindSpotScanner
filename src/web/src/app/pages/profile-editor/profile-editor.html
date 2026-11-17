@@ -14,6 +14,13 @@
 </div>
 <div class="note">The draft is not saved until you click Save.</div>
 
+@if (conflict()) {
+  <div class="banner row" role="alert">
+    <span>Someone saved a newer version of this profile. Reload it to continue; your unsaved changes will be lost.</span>
+    <button type="button" class="btn sm reload" (click)="reloadLatest()">Reload latest</button>
+  </div>
+}
+
 @if (viewing(); as old) {
   <div class="banner row">
     <span>Viewing version {{ old.version }} (read-only).</span>
@@ -53,7 +60,7 @@
 
   <div class="panel stack">
     <h2>Profile Markdown</h2>
-    <textarea name="markdown" class="markdown" [value]="markdown()" [readOnly]="readOnly()" (input)="markdown.set(value($event))"></textarea>
+    <textarea name="markdown" class="markdown" [value]="markdown()" [readOnly]="readOnly()" (input)="setMarkdown($event)"></textarea>
     <h3>Preview</h3>
     <div class="preview" [innerHTML]="preview()"></div>
   </div>

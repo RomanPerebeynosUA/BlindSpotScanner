@@ -27,6 +27,10 @@
                   <span class="chip s-running">Scanning</span>
                 } @else if (repo.lastRunId) {
                   <span class="chip s-succeeded">Scanned</span>
+                } @else if (repo.latestRunStatus === 'Failed') {
+                  <span class="chip s-failed">Last scan failed</span>
+                } @else if (repo.latestRunStatus === 'Cancelled') {
+                  <span class="chip s-cancelled">Last scan cancelled</span>
                 } @else {
                   <span class="chip s-unverified">Not scanned</span>
                 }

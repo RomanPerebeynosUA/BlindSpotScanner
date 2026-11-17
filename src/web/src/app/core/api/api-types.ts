@@ -13,6 +13,8 @@ export interface RepositorySummary {
   lastCoveredShare: number | null;
   lastScanAt: string | null;
   activeRunId: string | null;
+  /** The newest run's status, whatever it is. */
+  latestRunStatus: RunStatus | null;
 }
 
 export interface Repository {

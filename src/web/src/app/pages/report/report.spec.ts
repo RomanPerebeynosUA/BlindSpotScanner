@@ -73,11 +73,14 @@ describe('Report', () => {
 
   it('scoreTile_nullScore_showsNA', async () => {
     // Act
-    const { el } = await render(withReport((r) => (r.summary.qualityScore = null)));
+    const { el } = await render(withReport((r) => {
+      r.summary.qualityScore = null;
+      r.summary.weightAssessablePct = 0;
+    }));
 
-    // Assert
+    // Assert (principle 5: the score always carries "% of weight assessable")
     expect(kpi(el, 'Quality score').querySelector('.val')?.textContent?.trim()).toBe('N/A');
-    expect(kpi(el, 'Quality score').querySelector('.sub')?.textContent?.trim()).toBe('Not scorable');
+    expect(kpi(el, 'Quality score').querySelector('.sub')?.textContent?.trim()).toBe('Not scorable · 0% of weight assessable');
   });
 
   it('summary shows the four computed bullets', async () => {
@@ -174,6 +177,29 @@ describe('Report', () => {
 
     // Assert
     expect(el.querySelector('.outcome')?.textContent).toContain('Unresolved citation: a.cs::B');
+  });
+
+  it('succeeded run without a report says the report is missing', async () => {
+    // Act
+    const { el } = await render(of({ runId: 'run1', status: 'Succeeded', failureReasons: [] }));
+
+    // Assert
+    expect(el.querySelector('.outcome h1')?.textContent?.trim()).toBe('Scan finished, but its report is missing');
+  });
+
+  it('expanding one of two identical endpoints opens only that one', async () => {
+    // Arrange (D14: the same route can be declared twice)
+    const { el, settle } = await render(withReport((r) => {
+      const books = r.endpointCoverage[0];
+      books.endpoints = [books.endpoints[0], { ...books.endpoints[0] }];
+    }));
+
+    // Act
+    (el.querySelector('.coverage tr.endpoint button.expand') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect(el.querySelectorAll('.coverage tr.detail').length).toBe(1);
   });
 
   it('unknown run shows Run not found', async () => {
