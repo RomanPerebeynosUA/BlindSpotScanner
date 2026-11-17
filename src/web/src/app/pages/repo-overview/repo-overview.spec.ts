@@ -47,6 +47,7 @@ async function render(
       { provide: RepositoriesApi, useValue: { get: () => of(repo), runs: () => of(runs), startScan, acknowledgeLlmSharing } },
     ],
   });
+  vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
   const fixture = TestBed.createComponent(RepoOverview);
   fixture.componentRef.setInput('id', 'r1');
   await fixture.whenStable();
