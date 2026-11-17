@@ -2,7 +2,10 @@ namespace BlindSpotScanner.Application.GitHub;
 
 public sealed record OpenedPullRequest(int Number, string Url);
 
-/// <summary>The branch for a fix PR already exists (GitHub answers 422 on the ref).</summary>
+/// <summary>A fix-PR write failed; the message names the step and never the token (D25).</summary>
+public sealed class GitHubWriteException(string message, Exception inner) : Exception(message, inner);
+
+/// <summary>The branch for a fix PR already exists (GitHub answers 422 "Reference already exists" on the ref).</summary>
 public sealed class GitHubBranchExistsException(string message) : Exception(message);
 
 /// <summary>

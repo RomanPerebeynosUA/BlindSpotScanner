@@ -64,6 +64,10 @@ public sealed class FakeGitHubServer : IDisposable
         Write("pulls", 201, new { number = 7, html_url = $"https://github.com/{Owner}/{Name}/pull/7" });
         Write("issues/7/labels", 200, Array.Empty<object>());
 
+        // Repositories whose name says how a write should fail (tests pick the name).
+        Fail("branch-exists", "git/refs", 422, new { message = "Reference already exists" });
+        Fail("pull-fails", "pulls", 500, new { message = "Server Error" });
+
         foreach (var (path, bytes) in files)
         {
             Json($"{Repo}/git/blobs/{BlobSha(bytes)}", new { sha = BlobSha(bytes), encoding = "base64", content = Convert.ToBase64String(bytes) });
@@ -92,8 +96,14 @@ public sealed class FakeGitHubServer : IDisposable
     private void Json(string path, object body) =>
         _server.Given(Request.Create().WithPath(new RegexMatcher($"^{Repo}{Regex.Escape(path[Repo.Length..])}$")).UsingGet()).RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(body));
 
+    private void Fail(string nameMarker, string path, int status, object body) =>
+        _server.Given(Request.Create().WithPath(new RegexMatcher($"^/repos/{Owner}/[^/]*{Regex.Escape(nameMarker)}[^/]*/{Regex.Escape(path)}$")).UsingPost())
+            .AtPriority(1)
+            .RespondWith(Response.Create().WithStatusCode(status).WithBodyAsJson(body));
+
     private void Write(string path, int status, object body) =>
         _server.Given(Request.Create().WithPath(new RegexMatcher($"^{Repo}/{Regex.Escape(path)}$")).UsingPost())
+            .AtPriority(10) // the named failures (priority 1) win for their repositories
             .RespondWith(Response.Create().WithStatusCode(status).WithBodyAsJson(body));
 
     private static string BlobSha(byte[] bytes) => Convert.ToHexStringLower(SHA1.HashData(bytes));

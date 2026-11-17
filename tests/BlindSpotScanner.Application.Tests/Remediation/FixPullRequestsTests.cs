@@ -274,8 +274,57 @@ public class FixPullRequestsTests
         var act = () => CreateAsync();
 
         // Assert
-        await act.Should().ThrowAsync<HttpRequestException>();
+        await act.Should().ThrowAsync<GitHubWriteException>();
         _store.Actions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateAsync_PullCallFails_ErrorNamesTheStep()
+    {
+        // Arrange
+        _pulls.FailOn = "pull";
+
+        // Act
+        var act = () => CreateAsync();
+
+        // Assert
+        (await act.Should().ThrowAsync<GitHubWriteException>()).Which.Message.Should().Be("GitHub failed while opening the pull request.");
+    }
+
+    [Fact]
+    public async Task CreateAsync_NoFiles_ReturnsRejected()
+    {
+        // Act
+        var result = await CreateAsync(Request() with { Files = [] });
+
+        // Assert
+        new { result.Status, Reason = result.Reasons!.Single(), Calls = _pulls.Calls.Count }
+            .Should().Be(new { Status = FixStatus.Rejected, Reason = "no files to commit", Calls = 0 });
+    }
+
+    [Fact]
+    public async Task CreateAsync_MessageCheckFails_ReturnsRejected()
+    {
+        // Act
+        var result = await CreateAsync(Request() with { Branch = "bad branch" });
+
+        // Assert
+        new { result.Status, Reason = result.Reasons!.Single(), Calls = _pulls.Calls.Count }
+            .Should().Be(new { Status = FixStatus.Rejected, Reason = "branch: not a valid git branch name", Calls = 0 });
+    }
+
+    [Fact]
+    public async Task CreateAsync_TruncatedHeadTreeMissingTheFile_IsNotCountedAsChanged()
+    {
+        // Arrange (GitHub cut the head listing short; a missing entry proves nothing)
+        _github.TreesAt["head-sha"] = [.. FixContextBuilderTests.BookstoreFiles.Where(f => !f.EndsWith("BooksApiTests.cs", StringComparison.Ordinal))];
+        _github.TruncatedAt.Add("head-sha");
+
+        // Act
+        var result = await CreateAsync(Request("tests/Bookstore.IntegrationTests/BooksApiTests.cs", FixAction.Modify), "f3");
+
+        // Assert
+        result.Status.Should().Be(FixStatus.Ok);
     }
 
     [Fact]
@@ -414,9 +463,12 @@ public class FixPullRequestsTests
         CreatedBy = "anonymous",
     };
 
-    /// <summary>Rejects anything outside the bookstore test project, like the real guard's first rule.</summary>
+    /// <summary>Rejects anything outside the bookstore test project, like the real guard's first rule, and branches with spaces.</summary>
     private sealed class PathGuard : IFixGuard
     {
+        public IReadOnlyList<string> CheckMessage(string title, string body, string branch) =>
+            branch.Contains(' ', StringComparison.Ordinal) ? ["branch: not a valid git branch name"] : [];
+
         public IReadOnlyList<string> Check(IReadOnlyList<FixFile> files, string testProjectFolder, IReadOnlySet<string> existingPaths) =>
             [.. files.Where(f => !f.Path.StartsWith(testProjectFolder + "/", StringComparison.Ordinal)).Select(f => $"{f.Path}: outside the test project {testProjectFolder}")];
     }

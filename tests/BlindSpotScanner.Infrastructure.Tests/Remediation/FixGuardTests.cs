@@ -81,6 +81,46 @@ public class FixGuardTests
     }
 
     [Fact]
+    public void Check_CreateDifferingOnlyByCase_Rejected()
+    {
+        // Act (two files that collide on Windows and macOS checkouts)
+        var errors = Check(New("tests/Bookstore.IntegrationTests/ordersapitests.cs"));
+
+        // Assert
+        errors.Should().Equal("tests/Bookstore.IntegrationTests/ordersapitests.cs: already exists; use modify");
+    }
+
+    [Fact]
+    public void CheckMessage_SecretInBody_Rejected()
+    {
+        // Act
+        var errors = new FixGuard().CheckMessage("test: add", "Token ghp_" + new string('a', 36), "coverage/fix-x");
+
+        // Assert
+        errors.Should().Equal("body: contains something that looks like a secret");
+    }
+
+    [Fact]
+    public void CheckMessage_InvalidBranch_Rejected()
+    {
+        // Act
+        var errors = new FixGuard().CheckMessage("test: add", "Body", "coverage/fix x..y");
+
+        // Assert
+        errors.Should().Equal("branch: not a valid git branch name");
+    }
+
+    [Fact]
+    public void CheckMessage_ValidBranch_Passes()
+    {
+        // Act
+        var errors = new FixGuard().CheckMessage("test: add", "Body", "coverage/fix-uncovered-endpoint-post-api-orders-cancel-a1b2c3d");
+
+        // Assert
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Check_ModifyMissing_Rejected()
     {
         // Act

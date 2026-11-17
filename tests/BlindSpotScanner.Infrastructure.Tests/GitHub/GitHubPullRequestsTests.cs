@@ -101,6 +101,19 @@ public sealed class GitHubPullRequestsTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateBranchAsync_InvalidRef_ThrowsHttpRequestNotBranchExists()
+    {
+        // Arrange (GitHub also answers 422 for a malformed ref name)
+        Post("/git/refs", 422, new { message = "Reference update failed" });
+
+        // Act
+        var act = () => Client().CreateBranchAsync("example-org", "bookstore-api", "coverage/fix-x", "commit2", CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<HttpRequestException>()).Which.Message.Should().Contain("Reference update failed");
+    }
+
+    [Fact]
     public async Task CreateDraftPullRequestAsync_SendsDraftTrue_ReturnsNumberAndUrl()
     {
         // Arrange

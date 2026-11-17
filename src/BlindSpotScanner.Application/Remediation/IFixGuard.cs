@@ -15,4 +15,7 @@ public interface IFixGuard
     /// <param name="existingPaths">Every file path at the scanned commit.</param>
     /// <returns>One message per violation, each naming its path; empty when the fix passes.</returns>
     IReadOnlyList<string> Check(IReadOnlyList<FixFile> files, string testProjectFolder, IReadOnlySet<string> existingPaths);
+
+    /// <summary>The (user-editable) commit title, PR body and branch name: no secrets, and a valid git branch name.</summary>
+    IReadOnlyList<string> CheckMessage(string title, string body, string branch);
 }

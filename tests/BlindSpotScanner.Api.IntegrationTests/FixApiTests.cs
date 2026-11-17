@@ -9,10 +9,10 @@ namespace BlindSpotScanner.Api.IntegrationTests;
 /// <summary>M10 acceptance (doc 11): branch → blobs → tree → commit → ref → PR (draft), the guard rejects a production-code edit, and read-only mode disables PRs.</summary>
 public class FixApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnlyApiFactory>
 {
-    private async Task<(Guid RunId, string RepoName)> SeedAsync()
+    private async Task<(Guid RunId, string RepoName)> SeedAsync(string marker = "")
     {
         var repositoryId = await factory.SeedRepositoryAsync();
-        var (runId, repoName) = (Guid.NewGuid(), $"fix-{Guid.NewGuid():N}");
+        var (runId, repoName) = (Guid.NewGuid(), $"fix-{marker}{Guid.NewGuid():N}");
         await factory.SeedSucceededRunAsync(repositoryId, "sample-report.json", runId, null, repoName);
         return (runId, repoName);
     }
@@ -76,6 +76,55 @@ public class FixApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnlyA
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         new { response.StatusCode, Reason = problem.GetProperty("reasons")[0].GetString()!.Contains("outside the test project", StringComparison.Ordinal), Writes = factory.GitHub.CallsFor(repoName).Count(c => c.StartsWith("POST", StringComparison.Ordinal)) }
             .Should().Be(new { StatusCode = HttpStatusCode.UnprocessableEntity, Reason = true, Writes = 0 });
+    }
+
+    [Fact]
+    public async Task PullRequest_BranchExists_Returns409()
+    {
+        // Arrange
+        var (runId, _) = await SeedAsync("branch-exists-");
+        using var client = factory.CreateClient();
+        var draft = await PreviewAsync(client, runId);
+
+        // Act
+        var response = await CreateAsync(client, runId, draft);
+
+        // Assert
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        new { response.StatusCode, Title = problem.GetProperty("title").GetString() }.Should().Be(new { StatusCode = HttpStatusCode.Conflict, Title = "Branch exists" });
+    }
+
+    [Fact]
+    public async Task PullRequest_PullCallFails_Returns502NamingTheStep()
+    {
+        // Arrange
+        var (runId, _) = await SeedAsync("pull-fails-");
+        using var client = factory.CreateClient();
+        var draft = await PreviewAsync(client, runId);
+
+        // Act
+        var response = await CreateAsync(client, runId, draft);
+
+        // Assert
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        new { response.StatusCode, Names = problem.GetProperty("detail").GetString()!.StartsWith("GitHub failed while opening the pull request.", StringComparison.Ordinal) }
+            .Should().Be(new { StatusCode = HttpStatusCode.BadGateway, Names = true });
+    }
+
+    [Fact]
+    public async Task PullRequest_UnknownAction_Returns400()
+    {
+        // Arrange
+        var (runId, _) = await SeedAsync();
+        using var client = factory.CreateClient();
+        var draft = await PreviewAsync(client, runId);
+        var files = new JsonArray(new JsonObject { ["path"] = "tests/Bookstore.IntegrationTests/X.cs", ["action"] = "delete", ["content"] = "" });
+
+        // Act
+        var response = await CreateAsync(client, runId, draft, files);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]

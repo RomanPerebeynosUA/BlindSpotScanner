@@ -146,7 +146,14 @@ public sealed partial class FixPullRequests(
         }
 
         var (_, run, report, finding, context) = target;
-        var violations = guard.Check(request.Files, context!.TestProjectFolder, context.BlobShas.Keys.ToHashSet(StringComparer.Ordinal));
+        if (request.Files.Count == 0)
+        {
+            return new FixResult<RemediationAction>(FixStatus.Rejected, Reasons: ["no files to commit"]);
+        }
+
+        var violations = guard.Check(request.Files, context!.TestProjectFolder, context.BlobShas.Keys.ToHashSet(StringComparer.Ordinal))
+            .Concat(guard.CheckMessage(request.Title, request.Body, request.Branch))
+            .ToList();
         if (violations.Count > 0)
         {
             return new FixResult<RemediationAction>(FixStatus.Rejected, Reasons: violations);
@@ -158,9 +165,12 @@ public sealed partial class FixPullRequests(
         }
 
         var (owner, name, branch, head) = (report!.Meta.Repo.Owner, report.Meta.Repo.Name, target.DefaultBranch!, target.Head!);
-        var headBlobs = (await github.GetTreeAsync(owner, name, head, recursive: true, ct)).Entries
-            .Where(e => e.Type == GitEntryType.Blob).ToDictionary(e => e.Path, e => e.Sha, StringComparer.Ordinal);
+        var headTree = await github.GetTreeAsync(owner, name, head, recursive: true, ct);
+        var headBlobs = headTree.Entries.Where(e => e.Type == GitEntryType.Blob).ToDictionary(e => e.Path, e => e.Sha, StringComparer.Ordinal);
+
+        // A truncated head listing can miss a path; only a different blob proves a change then.
         var changed = request.Files
+            .Where(f => !(headTree.Truncated && !headBlobs.ContainsKey(f.Path)))
             .Where(f => context.BlobShas.GetValueOrDefault(f.Path) != headBlobs.GetValueOrDefault(f.Path))
             .Select(f => f.Path)
             .ToList();
@@ -170,17 +180,21 @@ public sealed partial class FixPullRequests(
         }
 
         var row = await store.EnsureFindingAsync(runId, finding!, ct);
-        var baseTree = await pulls.GetCommitTreeShaAsync(owner, name, head, ct);
+        var baseTree = await Step("reading the default branch commit", () => pulls.GetCommitTreeShaAsync(owner, name, head, ct));
         var blobs = new List<(string Path, string BlobSha)>();
         foreach (var file in request.Files)
         {
-            blobs.Add((file.Path, await pulls.CreateBlobAsync(owner, name, file.Content, ct)));
+            blobs.Add((file.Path, await Step($"uploading {file.Path}", () => pulls.CreateBlobAsync(owner, name, file.Content, ct))));
         }
 
-        var tree = await pulls.CreateTreeAsync(owner, name, baseTree, blobs, ct);
-        var commit = await pulls.CreateCommitAsync(owner, name, request.Title, tree, head, ct);
-        await pulls.CreateBranchAsync(owner, name, request.Branch, commit, ct);
-        var pr = await pulls.CreateDraftPullRequestAsync(owner, name, request.Title, request.Body, request.Branch, branch, ct);
+        var tree = await Step("creating the tree", () => pulls.CreateTreeAsync(owner, name, baseTree, blobs, ct));
+        var commit = await Step("creating the commit", () => pulls.CreateCommitAsync(owner, name, request.Title, tree, head, ct));
+        await Step("creating the branch", async () =>
+        {
+            await pulls.CreateBranchAsync(owner, name, request.Branch, commit, ct);
+            return true;
+        });
+        var pr = await Step("opening the pull request", () => pulls.CreateDraftPullRequestAsync(owner, name, request.Title, request.Body, request.Branch, branch, ct));
 
         var now = time.GetUtcNow();
         var action = new RemediationAction
@@ -210,6 +224,19 @@ public sealed partial class FixPullRequests(
         }
 
         return new FixResult<RemediationAction>(FixStatus.Ok, action);
+    }
+
+    /// <summary>Names the failing write (doc 09 step 5); a branch that already exists keeps its own exception.</summary>
+    private static async Task<T> Step<T>(string step, Func<Task<T>> write)
+    {
+        try
+        {
+            return await write();
+        }
+        catch (Exception e) when (GitHubFailures.IsUnavailable(e) || e is GitHubNotFoundException)
+        {
+            throw new GitHubWriteException($"GitHub failed while {step}.", e);
+        }
     }
 
     private enum BaseAt

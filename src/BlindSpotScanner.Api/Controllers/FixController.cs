@@ -47,6 +47,11 @@ public sealed class FixController(FixPullRequests fixes) : ControllerBase
     [HttpPost("pull-request")]
     public async Task<IActionResult> Create(Guid runId, string findingId, [FromBody] FixCreateRequest request, CancellationToken ct)
     {
+        if ((request.Files ?? []).FirstOrDefault(f => f.Action is not ("create" or "modify")) is { } bad)
+        {
+            return Problem($"{bad.Path}: action must be \"create\" or \"modify\".", statusCode: StatusCodes.Status400BadRequest, title: "Invalid fix");
+        }
+
         var files = (request.Files ?? []).Select(f => new FixFile(f.Path ?? string.Empty, f.Action == "modify" ? FixAction.Modify : FixAction.Create, f.Content ?? string.Empty)).ToList();
         FixResult<Domain.Entities.RemediationAction> result;
         try
@@ -56,6 +61,13 @@ public sealed class FixController(FixPullRequests fixes) : ControllerBase
         catch (GitHubBranchExistsException e)
         {
             return Problem(e.Message, statusCode: StatusCodes.Status409Conflict, title: "Branch exists");
+        }
+        catch (GitHubWriteException e)
+        {
+            return Problem(
+                $"{e.Message} Nothing was saved here; if a branch was already created on GitHub, delete or rename it before retrying.",
+                statusCode: StatusCodes.Status502BadGateway,
+                title: "GitHub error");
         }
         catch (Exception e) when (IsGitHubFailure(e))
         {

@@ -40,7 +40,7 @@ public sealed partial class GitHubClient
         {
             await SendJsonAsync(HttpMethod.Post, owner, name, $"{Repo(owner, name)}/git/refs", body, ct);
         }
-        catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.UnprocessableEntity)
+        catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.UnprocessableEntity && e.Message.Contains("Reference already exists", StringComparison.OrdinalIgnoreCase))
         {
             throw new GitHubBranchExistsException($"Branch {branch} already exists; rename it.");
         }
@@ -104,7 +104,26 @@ public sealed partial class GitHubClient
         }
 
         ThrowForAccessErrors(response, owner, name);
-        response.EnsureSuccessStatusCode();
-        return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct)) ?? new JsonObject();
+        var text = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            // GitHub's own message (for example "Reference already exists"); it never echoes the token.
+            var message = JsonNodeOrNull(text)?["message"]?.GetValue<string>() ?? response.ReasonPhrase;
+            throw new HttpRequestException($"GitHub returned {(int)response.StatusCode}: {message}", null, response.StatusCode);
+        }
+
+        return JsonNode.Parse(text) ?? new JsonObject();
+    }
+
+    private static JsonNode? JsonNodeOrNull(string text)
+    {
+        try
+        {
+            return JsonNode.Parse(text);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 }

@@ -43,7 +43,8 @@ public sealed class FixGuard : IFixGuard
             return $"{path}: only C# files can be changed";
         }
 
-        if (file.Action == FixAction.Create && existing.Contains(path))
+        // Case-insensitive: Foo.cs beside foo.cs collides on Windows and macOS checkouts.
+        if (file.Action == FixAction.Create && existing.Any(e => string.Equals(e, path, StringComparison.OrdinalIgnoreCase)))
         {
             return $"{path}: already exists; use modify";
         }
@@ -74,6 +75,38 @@ public sealed class FixGuard : IFixGuard
             ? null
             : $"{path}: C# syntax error at line {error.Location.GetLineSpan().StartLinePosition.Line + 1}: {error.GetMessage(System.Globalization.CultureInfo.InvariantCulture)}";
     }
+
+    public IReadOnlyList<string> CheckMessage(string title, string body, string branch)
+    {
+        var errors = new List<string>();
+        if (SecretScrubber.Scrub(title) != title)
+        {
+            errors.Add("title: contains something that looks like a secret");
+        }
+
+        if (SecretScrubber.Scrub(body) != body)
+        {
+            errors.Add("body: contains something that looks like a secret");
+        }
+
+        if (!IsBranchName(branch))
+        {
+            errors.Add("branch: not a valid git branch name");
+        }
+
+        return errors;
+    }
+
+    /// <summary>A conservative subset of <c>git check-ref-format --branch</c>.</summary>
+    private static bool IsBranchName(string branch) =>
+        branch.Length is > 0 and <= 200
+        && branch.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '/')
+        && !branch.Contains("..", StringComparison.Ordinal)
+        && !branch.Contains("//", StringComparison.Ordinal)
+        && !branch.StartsWith('/') && !branch.EndsWith('/')
+        && !branch.StartsWith('.') && !branch.EndsWith('.')
+        && !branch.EndsWith(".lock", StringComparison.Ordinal)
+        && !branch.Split('/').Any(s => s.StartsWith('.'));
 
     private static bool IsNormalised(string path) =>
         path.Length > 0 && !path.Contains('\\') && !path.StartsWith('/') && path.Split('/').All(s => s.Length > 0 && s != "." && s != "..");

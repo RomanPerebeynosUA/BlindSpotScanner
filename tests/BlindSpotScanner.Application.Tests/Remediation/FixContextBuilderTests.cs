@@ -136,6 +136,9 @@ public class FixContextBuilderTests
     {
         public Dictionary<string, IReadOnlyList<string>> TreesAt { get; } = [];
 
+        /// <summary>Commits whose tree read reports truncated:true.</summary>
+        public HashSet<string> TruncatedAt { get; } = [];
+
         public Task<GitHubRepository> GetRepositoryAsync(string owner, string name, CancellationToken ct) => throw new NotSupportedException();
 
         /// <summary>The branches whose head was asked for, in order.</summary>
@@ -150,7 +153,7 @@ public class FixContextBuilderTests
         public Task<GitTree> GetTreeAsync(string owner, string name, string treeSha, bool recursive, CancellationToken ct)
         {
             var at = TreesAt.GetValueOrDefault(treeSha, files);
-            return Task.FromResult(new GitTree([.. at.Select(f => new GitTreeEntry(f, GitEntryType.Blob, BlobSha(treeSha, f), 100))], false));
+            return Task.FromResult(new GitTree([.. at.Select(f => new GitTreeEntry(f, GitEntryType.Blob, BlobSha(treeSha, f), 100))], TruncatedAt.Contains(treeSha)));
         }
 
         /// <summary>Blob SHAs per commit; a test overriding a commit's tree can mark a changed file with "changed:".</summary>
