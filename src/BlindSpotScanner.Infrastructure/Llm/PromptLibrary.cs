@@ -19,6 +19,9 @@ public sealed partial class PromptLibrary
             .Where(n => n.StartsWith("prompts.", StringComparison.Ordinal) && n.EndsWith(".md", StringComparison.Ordinal))
             .ToDictionary(n => n["prompts.".Length..^".md".Length], n => Read(assembly, n), StringComparer.Ordinal);
         _texts[Application.Llm.Prompts.GradeQuality] += "\n\n" + Read(assembly, "rubric.md");
+
+        // The draft prompt fills in the profile template, "provided at runtime" (D22).
+        _texts[Application.Llm.Prompts.DraftProfile] += "\n\n" + Application.Repositories.ProfileTemplate.Markdown;
     }
 
     /// <summary>A prompt set given as texts, keyed by name ("_system" for the system prompt).</summary>

@@ -71,6 +71,9 @@ public static class DependencyInjection
         services.AddScoped<RepositoryService>();
         services.AddScoped<IProfileStore, EfProfileStore>();
         services.AddScoped<ProfileService>();
+        services.AddScoped(sp => new ProfileDrafter(
+            sp.GetRequiredService<IRepositoryStore>(), sp.GetRequiredService<IGitHubClient>(), sp.GetRequiredService<ILlmClient>(),
+            sp.GetRequiredService<IOptions<ScanOptions>>().Value.MaxFileBytes));
         services.AddScoped(sp =>
         {
             var llm = sp.GetRequiredService<IOptions<LlmOptions>>().Value;

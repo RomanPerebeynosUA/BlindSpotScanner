@@ -100,6 +100,37 @@ public class ProfilesApiTests(QueueOnlyApiFactory factory) : IClassFixture<Queue
     }
 
     [Fact]
+    public async Task Post_Draft_Returns200WithMarkdownAndQuestions()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient();
+
+        // Act
+        using var response = await client.PostAsync($"/api/repositories/{id}/profile/draft", null);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("markdown").GetString().Should().Contain("(drafted)");
+        body.GetProperty("openQuestions").EnumerateArray().Single().GetString().Should().Be("Is the payment gateway a real seam?");
+    }
+
+    [Fact]
+    public async Task Post_Draft_DoesNotSaveAVersion()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient();
+
+        // Act
+        (await client.PostAsync($"/api/repositories/{id}/profile/draft", null)).EnsureSuccessStatusCode();
+
+        // Assert
+        (await client.GetFromJsonAsync<int[]>($"/api/repositories/{id}/profile/versions")).Should().Equal(1);
+    }
+
+    [Fact]
     public async Task Get_UnknownRepository_Returns404()
     {
         // Arrange

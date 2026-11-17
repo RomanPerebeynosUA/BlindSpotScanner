@@ -20,8 +20,24 @@ public sealed record SaveProfileRequest(
 
 [ApiController]
 [Route("api/repositories/{repoId:guid}/profile")]
-public sealed class ProfilesController(ProfileService profiles) : ControllerBase
+public sealed class ProfilesController(ProfileService profiles, ProfileDrafter drafter) : ControllerBase
 {
+    /// <summary>An AI draft of the profile Markdown (a preview: nothing is saved, D22).</summary>
+    [HttpPost("draft")]
+    public async Task<IActionResult> Draft(Guid repoId, CancellationToken ct)
+    {
+        var result = await drafter.DraftAsync(repoId, ct);
+        return result.Status switch
+        {
+            DraftProfileStatus.Drafted => Ok(result.Draft),
+            DraftProfileStatus.RepositoryNotFound => NotFound(),
+            DraftProfileStatus.GitHubFailed => Problem(result.Errors![0], statusCode: StatusCodes.Status502BadGateway, title: "GitHub is unavailable"),
+
+            // The LLM's errors can quote its answer, so they are not echoed.
+            _ => Problem("The AI could not draft a profile. Try again, or edit the profile by hand.", statusCode: StatusCodes.Status502BadGateway, title: "Draft failed"),
+        };
+    }
+
     /// <summary>The latest profile, or <paramref name="version"/> when given.</summary>
     [HttpGet]
     public async Task<IActionResult> Get(Guid repoId, [FromQuery] int? version, CancellationToken ct) =>

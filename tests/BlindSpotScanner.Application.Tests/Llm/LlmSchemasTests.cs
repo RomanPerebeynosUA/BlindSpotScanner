@@ -10,6 +10,7 @@ public class LlmSchemasTests
     [InlineData(Prompts.ClassifyTests)]
     [InlineData(Prompts.MapCoverage)]
     [InlineData(Prompts.GradeQuality)]
+    [InlineData(Prompts.DraftProfile)]
     public void Get_AnswerSchema_UsesNoTypeArrays(string prompt)
     {
         // Act (structured outputs documents anyOf for nullable values, not "type": [ ... ])

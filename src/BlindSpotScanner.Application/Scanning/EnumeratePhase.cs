@@ -17,6 +17,18 @@ public sealed class EnumeratePhase(IGitHubClient github)
         "**/Generated/**", "**/generated/**", "**/*.Designer.cs", "**/*.g.cs",
     ];
 
+    private static readonly Microsoft.Extensions.FileSystemGlobbing.Matcher ExcludedPaths = CreateExcludedPaths();
+
+    /// <summary>Whether a path is vendored, generated or build output (the fixed excludes, D17).</summary>
+    public static bool IsExcluded(string path) => ExcludedPaths.Match(path).HasMatches;
+
+    private static Microsoft.Extensions.FileSystemGlobbing.Matcher CreateExcludedPaths()
+    {
+        var matcher = new Microsoft.Extensions.FileSystemGlobbing.Matcher(StringComparison.Ordinal);
+        matcher.AddIncludePatterns(DefaultExcludes);
+        return matcher;
+    }
+
     public async Task<RepositoryInventory> EnumerateAsync(RunContext run, RepoProfile profile, CancellationToken ct)
     {
         var (blobs, unverifiedReasons) = await ListBlobsAsync(run, ct);
