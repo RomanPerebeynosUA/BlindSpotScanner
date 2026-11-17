@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Observable, of, throwError } from 'rxjs';
+import { NEVER, Observable, of, throwError } from 'rxjs';
 import { RemediationApi } from '../../../core/api/remediation-api';
 import { JiraCreate, JiraDraft, RemediationAction } from '../../../core/api/api-types';
 import { JiraDialog } from './jira-dialog';
@@ -22,7 +22,7 @@ describe('JiraDialog', () => {
   let close: ReturnType<typeof vi.fn>;
   let createJira: ReturnType<typeof vi.fn>;
 
-  async function render(preview: JiraDraft, create: () => Observable<RemediationAction> = () => of(ticket('BSS-2'))) {
+  async function render(preview: JiraDraft | Observable<JiraDraft>, create: () => Observable<RemediationAction> = () => of(ticket('BSS-2'))) {
     close = vi.fn();
     createJira = vi.fn(create);
     TestBed.configureTestingModule({
@@ -30,7 +30,7 @@ describe('JiraDialog', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: { runId: 'run1', findingId: 'f2' } },
         { provide: MatDialogRef, useValue: { close } },
-        { provide: RemediationApi, useValue: { jiraPreview: () => of(preview), createJira } },
+        { provide: RemediationApi, useValue: { jiraPreview: () => ('summary' in preview ? of(preview) : preview), createJira } },
       ],
     });
     const fixture = TestBed.createComponent(JiraDialog);
@@ -121,5 +121,13 @@ describe('JiraDialog', () => {
 
     // Assert
     expect([el.querySelector('.banner')?.textContent?.includes('Already ticketed: BSS-7'), close.mock.calls.length]).toEqual([true, 0]);
+  });
+
+  it('loading text is announced', async () => {
+    // Act
+    const { el } = await render(NEVER);
+
+    // Assert
+    expect(el.querySelector('[aria-live=polite]')?.textContent?.trim()).toBe('Preparing the draft…');
   });
 });

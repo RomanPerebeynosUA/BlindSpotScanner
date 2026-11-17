@@ -59,4 +59,23 @@ describe('JiraAction', () => {
     expect(open).toHaveBeenCalledWith(JiraDialog, expect.objectContaining({ data: { runId: sampleReport().meta.runId, findingId: 'f3' } }));
     expect(el.querySelector('a')?.textContent?.trim()).toBe('BSS-9 · In Progress');
   });
+
+  it('Create Jira button names its finding for screen readers', () => {
+    // Act
+    const { el } = render(f3());
+
+    // Assert
+    expect(el.querySelector('button')?.getAttribute('aria-label')).toBe(`Create Jira ticket: ${f3().headline}`);
+  });
+
+  it('the dialog is named by its title', () => {
+    // Arrange
+    const { el } = render(f3());
+
+    // Act
+    (el.querySelector('button') as HTMLButtonElement).click();
+
+    // Assert
+    expect(open).toHaveBeenCalledWith(JiraDialog, expect.objectContaining({ ariaLabelledBy: 'jira-title' }));
+  });
 });

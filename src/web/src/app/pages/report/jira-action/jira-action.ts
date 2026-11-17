@@ -11,7 +11,7 @@ import { JiraDialog, JiraDialogData } from '../jira-dialog/jira-dialog';
   template: `@if (ticket(); as t) {
       <a class="chip ticket" [href]="t.url" target="_blank" rel="noopener">{{ t.externalKey }} · {{ t.status }}</a>
     } @else {
-      <button type="button" class="btn sm jira" (click)="create()">Create Jira</button>
+      <button type="button" class="btn sm jira" [attr.aria-label]="'Create Jira ticket: ' + finding().headline" (click)="create()">Create Jira</button>
     }`,
 })
 export class JiraAction {
@@ -30,7 +30,7 @@ export class JiraAction {
 
     const data: JiraDialogData = { runId, findingId: this.finding().id };
     this.dialog
-      .open<JiraDialog, JiraDialogData, RemediationAction>(JiraDialog, { data, maxWidth: 'calc(100vw - 32px)' })
+      .open<JiraDialog, JiraDialogData, RemediationAction>(JiraDialog, { data, maxWidth: 'calc(100vw - 32px)', ariaLabelledBy: 'jira-title' })
       .afterClosed()
       .subscribe((created) => {
         if (created) {

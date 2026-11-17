@@ -1,4 +1,4 @@
-<form class="dialog" (submit)="submit($event)" aria-labelledby="jira-title">
+<form class="dialog" (submit)="submit($event)">
   <h2 id="jira-title">Create Jira ticket</h2>
   @if (draft(); as d) {
     @if (existing(); as e) {
@@ -36,6 +36,6 @@
       </button>
     </div>
   } @else {
-    <p class="muted">Preparing the draft…</p>
+    <p class="muted" aria-live="polite">Preparing the draft…</p>
   }
 </form>
