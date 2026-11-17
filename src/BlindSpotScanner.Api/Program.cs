@@ -10,6 +10,8 @@ builder.Services.AddHealthChecks();
 builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddProblemDetails();
 builder.Services.AddSignalR();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<BlindSpotScanner.Application.ICurrentUser, HttpCurrentUser>();
 builder.Services.AddBlindSpotScannerCore();
 builder.AddBlindSpotScannerAuth();
 builder.Services.AddSingleton<ScanEventRelay>();

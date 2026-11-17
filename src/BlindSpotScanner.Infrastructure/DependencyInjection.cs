@@ -1,3 +1,4 @@
+using BlindSpotScanner.Application;
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Llm;
 using BlindSpotScanner.Application.Remediation;
@@ -34,6 +35,9 @@ public static class DependencyInjection
         services.AddOptions<ScanOptions>().BindConfiguration("Scan");
         services.AddOptions<JiraOptions>().BindConfiguration("Jira");
         services.TryAddSingleton(TimeProvider.System);
+
+        // Hosts that know a signed-in user (the api) register theirs first; otherwise actions are "system".
+        services.TryAddScoped<ICurrentUser, SystemUser>();
 
         // The typed client owns its HttpClient; the rate-limit handler sits in its handler chain (D16).
         services.AddTransient<GitHubRateLimitHandler>();
@@ -83,14 +87,14 @@ public static class DependencyInjection
         services.AddScoped(sp => new FixPullRequests(
             sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IRepositoryStore>(), sp.GetRequiredService<FixContextBuilder>(),
             sp.GetRequiredService<IFixGuard>(), sp.GetRequiredService<ILlmClient>(), sp.GetRequiredService<IGitHubClient>(),
-            sp.GetRequiredService<IGitHubPullRequests>(), sp.GetRequiredService<TimeProvider>(), FixDefaultsFrom(sp)));
+            sp.GetRequiredService<IGitHubPullRequests>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ICurrentUser>(), FixDefaultsFrom(sp)));
         services.AddScoped<RemediationActions>();
         services.AddScoped(sp =>
         {
             var jira = sp.GetRequiredService<IOptions<JiraOptions>>().Value;
             var publicUrl = PublicUrl(sp.GetRequiredService<IConfiguration>());
             return new JiraTickets(
-                sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IJiraClient>(), sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IJiraClient>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ICurrentUser>(),
                 new JiraDefaults(jira.ProjectKey, jira.IssueType, jira.Labels, publicUrl));
         });
         services.AddScoped<IProfileStore, EfProfileStore>();

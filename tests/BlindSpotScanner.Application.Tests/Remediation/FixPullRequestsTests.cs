@@ -34,6 +34,7 @@ public class FixPullRequestsTests
 
     private FixPullRequests Fixes => new(
         _runs, _store, new OneRepository(_repositoryId, "trunk"), new FixContextBuilder(_github), new PathGuard(), _llm, _github, _pulls, new Clock(Now),
+        new JiraTicketsTests.NamedUser("dev@example.com"),
         new FixDefaults(_enabled, "http://localhost:8080"));
 
     private Guid AddRun(IntegrationReport report)
@@ -325,6 +326,16 @@ public class FixPullRequestsTests
 
         // Assert
         result.Status.Should().Be(FixStatus.Ok);
+    }
+
+    [Fact]
+    public async Task CreateAsync_New_RecordsCreatedBy()
+    {
+        // Act
+        var result = await CreateAsync();
+
+        // Assert
+        result.Value!.CreatedBy.Should().Be("dev@example.com");
     }
 
     [Fact]

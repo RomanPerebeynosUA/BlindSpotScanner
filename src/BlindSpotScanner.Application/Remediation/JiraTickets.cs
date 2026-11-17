@@ -33,7 +33,7 @@ public sealed record TicketResult<T>(TicketStatus Status, T? Value = default, Re
 /// actions first, then Jira itself), creation only on an explicit request (principle 8), and a lazy
 /// statuses are refreshed by <see cref="RemediationActions"/>.
 /// </summary>
-public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store, IJiraClient jira, TimeProvider time, JiraDefaults defaults)
+public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store, IJiraClient jira, TimeProvider time, ICurrentUser user, JiraDefaults defaults)
 {
     public const string CoverageLabel = "integration-coverage";
 
@@ -120,7 +120,7 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
             Status = issue.Status,
             StatusCheckedAt = now,
             CreatedAt = now,
-            CreatedBy = "anonymous", // until M11 auth (D24)
+            CreatedBy = user.Name,
         };
         await store.AddActionAsync(action, ct);
         return action;

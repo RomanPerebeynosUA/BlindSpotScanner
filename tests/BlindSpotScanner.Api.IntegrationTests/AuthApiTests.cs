@@ -104,6 +104,33 @@ public class AuthApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnly
     }
 
     [Fact]
+    public async Task CreateJira_AsMember_RecordsUserName()
+    {
+        // Arrange
+        var repositoryId = await factory.SeedRepositoryAsync();
+        var runId = Guid.NewGuid();
+        await factory.SeedSucceededRunAsync(repositoryId, "sample-report.json", runId, null);
+        using var client = factory.CreateClient(Roles.Member, "dev@example.com");
+        var draft = (await (await client.PostAsync($"/api/runs/{runId}/findings/f2/jira-preview", null)).Content.ReadFromJsonAsync<JsonElement>());
+        await client.PostAsJsonAsync($"/api/runs/{runId}/findings/f2/jira", new
+        {
+            summary = draft.GetProperty("summary").GetString(),
+            description = draft.GetProperty("description").GetString(),
+            projectKey = "BSS",
+            issueType = "Task",
+            priority = "High",
+            labels = new[] { "integration-coverage" },
+            force = false,
+        });
+
+        // Act
+        var actions = await client.GetFromJsonAsync<JsonElement>($"/api/repositories/{repositoryId}/actions");
+
+        // Assert
+        actions[0].GetProperty("createdBy").GetString().Should().Be("dev@example.com");
+    }
+
+    [Fact]
     public async Task Login_ExternalReturnUrl_RedirectsHome()
     {
         // Arrange (Local mode: no identity provider to visit)

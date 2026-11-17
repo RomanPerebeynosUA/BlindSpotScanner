@@ -18,7 +18,7 @@ public sealed class AuthController(IOptions<AuthOptions> options) : ControllerBa
 {
     [HttpGet("me")]
     public MeResponse Me() => new(
-        User.FindFirstValue("name") ?? User.FindFirstValue("email") ?? User.Identity?.Name ?? User.FindFirstValue("sub") ?? "unknown",
+        HttpCurrentUser.NameOf(User),
         [.. User.FindAll(ClaimTypes.Role).Select(c => c.Value).Distinct(StringComparer.Ordinal)]);
 
     /// <summary>Starts sign-in, then returns to <paramref name="returnUrl"/> when it is a local path (anything else goes home).</summary>

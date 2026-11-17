@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BlindSpotScanner.Api.Controllers;
 
-public sealed record ActionResponse(Guid Id, string Type, string StableKey, string ExternalKey, string Url, string Status, DateTimeOffset CreatedAt)
+public sealed record ActionResponse(Guid Id, string Type, string StableKey, string ExternalKey, string Url, string Status, DateTimeOffset CreatedAt, string CreatedBy)
 {
-    public static ActionResponse From(RemediationAction a) => new(a.Id, a.Type.ToString(), a.StableKey, a.ExternalKey, a.Url, a.Status, a.CreatedAt);
+    public static ActionResponse From(RemediationAction a) => new(a.Id, a.Type.ToString(), a.StableKey, a.ExternalKey, a.Url, a.Status, a.CreatedAt, a.CreatedBy);
 }
 
 public sealed record JiraDraftResponse(
