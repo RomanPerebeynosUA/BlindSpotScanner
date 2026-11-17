@@ -42,7 +42,7 @@ public class LiveScanTests
             new ScanPipelineOptions(llmOptions.Value.Model, llmOptions.Value.PromptSetVersion, 200_000));
 
         // Act
-        var outcome = await pipeline.RunAsync(Guid.NewGuid(), Environment.GetEnvironmentVariable("BSS_LIVE_REPO_URL")!, Profile, CancellationToken.None);
+        var outcome = await pipeline.RunAsync(Guid.NewGuid(), Environment.GetEnvironmentVariable("BSS_LIVE_REPO_URL")!, Profile, previous: null, NoScanObserver.Instance, CancellationToken.None);
 
         // Assert
         outcome.Violations.Should().BeEmpty();

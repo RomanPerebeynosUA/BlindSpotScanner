@@ -8,12 +8,14 @@ namespace BlindSpotScanner.Application.Scanning;
 
 public sealed record ScanPipelineOptions(string ModelId, string PromptSetVersion, int MaxFileBytes);
 
-/// <param name="Violations">ReportValidator's findings; empty means the report may be published (after M6's citation check).</param>
-public sealed record ScanOutcome(IntegrationReport Report, IReadOnlyList<string> Violations, LlmUsage Usage);
+/// <param name="Run">What P1 resolved (branch and pinned commit).</param>
+/// <param name="Violations">ReportValidator's findings; empty means the report may be published once its citations verify.</param>
+public sealed record ScanOutcome(RunContext Run, IntegrationReport Report, IReadOnlyList<string> Violations, LlmUsage Usage);
 
 /// <summary>
-/// One scan, P1 → P7 (doc 05) without the M6 parts (citation verifier, queue, budgets, progress):
-/// resolve, enumerate, extract, classify (rules, then LLM), map, grade, then assemble and validate.
+/// One scan, P1 → P7 (doc 05): resolve, enumerate, extract, classify (rules, then LLM), map, grade,
+/// then assemble (with the delta against <paramref name="previous"/>) and validate. The observer sees
+/// every phase; the orchestrator adds citation verification, storage and progress (M6).
 /// </summary>
 public sealed class ScanPipeline(
     IGitHubClient github,
@@ -27,19 +29,46 @@ public sealed class ScanPipeline(
 {
     public const string SchemaVersion = "1.0";
 
-    public async Task<ScanOutcome> RunAsync(Guid runId, string repoUrl, RepoProfile profile, CancellationToken ct)
+    public async Task<ScanOutcome> RunAsync(Guid runId, string repoUrl, RepoProfile profile, IntegrationReport? previous, IScanObserver observer, CancellationToken ct)
     {
-        var run = await new ResolvePhase(github).ResolveAsync(repoUrl, ct);
-        var inventory = await new EnumeratePhase(github).EnumerateAsync(run, profile, ct);
-        var endpoints = await new ExtractPhase(blobs, extractor).ExtractAsync(run, inventory, ct);
-        var rules = await new ClassifyPhase(blobs, reader).ClassifyAsync(run, inventory, profile, ct);
-        var classified = await new ClassifyAmbiguousPhase(llm, blobs).ClassifyAsync(run, rules, profile, options.MaxFileBytes, ct);
-        var mapped = await new MapCoveragePhase(llm, blobs).MapAsync(run, endpoints, classified.Value, inventory, profile, options.MaxFileBytes, ct);
-        var graded = await new GradeQualityPhase(llm, blobs).GradeAsync(run, classified.Value, mapped.Value, profile, options.MaxFileBytes, ct);
+        async Task<T> Phase<T>(string phase, Func<Task<T>> work, Func<T, PhaseReport> report)
+        {
+            await observer.PhaseStartedAsync(phase, ct);
+            var value = await work();
+            await observer.PhaseCompletedAsync(report(value), ct);
+            return value;
+        }
+
+        static PhaseReport Plain(string phase, int readInFull = 0) => new(phase, LlmUsage.None, [], readInFull);
+
+        var run = await Phase(ScanPhases.Resolve, () => new ResolvePhase(github).ResolveAsync(repoUrl, ct), _ => Plain(ScanPhases.Resolve));
+        var inventory = await Phase(ScanPhases.Enumerate, () => new EnumeratePhase(github).EnumerateAsync(run, profile, ct), i => new PhaseReport(ScanPhases.Enumerate, LlmUsage.None, i.UnverifiedReasons, 0));
+        var endpoints = await Phase(ScanPhases.Extract, () => new ExtractPhase(blobs, extractor).ExtractAsync(run, inventory, ct), _ => Plain(ScanPhases.Extract, inventory.ControllerFileCount));
+        var rules = await Phase(ScanPhases.Classify, () => new ClassifyPhase(blobs, reader).ClassifyAsync(run, inventory, profile, ct), _ => Plain(ScanPhases.Classify, inventory.TestFileCount));
+        var classified = await Phase(ScanPhases.ClassifyWithLlm, () => new ClassifyAmbiguousPhase(llm, blobs).ClassifyAsync(run, rules, profile, options.MaxFileBytes, ct), r => new PhaseReport(ScanPhases.ClassifyWithLlm, r.Usage, r.Notes, 0));
+        var mapped = await Phase(ScanPhases.Map, () => new MapCoveragePhase(llm, blobs).MapAsync(run, endpoints, classified.Value, inventory, profile, options.MaxFileBytes, ct), r => new PhaseReport(ScanPhases.Map, r.Usage, r.Notes, 0));
+        var graded = await Phase(ScanPhases.Grade, () => new GradeQualityPhase(llm, blobs).GradeAsync(run, classified.Value, mapped.Value, profile, options.MaxFileBytes, ct), r => new PhaseReport(ScanPhases.Grade, r.Usage, r.Notes, 0));
         var usage = classified.Usage.Add(mapped.Usage).Add(graded.Usage);
 
+        var detail = Detail(runId, run, profile, inventory, endpoints, classified, mapped.Value, graded.Value, usage, [.. endpoints.UnverifiedReasons, .. classified.Notes, .. mapped.Notes, .. graded.Notes]);
+        var (report, violations) = await Phase(ScanPhases.Assemble, () => Task.FromResult(Assemble(detail, previous)), r => new PhaseReport(ScanPhases.Assemble, LlmUsage.None, r.Violations, 0));
+        return new ScanOutcome(run, report, violations, usage);
+    }
+
+    /// <summary>Assembles and validates; the orchestrator calls it again when it adds an unverified reason.</summary>
+    public (IntegrationReport Report, IReadOnlyList<string> Violations) Assemble(ReportDetail detail, IntegrationReport? previous)
+    {
+        var report = ReportAssembler.Assemble(detail, previous);
+        var violations = validator.Validate(report, previous);
+        return (report with { Validation = new ReportValidation { Passed = violations.Count == 0, Method = "script", Violations = violations } }, violations);
+    }
+
+    private ReportDetail Detail(
+        Guid runId, RunContext run, RepoProfile profile, RepositoryInventory inventory, EndpointInventory endpoints,
+        PhaseResult<TestClassification> classified, IReadOnlyList<ControllerCoverage> coverage, QualityGrade grade, LlmUsage usage, IReadOnlyList<string> unverifiedReasons)
+    {
         var tests = classified.Value;
-        var detail = new ReportDetail
+        return new ReportDetail
         {
             Meta = new ReportMeta
             {
@@ -69,17 +98,12 @@ public sealed class ScanPipeline(
                 },
                 // P4's rules parse every test file in full; nothing is sampled.
                 ReadInFull = inventory.TestFileCount,
-                UnverifiedReasons = [.. endpoints.UnverifiedReasons, .. classified.Notes, .. mapped.Notes, .. graded.Notes],
+                UnverifiedReasons = unverifiedReasons,
             },
-            EndpointCoverage = mapped.Value,
-            Scorecard = graded.Value.Scorecard,
-            Findings = graded.Value.Findings,
-            TopRisks = graded.Value.TopRisks,
+            EndpointCoverage = coverage,
+            Scorecard = grade.Scorecard,
+            Findings = grade.Findings,
+            TopRisks = grade.TopRisks,
         };
-
-        var report = ReportAssembler.Assemble(detail, previous: null);
-        var violations = validator.Validate(report, previous: null);
-        report = report with { Validation = new ReportValidation { Passed = violations.Count == 0, Method = "script", Violations = violations } };
-        return new ScanOutcome(report, violations, usage);
     }
 }
