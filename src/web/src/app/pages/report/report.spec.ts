@@ -1,26 +1,43 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Router } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import { RunsApi } from '../../core/api/runs-api';
-import { RunBody } from '../../core/api/api-types';
+import { RepositoriesApi } from '../../core/api/repositories-api';
+import { RunBody, RunHistoryItem } from '../../core/api/api-types';
 import { IntegrationReport } from '../../core/api/report';
 import { sampleReport } from '../../../testing/sample-report';
 import { Report } from './report';
 
+const PREVIOUS = '11111111-1111-4111-8111-111111111111';
+
+const historyItem = (runId: string, generatedAt: string, status: RunHistoryItem['status'] = 'Succeeded'): RunHistoryItem => ({
+  runId, status, branch: 'main', commitSha: runId.replace(/-/g, '').padEnd(40, '0'), queuedAt: generatedAt, generatedAt,
+  score: 5, weightAssessablePct: 90, endpointsTotal: 5, endpointsCovered: 3, endpointsWeak: 1, endpointsNone: 1, endpointsUnverified: 0, costUsd: 0, failureReasons: [],
+});
+
+/** The repository's history, newest first: this run, a failed one, then the previous example run. */
+const defaultHistory = [
+  historyItem('run1', '2026-11-15T09:00:00Z'),
+  historyItem('failed', '2026-11-10T09:00:00Z', 'Failed'),
+  historyItem(PREVIOUS, '2026-11-01T09:00:00Z'),
+];
+
 describe('Report', () => {
-  const navigate = vi.fn().mockResolvedValue(true);
+  let navigate: ReturnType<typeof vi.fn>;
+  let get: ReturnType<typeof vi.fn>;
 
-  beforeEach(() => navigate.mockClear());
-
-  async function render(body: Observable<RunBody>) {
+  async function render(body: Observable<RunBody>, history: RunHistoryItem[] = defaultHistory) {
+    get = vi.fn(() => body);
     TestBed.configureTestingModule({
       imports: [Report],
       providers: [
-        { provide: Router, useValue: { navigate } },
-        { provide: RunsApi, useValue: { get: () => body } },
+        provideRouter([]),
+        { provide: RunsApi, useValue: { get, repository: () => of({ id: 'repo1' }) } },
+        { provide: RepositoriesApi, useValue: { runs: () => of(history) } },
       ],
     });
+    navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true) as unknown as ReturnType<typeof vi.fn>;
     const fixture = TestBed.createComponent(Report);
     fixture.componentRef.setInput('runId', 'run1');
     fixture.detectChanges();
@@ -32,7 +49,7 @@ describe('Report', () => {
       await fixture.whenStable();
       fixture.detectChanges();
     };
-    return { el, settle };
+    return { el, settle, fixture };
   }
 
   const withReport = (change: (r: IntegrationReport) => void = () => undefined) => {
@@ -200,6 +217,91 @@ describe('Report', () => {
 
     // Assert
     expect(el.querySelectorAll('.coverage tr.detail').length).toBe(1);
+  });
+
+  it('score tile shows the delta chip ▲ 0.4', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    const chip = kpi(el, 'Quality score').querySelector('.delta') as HTMLElement;
+    expect([chip.textContent?.trim(), chip.classList.contains('up')]).toEqual(['▲ 0.4', true]);
+  });
+
+  it('not comparable shows the banner and flat chips', async () => {
+    // Act
+    const { el } = await render(withReport((r) => {
+      r.delta!.comparable = false;
+      r.delta!.comparability = ['integrationMappedTo changed'];
+    }));
+
+    // Assert
+    expect(el.querySelector('.banner')?.textContent).toContain('Not comparable with the previous scan: integrationMappedTo changed');
+    expect(el.querySelectorAll('.kpi .delta.up, .kpi .delta.down').length).toBe(0);
+  });
+
+  it('first scan shows no banner and no changes', async () => {
+    // Act
+    const { el } = await render(withReport((r) => (r.delta = null)));
+
+    // Assert
+    expect([el.querySelector('.banner'), el.querySelector('app-delta-changes')]).toEqual([null, null]);
+  });
+
+  it('changes section names the base date', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    expect(el.querySelector('.changes-since h2')?.textContent?.trim()).toBe('Changes since 1 Nov 2026');
+  });
+
+  it('run picker lists succeeded runs newest first', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    const options = [...el.querySelectorAll('select.run-picker option')].map((o) => (o as HTMLOptionElement).value);
+    expect(options).toEqual(['run1', PREVIOUS]);
+  });
+
+  it('older button navigates to the previous run', async () => {
+    // Arrange
+    const { el } = await render(withReport());
+
+    // Act
+    (el.querySelector('button.older') as HTMLButtonElement).click();
+
+    // Assert
+    expect(navigate).toHaveBeenCalledWith(['/runs', PREVIOUS]);
+  });
+
+  it('newest run disables the newer button', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    expect((el.querySelector('button.newer') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('Compare with links base and target', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    expect(el.querySelector('a.compare')?.getAttribute('href')).toBe(`/compare?base=${PREVIOUS}&target=run1`);
+  });
+
+  it('navigating to another run reloads the report', async () => {
+    // Arrange
+    const { fixture, settle } = await render(withReport());
+
+    // Act
+    fixture.componentRef.setInput('runId', PREVIOUS);
+    await settle();
+
+    // Assert
+    expect(get).toHaveBeenLastCalledWith(PREVIOUS);
   });
 
   it('unknown run shows Run not found', async () => {
