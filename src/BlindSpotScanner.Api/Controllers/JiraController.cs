@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.Remediation;
 using BlindSpotScanner.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +19,7 @@ public sealed record JiraDraftResponse(
 }
 
 /// <summary>Doc 09 Jira tickets: an editable preview, then creation only on the user's explicit request (principle 8).</summary>
+[Authorize(Policy = Roles.Member)]
 [ApiController]
 [Route("api/runs/{runId:guid}/findings/{findingId}")]
 public sealed class JiraController(JiraTickets tickets) : ControllerBase

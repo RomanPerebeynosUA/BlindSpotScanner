@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
@@ -34,6 +36,7 @@ public sealed class RepositoriesController(RepositoryService repositories, Appli
     public async Task<IReadOnlyList<RepositorySummary>> List(CancellationToken ct) => await repositories.ListAsync(ct);
 
     /// <summary>Registers a repository by its GitHub URL and gives it profile v1 (D22).</summary>
+    [Authorize(Policy = Roles.Member)]
     [HttpPost]
     public async Task<IActionResult> Add([FromBody] CreateRepositoryRequest request, CancellationToken ct)
     {

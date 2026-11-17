@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -45,6 +47,7 @@ public sealed class RunsController(ScanRequests scans, Application.Repositories.
     }
 
     /// <summary>Cancels a queued or running scan; a finished one is left as it is.</summary>
+    [Authorize(Policy = Roles.Member)]
     [HttpPost("cancel")]
     public async Task<IActionResult> Cancel(Guid runId, CancellationToken ct) =>
         await scans.CancelAsync(runId, ct) ? Accepted() : NotFound();

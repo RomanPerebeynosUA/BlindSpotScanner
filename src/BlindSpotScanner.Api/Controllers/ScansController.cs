@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.Scanning;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,6 +14,7 @@ public sealed record StartScanResponse(Guid RunId);
 public sealed class ScansController(ScanRequests scans) : ControllerBase
 {
     /// <summary>Starts a scan (async): it is queued and a worker runs it.</summary>
+    [Authorize(Policy = Roles.Member)]
     [HttpPost]
     public async Task<IActionResult> Start(Guid repoId, [FromBody] StartScanRequest? request, CancellationToken ct)
     {

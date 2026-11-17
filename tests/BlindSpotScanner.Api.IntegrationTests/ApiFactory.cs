@@ -3,6 +3,7 @@ using BlindSpotScanner.Domain.Enums;
 using BlindSpotScanner.Domain.Reports;
 using BlindSpotScanner.Infrastructure.Persistence;
 using BlindSpotScanner.Infrastructure.Scanning;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -61,11 +62,33 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Jira:ProjectKey", "BSS");
         builder.ConfigureTestServices(services =>
         {
+            // The real policies, with the role chosen per request (TestAuthHandler).
+            services.AddAuthentication(TestAuthHandler.SchemeName).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
+            services.PostConfigure<AuthenticationOptions>(o =>
+            {
+                o.DefaultScheme = TestAuthHandler.SchemeName;
+                o.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                o.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+                o.DefaultForbidScheme = TestAuthHandler.SchemeName;
+            });
             if (RunWorker)
             {
                 services.AddHostedService<ScanWorker>();
             }
         });
+    }
+
+    /// <summary>A client signed in with <paramref name="role"/> ("none" = anonymous).</summary>
+    public HttpClient CreateClient(string role, string? user = null)
+    {
+        var client = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RoleHeader, role);
+        if (user is not null)
+        {
+            client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeader, user);
+        }
+
+        return client;
     }
 
     /// <summary>

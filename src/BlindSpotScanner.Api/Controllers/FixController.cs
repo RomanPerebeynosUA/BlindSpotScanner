@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Remediation;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +25,7 @@ public sealed record FixFileRequest(string? Path, string? Action, string? Conten
 public sealed record FixCreateRequest(IReadOnlyList<FixFileRequest>? Files, string? Branch, string? Title, string? Body, bool Force, string? BaseSha);
 
 /// <summary>Doc 09 fix PRs (D25): a generated, guarded, editable draft, then a draft PR only on the user's request (principle 8).</summary>
+[Authorize(Policy = Roles.Member)]
 [ApiController]
 [Route("api/runs/{runId:guid}/findings/{findingId}")]
 public sealed class FixController(FixPullRequests fixes) : ControllerBase

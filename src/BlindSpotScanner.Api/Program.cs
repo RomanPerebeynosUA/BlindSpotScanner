@@ -1,3 +1,4 @@
+using BlindSpotScanner.Api.Auth;
 using BlindSpotScanner.Api.Hubs;
 using BlindSpotScanner.Infrastructure;
 using BlindSpotScanner.Infrastructure.Persistence;
@@ -10,6 +11,7 @@ builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Co
 builder.Services.AddProblemDetails();
 builder.Services.AddSignalR();
 builder.Services.AddBlindSpotScannerCore();
+builder.AddBlindSpotScannerAuth();
 builder.Services.AddSingleton<ScanEventRelay>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ScanEventRelay>());
 
@@ -21,9 +23,12 @@ await using (var scope = app.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>().Database.MigrateAsync();
 }
 
-app.MapHealthChecks("/health");
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapHealthChecks("/health").AllowAnonymous();
 app.MapControllers();
-app.MapHub<ScanHub>("/hubs/scans");
+app.MapHub<ScanHub>("/hubs/scans").RequireAuthorization(Roles.Viewer);
 
 await app.RunAsync();
 

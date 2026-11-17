@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +25,7 @@ public sealed record SaveProfileRequest(
 public sealed class ProfilesController(ProfileService profiles, ProfileDrafter drafter) : ControllerBase
 {
     /// <summary>An AI draft of the profile Markdown (a preview: nothing is saved, D22).</summary>
+    [Authorize(Policy = Roles.Member)]
     [HttpPost("draft")]
     public async Task<IActionResult> Draft(Guid repoId, CancellationToken ct)
     {
@@ -48,6 +51,7 @@ public sealed class ProfilesController(ProfileService profiles, ProfileDrafter d
         await profiles.VersionsAsync(repoId, ct) is { } versions ? Ok(versions) : NotFound();
 
     /// <summary>Saves the next version (profiles are never edited in place).</summary>
+    [Authorize(Policy = Roles.Member)]
     [HttpPut]
     public async Task<IActionResult> Save(Guid repoId, [FromBody] SaveProfileRequest request, CancellationToken ct)
     {

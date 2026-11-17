@@ -277,3 +277,20 @@ click. GitHub is tested with WireMock only; no live test.
   create compares the target files at `baseSha` with the default branch head, so a regenerated fix
   can be opened. The PR always goes against the default branch head (doc 09 step 5). The action is
   stored as soon as GitHub returns the PR; the `integration-coverage` label is best effort.
+
+## D26 — Sign-in, roles and hardening (2026-11-17)
+The user's choices for M11: sign-in is server-side OpenID Connect with an HttpOnly cookie session
+(the browser never handles tokens); the settings page is a read-only status page (masked values,
+"Test" buttons; values stay in env vars, nothing is stored in the database); the GitHub PAT stays
+(a GitHub App is out of v1, superseding D16's M11 note).
+- `Auth:Mode`: `Local` (default; every request is `local-admin` with Admin, for development and
+  compose) or `Oidc` (`Auth:Authority`, `Auth:ClientId`, `Auth:ClientSecret` from an env var,
+  `Auth:RoleClaim` default `roles`, `Auth:DefaultRole` default `Viewer`). The OIDC callback is
+  `/api/auth/callback`, so nginx's `/api/` proxy covers it. A user gets the highest known role
+  claimed; unknown values never elevate, and no role means the default.
+- Policies: Viewer reads everything (the fallback for any endpoint, and the scan hub); Member also
+  adds repositories, edits and drafts profiles, acknowledges LLM sharing, scans, cancels, and creates
+  Jira tickets and PRs; Admin also gets `/api/settings/*`. API and hub calls get 401/403, never a
+  login redirect. `/health` and `/api/auth/*` are anonymous.
+- Contract additions: `GET /api/me` (`{ name, roles }`), `GET /api/auth/login?returnUrl=` (local
+  paths only), `POST /api/auth/logout`.
