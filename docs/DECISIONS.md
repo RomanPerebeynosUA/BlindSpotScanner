@@ -127,3 +127,19 @@ field this file doesn't resolve; any non-`.cs` file. In P4, non-`.cs` test files
 tests may be inherited from a class base go to Ambiguous (the LLM step), not Other. Derived test
 attributes (`[SkippableFact]`, `[IntegrationTheory]`) count as tests. A file's minimal APIs form one
 controller row named after the file. Roslyn is pinned to 5.0.0 to match EF Core Design's exact dependency.
+
+## D20 — LLM client and judgment phases (2026-11-17)
+The user's choices: the official Anthropic SDK (`Anthropic` NuGet); default model
+`claude-sonnet-5-5` (`Llm:Model`, doc 10's "latest Sonnet"); the live test runs only when
+`ANTHROPIC_API_KEY` and `BSS_LIVE_REPO_URL` are set. `Llm` defaults: `MaxTokensPerCall` 8000,
+`PromptSetVersion` 1.0.0, $2 / $10 per million input/output tokens. Every call: scrubbed input,
+structured JSON output, a schema check plus the phase's rule check, and at most 2 re-asks with the
+errors; a reply cut off (`max_tokens`) or refused counts as a failed attempt. Server-side refusal
+fallback (`fallbacks: "default"`) is on. Accepted answers are cached in `llm_cache` by a hash of
+prompt, prompt version, model, schema and input. P5 sends a controller only the integration tests
+that mention its routes; `allCandidateTestsIncluded` holds only when no test file is still
+ambiguous or withheld (denied path, over `Scan:MaxFileBytes`) and P2 reported nothing unverified.
+Evidence that doesn't name a test method of a sent file makes the endpoint `unverified`. P6 takes
+dimension names and weights from code; without an answer all 7 dimensions are unscorable.
+`productionSeams` is sent empty (the seams are in the profile Markdown). The citation verifier,
+budgets, queue and DI wiring are M6.
