@@ -1,4 +1,4 @@
-import { IntegrationMappedTo, IntegrationReport } from './report';
+import { IntegrationMappedTo, IntegrationReport, RunDelta } from './report';
 
 /** Shapes of the API's JSON (the C# response records, camelCase). */
 
@@ -15,6 +15,32 @@ export interface RepositorySummary {
   activeRunId: string | null;
   /** The newest run's status, whatever it is. */
   latestRunStatus: RunStatus | null;
+  /** The last succeeded runs (at most 12), oldest first (D23). */
+  trend: TrendPoint[];
+}
+
+export interface TrendPoint {
+  runId: string;
+  generatedAt: string;
+  score: number | null;
+  coveredShare: number | null;
+}
+
+export interface RunHeadline {
+  runId: string;
+  branch: string;
+  commitSha: string;
+  generatedAt: string;
+  score: number | null;
+}
+
+/** GET /api/runs/compare: always old → new (D23). */
+export interface Comparison {
+  base: RunHeadline;
+  target: RunHeadline;
+  swapped: boolean;
+  adHoc: boolean;
+  delta: RunDelta;
 }
 
 export interface Repository {

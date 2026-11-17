@@ -32,6 +32,22 @@ describe('RunsApi', () => {
     expect(http.expectOne('/api/runs/run1/steps').request.method).toBe('GET');
   });
 
+  it('compare gets /api/runs/compare with base and target', () => {
+    // Act
+    api.compare('a', 'b').subscribe();
+
+    // Assert
+    expect(http.expectOne('/api/runs/compare?base=a&target=b').request.method).toBe('GET');
+  });
+
+  it('repository gets /api/runs/{id}/repository', () => {
+    // Act
+    api.repository('run1').subscribe();
+
+    // Assert
+    expect(http.expectOne('/api/runs/run1/repository').request.method).toBe('GET');
+  });
+
   it('isReport tells a report from a status body', () => {
     // Arrange
     const status: RunBody = { runId: 'r', status: 'Running', failureReasons: [] };

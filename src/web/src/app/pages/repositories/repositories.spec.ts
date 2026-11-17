@@ -15,6 +15,7 @@ const summary = (overrides: Partial<RepositorySummary> = {}): RepositorySummary 
   lastScanAt: '2026-11-15T09:00:00Z',
   activeRunId: null,
   latestRunStatus: 'Succeeded',
+  trend: [],
   ...overrides,
 });
 
