@@ -6,6 +6,7 @@ using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Infrastructure.Extraction;
 using BlindSpotScanner.Infrastructure.GitHub;
+using BlindSpotScanner.Infrastructure.Jira;
 using BlindSpotScanner.Infrastructure.Llm;
 using BlindSpotScanner.Infrastructure.Persistence;
 using BlindSpotScanner.Infrastructure.Remediation;
@@ -31,12 +32,14 @@ public static class DependencyInjection
         services.AddOptions<GitHubOptions>().BindConfiguration("GitHub");
         services.AddOptions<LlmOptions>().BindConfiguration("Llm");
         services.AddOptions<ScanOptions>().BindConfiguration("Scan");
+        services.AddOptions<JiraOptions>().BindConfiguration("Jira");
         services.TryAddSingleton(TimeProvider.System);
 
         // The typed client owns its HttpClient; the rate-limit handler sits in its handler chain (D16).
         services.AddTransient<GitHubRateLimitHandler>();
         services.AddHttpClient<IGitHubClient, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
         services.AddScoped<IBlobReader, CachingBlobReader>();
+        services.AddHttpClient<IJiraClient, JiraClient>();
         services.AddSingleton<IEndpointExtractor, AspNetCoreEndpointExtractor>();
         services.AddSingleton<ITestSyntaxReader, CSharpTestSyntaxReader>();
 
