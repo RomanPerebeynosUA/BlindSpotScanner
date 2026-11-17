@@ -112,6 +112,19 @@ describe('RepoOverview', () => {
     expect(button.disabled).toBe(true);
   });
 
+  it('overview shows score and covered share trends oldest first', async () => {
+    // Act (history is newest first; the failed run has no headline)
+    const { el } = await render([
+      run({ runId: 'c', score: 5.1, endpointsCovered: 3, endpointsTotal: 5 }),
+      run({ runId: 'f', status: 'Failed', score: null, endpointsCovered: null, endpointsTotal: null }),
+      run({ runId: 'a', score: 4.7, endpointsCovered: 2, endpointsTotal: 5 }),
+    ]);
+
+    // Assert
+    const labels = [...el.querySelectorAll('.trends svg')].map((s) => s.getAttribute('aria-label'));
+    expect(labels).toEqual(['Score: 4.7 to 5.1', 'Covered share: 40% to 60%']);
+  });
+
   it('no runs shows the empty state', async () => {
     // Act
     const { el } = await render([]);

@@ -12,6 +12,13 @@
   <button type="button" class="btn primary" [disabled]="starting()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
 </div>
 
+@if (scoreTrend().length >= 2) {
+  <div class="panel row trends">
+    <div class="stack"><span class="muted">Score</span><app-sparkline [values]="scoreTrend()" label="Score" /></div>
+    <div class="stack"><span class="muted">Covered share</span><app-sparkline [values]="coveredTrend()" [max]="1" label="Covered share" /></div>
+  </div>
+}
+
 @if (runs(); as list) {
   @if (list.length === 0) {
     <div class="panel muted">No scans yet.</div>
