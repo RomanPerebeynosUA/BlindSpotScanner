@@ -76,6 +76,14 @@ public static class DependencyInjection
         services.AddScoped<RepositoryService>();
         services.AddScoped<RunComparison>();
         services.AddScoped<IRemediationStore, EfRemediationStore>();
+        services.AddScoped(sp =>
+        {
+            var jira = sp.GetRequiredService<IOptions<JiraOptions>>().Value;
+            var publicUrl = sp.GetRequiredService<IConfiguration>()["App:PublicUrl"] is { Length: > 0 } url ? url : "http://localhost:8080";
+            return new JiraTickets(
+                sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IJiraClient>(), sp.GetRequiredService<TimeProvider>(),
+                new JiraDefaults(jira.ProjectKey, jira.IssueType, jira.Labels, publicUrl));
+        });
         services.AddScoped<IProfileStore, EfProfileStore>();
         services.AddScoped<ProfileService>();
         services.AddScoped(sp => new ProfileDrafter(
