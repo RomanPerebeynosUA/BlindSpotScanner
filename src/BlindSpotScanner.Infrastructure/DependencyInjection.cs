@@ -5,6 +5,7 @@ using BlindSpotScanner.Application.Remediation;
 using BlindSpotScanner.Application.Reports;
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Application.Scanning;
+using BlindSpotScanner.Application.Settings;
 using BlindSpotScanner.Infrastructure.Extraction;
 using BlindSpotScanner.Infrastructure.GitHub;
 using BlindSpotScanner.Infrastructure.Jira;
@@ -14,6 +15,7 @@ using BlindSpotScanner.Infrastructure.Remediation;
 using BlindSpotScanner.Infrastructure.Reports;
 using BlindSpotScanner.Infrastructure.Repositories;
 using BlindSpotScanner.Infrastructure.Scanning;
+using BlindSpotScanner.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -46,6 +48,7 @@ public static class DependencyInjection
         services.AddHttpClient<IGitHubPullRequests, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
         services.AddScoped<IBlobReader, CachingBlobReader>();
         // A short timeout: a hung Jira must not hold the report's actions list (D24).
+        services.AddHttpClient<IConnectionSettings, ConnectionTester>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddHttpClient<IJiraClient, JiraClient>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<IEndpointExtractor, AspNetCoreEndpointExtractor>();
         services.AddSingleton<ITestSyntaxReader, CSharpTestSyntaxReader>();
