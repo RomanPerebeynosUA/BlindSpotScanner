@@ -239,18 +239,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
 
     private static IEnumerable<AttributeSyntax> Attributes(SyntaxList<AttributeListSyntax> lists) => lists.SelectMany(l => l.Attributes);
 
-    /// <summary>The attribute's simple name without namespace or "Attribute" suffix.</summary>
-    private static string Name(AttributeSyntax attribute)
-    {
-        var name = SimpleName(attribute.Name);
-        return name.Length > "Attribute".Length && name.EndsWith("Attribute", StringComparison.Ordinal) ? name[..^"Attribute".Length] : name;
-    }
+    private static string Name(AttributeSyntax attribute) => SyntaxNames.Of(attribute);
 
-    private static string SimpleName(TypeSyntax type) => type switch
-    {
-        QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
-        AliasQualifiedNameSyntax alias => alias.Name.Identifier.ValueText,
-        SimpleNameSyntax simple => simple.Identifier.ValueText,
-        _ => type.ToString(),
-    };
+    private static string SimpleName(TypeSyntax type) => SyntaxNames.Simple(type);
 }
