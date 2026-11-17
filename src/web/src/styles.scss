@@ -67,7 +67,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .grid2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; }
 .bullets { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .bullets b { display: inline-block; min-width: 118px; color: var(--muted); font-weight: 500; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
-.tablewrap { overflow-x: auto; }
+/* relative: absolutely positioned children (.sr-only) must stay inside the scroller, not widen the page. */
+.tablewrap { overflow-x: auto; position: relative; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; padding: 8px; border-bottom: 1px solid var(--line); }
 td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }

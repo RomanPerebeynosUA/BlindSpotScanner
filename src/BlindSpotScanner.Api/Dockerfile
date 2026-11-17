@@ -10,6 +10,8 @@ RUN dotnet restore src/BlindSpotScanner.Api/BlindSpotScanner.Api.csproj
 # Prompts and the scoring rubric are embedded into Infrastructure at build time (D20).
 COPY BlindSpotScanner-Blueprint/prompts/ BlindSpotScanner-Blueprint/prompts/
 COPY BlindSpotScanner-Blueprint/docs/06-scoring-rubric.md BlindSpotScanner-Blueprint/docs/
+# The profile template is embedded into Application (D22).
+COPY BlindSpotScanner-Blueprint/profiles/_template.md BlindSpotScanner-Blueprint/profiles/
 COPY src/ src/
 RUN dotnet publish src/BlindSpotScanner.Api/BlindSpotScanner.Api.csproj -c Release --no-restore -o /app
 
