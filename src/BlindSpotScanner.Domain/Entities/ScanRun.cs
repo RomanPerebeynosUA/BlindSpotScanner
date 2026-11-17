@@ -17,6 +17,18 @@ public class ScanRun
         ProfileVersion = profileVersion;
     }
 
+    /// <summary>
+    /// A scan requested through the API (M6). Branch and commit stay empty until the worker resolves
+    /// them (<see cref="Pin"/>); status, lease and attempts are then driven by the scan queue.
+    /// </summary>
+    public static ScanRun Enqueue(Guid id, Guid repositoryId, string? requestedBranch, decimal maxCostUsd, int profileVersion, string modelId, string promptSetVersion, DateTimeOffset queuedAt) =>
+        new(id, repositoryId, requestedBranch ?? string.Empty, string.Empty, modelId, promptSetVersion, profileVersion)
+        {
+            RequestedBranch = requestedBranch,
+            MaxCostUsd = maxCostUsd,
+            QueuedAt = queuedAt.ToUniversalTime(),
+        };
+
     public Guid Id { get; private set; }
     public Guid RepositoryId { get; private set; }
     public string Branch { get; private set; }
@@ -40,6 +52,63 @@ public class ScanRun
     public int? EndpointsWeak { get; private set; }
     public int? EndpointsNone { get; private set; }
     public int? EndpointsUnverified { get; private set; }
+
+    // Job state (M6, D21). Null QueuedAt: a run created directly, not through the queue.
+    public DateTimeOffset? QueuedAt { get; private set; }
+    public string? RequestedBranch { get; private set; }
+    public decimal MaxCostUsd { get; private set; }
+    public int Attempts { get; private set; }
+    public DateTimeOffset? LeasedUntil { get; private set; }
+    public bool CancelRequested { get; private set; }
+    public string[] FailureReasons { get; private set; } = [];
+
+    private bool IsTerminal => Status is RunStatus.Succeeded or RunStatus.Failed or RunStatus.Cancelled;
+
+    /// <summary>Records the branch and commit P1 resolved; every later read is pinned to them.</summary>
+    public void Pin(string branch, string commitSha)
+    {
+        if (Status != RunStatus.Running)
+        {
+            throw new InvalidOperationException($"Scan run {Id} is {Status}; only a running scan can be pinned.");
+        }
+
+        Branch = branch;
+        CommitSha = commitSha;
+    }
+
+    public void Fail(IReadOnlyList<string> reasons)
+    {
+        if (IsTerminal)
+        {
+            throw new InvalidOperationException($"Scan run {Id} is already {Status}.");
+        }
+
+        Status = RunStatus.Failed;
+        FailureReasons = [.. reasons];
+    }
+
+    /// <summary>A queued scan is cancelled at once; a running one is flagged and stops at its next phase.</summary>
+    public void RequestCancel()
+    {
+        if (Status == RunStatus.Queued)
+        {
+            Status = RunStatus.Cancelled;
+        }
+        else if (Status == RunStatus.Running)
+        {
+            CancelRequested = true;
+        }
+    }
+
+    public void Cancel()
+    {
+        if (Status != RunStatus.Running)
+        {
+            throw new InvalidOperationException($"Scan run {Id} is {Status}; only a running scan can be cancelled this way.");
+        }
+
+        Status = RunStatus.Cancelled;
+    }
 
     public void RecordReport(IntegrationReport report)
     {

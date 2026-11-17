@@ -25,6 +25,8 @@ internal sealed class ScanRunConfiguration : IEntityTypeConfiguration<ScanRun>
         builder.HasKey(r => r.Id);
         builder.HasOne<Repository>().WithMany().HasForeignKey(r => r.RepositoryId);
         builder.Property(r => r.ReportJson).HasColumnType("jsonb");
+        // The scan queue (D21) takes the oldest queued run, or an expired running one.
+        builder.HasIndex(r => new { r.Status, r.QueuedAt });
     }
 }
 
