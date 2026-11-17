@@ -10,8 +10,13 @@ public sealed record ScanStepResponse(string Phase, string Status, DateTimeOffse
 
 [ApiController]
 [Route("api/runs/{runId:guid}")]
-public sealed class RunsController(ScanRequests scans) : ControllerBase
+public sealed class RunsController(ScanRequests scans, Application.Repositories.RepositoryService repositories) : ControllerBase
 {
+    /// <summary>The run's repository (D23), so the report page can list the repository's other runs.</summary>
+    [HttpGet("repository")]
+    public async Task<IActionResult> Repository(Guid runId, CancellationToken ct) =>
+        await repositories.FindByRunAsync(runId, ct) is { } repository ? Ok(RepositoryResponse.From(repository)) : NotFound();
+
     /// <summary>The report once the run succeeded; otherwise the run's status (OpenAPI).</summary>
     [HttpGet]
     public async Task<IActionResult> Get(Guid runId, CancellationToken ct)

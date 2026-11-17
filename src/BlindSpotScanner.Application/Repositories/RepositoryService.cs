@@ -31,6 +31,9 @@ public interface IRepositoryStore
     /// <summary>Every repository with its latest succeeded run's headline and its active run, by full name.</summary>
     Task<IReadOnlyList<RepositorySummary>> ListAsync(CancellationToken ct);
 
+    /// <summary>The repository a run belongs to; null when the run doesn't exist.</summary>
+    Task<Repository?> FindByRunAsync(Guid runId, CancellationToken ct);
+
     /// <summary>The repository's runs, newest first (by generation, else queue time).</summary>
     Task<IReadOnlyList<ScanRun>> RunsAsync(Guid repositoryId, CancellationToken ct);
 }
@@ -41,7 +44,15 @@ public interface IRepositoryStore
 /// <param name="LatestRunStatus">The newest run's status, whatever it is (so a repository whose scans all failed doesn't look unscanned).</param>
 public sealed record RepositorySummary(
     Guid Id, string FullName, string DefaultBranch, Guid? LastRunId, decimal? LastScore, decimal? LastCoveredShare, DateTimeOffset? LastScanAt, Guid? ActiveRunId,
-    RunStatus? LatestRunStatus = null);
+    RunStatus? LatestRunStatus = null,
+    IReadOnlyList<TrendPoint>? Trend = null)
+{
+    /// <summary>The last succeeded runs (at most 12), oldest first (D23).</summary>
+    public IReadOnlyList<TrendPoint> Trend { get; init; } = Trend ?? [];
+}
+
+/// <param name="CoveredShare">Covered / total endpoints; null when the run had no endpoints.</param>
+public sealed record TrendPoint(Guid RunId, DateTimeOffset GeneratedAt, decimal? Score, decimal? CoveredShare);
 
 /// <summary>Registers GitHub repositories (D22): GitHub's canonical names, a branch that exists, and profile v1.</summary>
 public sealed class RepositoryService(IRepositoryStore store, IGitHubClient github)
@@ -49,6 +60,8 @@ public sealed class RepositoryService(IRepositoryStore store, IGitHubClient gith
     public Task<IReadOnlyList<RepositorySummary>> ListAsync(CancellationToken ct) => store.ListAsync(ct);
 
     public Task<Repository?> GetAsync(Guid id, CancellationToken ct) => store.FindAsync(id, ct);
+
+    public Task<Repository?> FindByRunAsync(Guid runId, CancellationToken ct) => store.FindByRunAsync(runId, ct);
 
     /// <summary>Null when the repository doesn't exist.</summary>
     public async Task<IReadOnlyList<ScanRun>?> RunsAsync(Guid id, CancellationToken ct) =>
