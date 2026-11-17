@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoints"],
+  "properties": {
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "evidence", "falsePositive", "notes"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["covered", "weak", "skipped", "none", "unverified"] },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "falsePositive": { "type": "boolean" },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}
