@@ -1,5 +1,6 @@
 using BlindSpotScanner.Domain.Entities;
 using BlindSpotScanner.Domain.Enums;
+using BlindSpotScanner.Domain.Reports;
 using BlindSpotScanner.Infrastructure.Persistence;
 using BlindSpotScanner.Infrastructure.Scanning;
 using Microsoft.AspNetCore.Hosting;
@@ -85,6 +86,30 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
         await db.SaveChangesAsync();
         return repository.Id;
+    }
+
+    /// <summary>
+    /// A succeeded run carrying an example report under <paramref name="runId"/>. The example's fixed
+    /// ids are rewritten (run id, previous run id, the stored delta's base) so tests don't collide and
+    /// the stored-delta link points at <paramref name="previousRunId"/>.
+    /// </summary>
+    public async Task SeedSucceededRunAsync(Guid repositoryId, string fixture, Guid runId, Guid? previousRunId)
+    {
+        var report = ReportJsonSerializer.Deserialize(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture)));
+        report = report with
+        {
+            Meta = report.Meta with { RunId = runId },
+            Summary = report.Summary with { PreviousRunId = previousRunId },
+            Delta = report.Delta is null || previousRunId is null ? report.Delta : report.Delta with { BaseRunId = previousRunId.Value },
+        };
+        var meta = report.Meta;
+        var run = new ScanRun(runId, repositoryId, meta.Branch, meta.CommitSha, meta.ModelId, meta.PromptSetVersion, meta.ProfileVersion);
+        run.RecordReport(report);
+        run.Succeed();
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>();
+        db.ScanRuns.Add(run);
+        await db.SaveChangesAsync();
     }
 }
 

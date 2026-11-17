@@ -104,6 +104,35 @@ public class RepositoriesApiTests(ApiFactory factory) : IClassFixture<ApiFactory
     }
 
     [Fact]
+    public async Task RunRepository_KnownRun_ReturnsRepository()
+    {
+        // Arrange
+        using var client = factory.CreateClient();
+        var id = await AddAsync(client, NewUrl());
+        var runId = Guid.NewGuid();
+        await factory.SeedSucceededRunAsync(id, "sample-report.json", runId, null);
+
+        // Act
+        var body = await client.GetFromJsonAsync<JsonElement>($"/api/runs/{runId}/repository");
+
+        // Assert
+        body.GetProperty("id").GetGuid().Should().Be(id);
+    }
+
+    [Fact]
+    public async Task RunRepository_UnknownRun_Returns404()
+    {
+        // Arrange
+        using var client = factory.CreateClient();
+
+        // Act
+        using var response = await client.GetAsync($"/api/runs/{Guid.NewGuid()}/repository");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task Runs_UnknownRepository_Returns404()
     {
         // Arrange

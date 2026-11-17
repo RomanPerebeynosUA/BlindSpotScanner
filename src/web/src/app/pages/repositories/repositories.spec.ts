@@ -15,6 +15,7 @@ const summary = (overrides: Partial<RepositorySummary> = {}): RepositorySummary 
   lastScanAt: '2026-11-15T09:00:00Z',
   activeRunId: null,
   latestRunStatus: 'Succeeded',
+  trend: [],
   ...overrides,
 });
 
@@ -56,7 +57,7 @@ describe('Repositories', () => {
     const el = await render([summary({ activeRunId: 'run9' })]);
 
     // Assert
-    expect(cells(el)[4]).toBe('Scanning');
+    expect(cells(el)[5]).toBe('Scanning');
     const link = el.querySelector('tbody a.btn') as HTMLAnchorElement;
     expect(link.textContent?.trim()).toBe('Watch');
     expect(link.getAttribute('href')).toBe('/runs/run9/live');
@@ -75,7 +76,26 @@ describe('Repositories', () => {
     const el = await render([summary({ lastRunId: null, lastScore: null, lastCoveredShare: null, lastScanAt: null, latestRunStatus: 'Failed' })]);
 
     // Assert
-    expect(cells(el)[4]).toBe('Last scan failed');
+    expect(cells(el)[5]).toBe('Last scan failed');
+  });
+
+  it('repositories trend column shows a sparkline for two or more points', async () => {
+    // Act
+    const el = await render([summary({ trend: [
+      { runId: 'a', generatedAt: '2026-11-01T09:00:00Z', score: 4.7, coveredShare: 0.4 },
+      { runId: 'b', generatedAt: '2026-11-15T09:00:00Z', score: 5.1, coveredShare: 0.6 },
+    ] })]);
+
+    // Assert
+    expect(el.querySelector('tbody td.trend svg')?.getAttribute('aria-label')).toBe('Score trend: 4.7 to 5.1');
+  });
+
+  it('repositories trend with one point shows a dash', async () => {
+    // Act
+    const el = await render([summary({ trend: [{ runId: 'b', generatedAt: '2026-11-15T09:00:00Z', score: 5.1, coveredShare: 0.6 }] })]);
+
+    // Assert
+    expect(el.querySelector('tbody td.trend')?.textContent?.trim()).toBe('—');
   });
 
   it('empty list shows the empty state', async () => {

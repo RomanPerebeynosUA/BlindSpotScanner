@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IScanRequestStore, EfScanRequestStore>();
         services.AddScoped<IRepositoryStore, EfRepositoryStore>();
         services.AddScoped<RepositoryService>();
+        services.AddScoped<RunComparison>();
         services.AddScoped<IProfileStore, EfProfileStore>();
         services.AddScoped<ProfileService>();
         services.AddScoped(sp => new ProfileDrafter(

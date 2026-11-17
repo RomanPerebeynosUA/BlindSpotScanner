@@ -12,9 +12,36 @@
         <span class="chip s-badge mapping" title="What 'integration' means in this measurement">{{ meta.integrationMappedTo }}</span>
       </div>
     </div>
+    <div class="row picker">
+      <button type="button" class="btn sm older" aria-label="Previous run" [disabled]="!older()" (click)="go(older()!.runId)">◀</button>
+      <select class="run-picker" aria-label="Run" (change)="pick($event)">
+        @for (run of siblings(); track run.runId) {
+          <option [value]="run.runId" [selected]="run.runId === runId()">{{ run.generatedAt | date: 'd MMM y' }} · {{ run.commitSha.slice(0, 7) }}</option>
+        }
+      </select>
+      <button type="button" class="btn sm newer" aria-label="Next run" [disabled]="!newer()" (click)="go(newer()!.runId)">▶</button>
+      @if (compareBase(); as base) {
+        <a class="btn compare" routerLink="/compare" [queryParams]="{ base: base, target: runId() }">Compare with…</a>
+      }
+    </div>
   </div>
 
+  @if (report.delta; as delta) {
+    @if (!delta.comparable) {
+      <div class="banner" role="alert">Not comparable with the previous scan: {{ delta.comparability.join('; ') }}. Changes are shown but not counted as progress.</div>
+    } @else if (delta.comparability.length > 0) {
+      <div class="note">Compared with the previous scan despite: {{ delta.comparability.join('; ') }}.</div>
+    }
+  }
+
   <app-summary-card [report]="report" />
+
+  @if (report.delta; as delta) {
+    <div class="stack changes-since">
+      <h2>Changes since {{ delta.baseGeneratedAt | date: 'd MMM y' }}</h2>
+      <app-delta-changes [delta]="delta" />
+    </div>
+  }
   <app-top-risks [risks]="report.topRisks" [meta]="meta" />
   <app-endpoint-coverage [meta]="meta" />
   <app-scorecard [rows]="report.scorecard" [meta]="meta" [scoreLabel]="report.summary.scoreLabel" />

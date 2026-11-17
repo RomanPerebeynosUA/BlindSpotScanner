@@ -155,9 +155,10 @@ public class EfRepositoryStoreTests(PostgresFixture db)
         list.Single(r => r.Id == repository.Id).Should().BeEquivalentTo(new { LastRunId = (Guid?)null, LatestRunStatus = (RunStatus?)RunStatus.Failed });
     }
 
-    private async Task AddSucceededRunAsync(Guid repositoryId, Guid runId)
+    private async Task AddSucceededRunAsync(Guid repositoryId, Guid runId, Func<Domain.Reports.IntegrationReport, Domain.Reports.IntegrationReport>? change = null)
     {
         var report = PostgresFixture.LoadReport("sample-report.json", runId);
+        report = change?.Invoke(report) ?? report;
         var meta = report.Meta;
         var run = new ScanRun(runId, repositoryId, meta.Branch, meta.CommitSha, meta.ModelId, meta.PromptSetVersion, meta.ProfileVersion);
         run.RecordReport(report);
@@ -165,6 +166,61 @@ public class EfRepositoryStoreTests(PostgresFixture db)
         await using var context = db.CreateContext();
         context.ScanRuns.Add(run);
         await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task ListAsync_ThirteenSucceededRuns_TrendHasLastTwelveOldestFirst()
+    {
+        // Arrange
+        var repository = await AddAsync(UniqueName());
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var ids = Enumerable.Range(0, 13).Select(_ => Guid.NewGuid()).ToList();
+        foreach (var (id, day) in ids.Select((id, i) => (id, i)))
+        {
+            await AddSucceededRunAsync(repository.Id, id, r => r with { Meta = r.Meta with { GeneratedAt = start.AddDays(day) } });
+        }
+
+        await using var context = db.CreateContext();
+
+        // Act
+        var list = await new EfRepositoryStore(context).ListAsync(CancellationToken.None);
+
+        // Assert
+        var trend = list.Single(r => r.Id == repository.Id).Trend;
+        trend.Select(p => p.RunId).Should().Equal(ids.Skip(1));
+        trend[0].Should().BeEquivalentTo(new { Score = (decimal?)5.1m, CoveredShare = (decimal?)0.6m, GeneratedAt = start.AddDays(1) });
+    }
+
+    [Fact]
+    public async Task ListAsync_NullScoreRun_TrendKeepsNullPoint()
+    {
+        // Arrange
+        var repository = await AddAsync(UniqueName());
+        var runId = Guid.NewGuid();
+        await AddSucceededRunAsync(repository.Id, runId, r => r with { Summary = r.Summary with { QualityScore = null } });
+        await using var context = db.CreateContext();
+
+        // Act
+        var list = await new EfRepositoryStore(context).ListAsync(CancellationToken.None);
+
+        // Assert
+        list.Single(r => r.Id == repository.Id).Trend.Should().ContainSingle().Which.Score.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FindByRunAsync_KnownRun_ReturnsItsRepository()
+    {
+        // Arrange
+        var repository = await AddAsync(UniqueName());
+        var runId = Guid.NewGuid();
+        await AddSucceededRunAsync(repository.Id, runId);
+        await using var context = db.CreateContext();
+
+        // Act
+        var found = await new EfRepositoryStore(context).FindByRunAsync(runId, CancellationToken.None);
+
+        // Assert
+        found!.Id.Should().Be(repository.Id);
     }
 
     [Fact]
@@ -182,5 +238,28 @@ public class EfRepositoryStoreTests(PostgresFixture db)
 
         // Assert
         runs.Select(r => r.Id).Should().Equal(newer.Id, succeeded.Id, older.Id);
+    }
+
+    [Fact]
+    public async Task RunsAsync_SameTimestamp_HigherIdFirst()
+    {
+        // Arrange (inserted lower id first, so insertion order alone gives the wrong answer)
+        var repository = await AddAsync(UniqueName());
+        var at = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
+        var low = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var high = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        foreach (var id in new[] { low, high })
+        {
+            await using var add = db.CreateContext();
+            await new PostgresScanQueue(add).EnqueueAsync(ScanRun.Enqueue(id, repository.Id, null, 5m, 1, "claude-sonnet-5-5", "1.0.0", at), CancellationToken.None);
+        }
+
+        await using var context = db.CreateContext();
+
+        // Act
+        var runs = await new EfRepositoryStore(context).RunsAsync(repository.Id, CancellationToken.None);
+
+        // Assert
+        runs.Select(r => r.Id).Should().Equal(high, low);
     }
 }

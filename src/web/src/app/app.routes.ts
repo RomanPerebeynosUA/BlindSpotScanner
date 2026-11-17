@@ -6,5 +6,6 @@ export const routes: Routes = [
   { path: 'repos/:id/profile', loadComponent: () => import('./pages/profile-editor/profile-editor').then((m) => m.ProfileEditor) },
   { path: 'runs/:runId', loadComponent: () => import('./pages/report/report').then((m) => m.Report) },
   { path: 'runs/:runId/live', loadComponent: () => import('./pages/live-scan/live-scan').then((m) => m.LiveScan) },
+  { path: 'compare', loadComponent: () => import('./pages/compare/compare').then((m) => m.Compare) },
   { path: '**', redirectTo: '' },
 ];

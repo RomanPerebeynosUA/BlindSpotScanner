@@ -1,4 +1,5 @@
 @let summary = report().summary;
+@let comparable = report().delta?.comparable ?? true;
 <div class="kpis">
   <div class="kpi">
     <div class="lbl">Quality score</div>
@@ -9,25 +10,30 @@
       <div class="val">{{ summary.qualityScore | number: '1.1-1' }}<span class="muted unit">/10</span></div>
       <div class="sub">{{ summary.weightAssessablePct }}% of weight assessable</div>
     }
+    <app-delta-chip [metric]="metric('qualityScore')" [comparable]="comparable" [decimals]="1" />
   </div>
   <div class="kpi">
     <div class="lbl">Endpoints covered</div>
     <div class="val">{{ summary.endpoints.covered }}<span class="muted unit"> / {{ summary.endpoints.total }}</span></div>
+    <app-delta-chip [metric]="metric('endpoints.covered')" [comparable]="comparable" />
     <div class="sub">Verdict: <span class="chip" [class]="'chip s-' + summary.verdict">{{ summary.verdict }}</span></div>
   </div>
   <div class="kpi">
     <div class="lbl">Weak</div>
     <div class="val">{{ summary.endpoints.weak }}</div>
+    <app-delta-chip [metric]="metric('endpoints.weak')" [comparable]="comparable" />
     <div class="sub">status-only or partial</div>
   </div>
   <div class="kpi">
     <div class="lbl">Untested</div>
     <div class="val">{{ summary.endpoints.none }}</div>
+    <app-delta-chip [metric]="metric('endpoints.none')" [comparable]="comparable" />
     <div class="sub">confirmed none</div>
   </div>
   <div class="kpi">
     <div class="lbl">Unverified</div>
     <div class="val">{{ summary.endpoints.unverified }}</div>
+    <app-delta-chip [metric]="metric('endpoints.unverified')" [comparable]="comparable" />
     <div class="sub">not read, never guessed</div>
   </div>
 </div>

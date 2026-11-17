@@ -114,8 +114,29 @@ export interface Validation {
   citationsResolved?: number;
 }
 
-/** M8 renders the delta; M7 only carries it. */
-export type RunDelta = Record<string, unknown>;
+export type DeltaDirection = 'improved' | 'regressed' | 'unchanged';
+
+export interface DeltaMetric {
+  name: string;
+  prev: number | null;
+  curr: number | null;
+  change: number | null;
+  direction: DeltaDirection;
+}
+
+/** Computed by the backend's RunComparer (doc 08); the UI only renders it. */
+export interface RunDelta {
+  baseRunId: string;
+  baseCommitSha: string;
+  baseGeneratedAt: string;
+  comparable: boolean;
+  comparability: string[];
+  metrics: DeltaMetric[];
+  endpoints: { newlyCovered: string[]; regressed: string[]; added: string[]; removed: string[]; confidenceChanged?: string[] };
+  scorecard: { dimension: string; prev: number | null; curr: number | null; change: number | null }[];
+  findings: { fixed: string[]; new: string[] };
+  risks: { dropped: string[]; new: string[] };
+}
 
 export interface IntegrationReport {
   meta: ReportMeta;

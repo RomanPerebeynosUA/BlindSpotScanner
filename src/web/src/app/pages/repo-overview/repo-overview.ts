@@ -1,14 +1,17 @@
-import { Component, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { Repository, RunHistoryItem } from '../../core/api/api-types';
 import { StatusChip } from '../../shared/status-chip/status-chip';
+import { Sparkline } from '../../shared/sparkline/sparkline';
+
+const TREND_LENGTH = 12;
 
 /** `/repos/:id`: run history and "Scan now" (doc 04). */
 @Component({
   selector: 'app-repo-overview',
-  imports: [RouterLink, DatePipe, DecimalPipe, StatusChip],
+  imports: [RouterLink, DatePipe, DecimalPipe, StatusChip, Sparkline],
   templateUrl: './repo-overview.html',
   styleUrl: './repo-overview.scss',
 })
@@ -21,6 +24,15 @@ export class RepoOverview implements OnInit {
   protected readonly repository = signal<Repository | null>(null);
   protected readonly runs = signal<RunHistoryItem[] | null>(null);
   protected readonly starting = signal(false);
+
+  /** The last 12 succeeded runs, oldest first (history arrives newest first), matching the repositories list's trend (D23). */
+  private readonly succeeded = computed(() =>
+    (this.runs() ?? []).filter((r) => r.status === 'Succeeded').slice(0, TREND_LENGTH).reverse(),
+  );
+  protected readonly scoreTrend = computed(() => this.succeeded().map((r) => r.score));
+  protected readonly coveredTrend = computed(() =>
+    this.succeeded().map((r) => (r.endpointsTotal ? (r.endpointsCovered ?? 0) / r.endpointsTotal : null)),
+  );
 
   ngOnInit(): void {
     this.api.get(this.id()).subscribe((repository) => this.repository.set(repository));

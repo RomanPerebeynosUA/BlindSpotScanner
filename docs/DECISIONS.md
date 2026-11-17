@@ -207,3 +207,20 @@ in configuration); the web app uses hand-written typed API services instead of o
   the prompt says.
 - New endpoints return errors as ProblemDetails. Validation stays in the application services (as
   in M6), so FluentValidation is not added yet. No auth header until M11 (OIDC).
+
+## D23 — Run comparison and trends (2026-11-17)
+The user's choices for M8: the trend sparkline is a hand-drawn SVG (no chart library); it shows on
+the repositories table and on the repository overview; ad-hoc compare always runs old → new.
+- `GET /api/runs/compare?base=&target=` orders the two reports by `meta.generatedAt` (then run id)
+  and compares older → newer; a reversed request returns `swapped: true`. Runs are adjacent when
+  the newer report's stored `delta.baseRunId` is the older run: then the stored delta is returned
+  (`adHoc: false`), otherwise `RunComparer` computes it live (`adHoc: true`).
+- Response: `{ base, target, swapped, adHoc, delta }`; `base`/`target` are `{ runId, branch,
+  commitSha, generatedAt, score }` and `delta` is written with `ReportJsonSerializer.Options`, so
+  it reads exactly like a report's stored delta. 400 for the same run twice or runs of different
+  repositories, 404 for an unknown run, 409 when either run has no report.
+- Contract additions: `GET /api/runs/{runId}/repository` (the run's repository, for the report's
+  run picker) and `RepositorySummary.trend` (the last 12 succeeded runs, oldest first: `runId`,
+  `generatedAt`, `score`, `coveredShare`; an unscorable run keeps a null score).
+- Non-comparable deltas (`comparable: false`) show a warning banner with the reasons and neutral,
+  uncoloured chips (principle 6).
