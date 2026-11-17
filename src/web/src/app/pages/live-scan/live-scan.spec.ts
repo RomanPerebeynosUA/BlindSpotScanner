@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { of, Observable, NEVER } from 'rxjs';
+import { of, Observable, NEVER, Subject } from 'rxjs';
 import { RunsApi } from '../../core/api/runs-api';
 import { RunBody, RunStatus, ScanStep } from '../../core/api/api-types';
 import { ScanProgress, ScanProgressService } from '../../core/scan-progress';
@@ -164,6 +164,47 @@ describe('LiveScan', () => {
 
     // Assert
     expect(navigate).toHaveBeenCalledWith(['/runs', 'run1'], { replaceUrl: true });
+  });
+
+  it('destroyed before the first read resolves never starts watching', async () => {
+    // Arrange
+    const first = new Subject<RunBody>();
+    get = () => first;
+    const watch = vi.fn();
+    TestBed.configureTestingModule({
+      imports: [LiveScan],
+      providers: [
+        { provide: Router, useValue: { navigate } },
+        { provide: RunsApi, useValue: { get: () => get(), steps: () => of(steps), cancel } },
+        { provide: ScanProgressService, useValue: { watch } },
+      ],
+    });
+    const fixture = TestBed.createComponent(LiveScan);
+    fixture.componentRef.setInput('runId', 'run1');
+    fixture.detectChanges();
+
+    // Act
+    fixture.destroy();
+    first.next(running);
+
+    // Assert
+    expect(watch).not.toHaveBeenCalled();
+  });
+
+  it('a read in flight when leaving does not navigate', async () => {
+    // Arrange
+    const { fixture } = await render();
+    const pending = new Subject<RunBody>();
+    get = () => pending;
+    completed.set('Succeeded');
+    fixture.detectChanges();
+
+    // Act
+    fixture.destroy();
+    pending.next(report);
+
+    // Assert
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('stops watching on destroy', async () => {

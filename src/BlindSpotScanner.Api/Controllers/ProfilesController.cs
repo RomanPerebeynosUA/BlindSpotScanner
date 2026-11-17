@@ -62,7 +62,7 @@ public sealed class ProfilesController(ProfileService profiles, ProfileDrafter d
             SaveProfileStatus.RepositoryNotFound => NotFound(),
             SaveProfileStatus.Conflict => Problem(
                 "The profile was saved by someone else meanwhile. Reload it and apply your changes again.", statusCode: StatusCodes.Status409Conflict, title: "Profile changed"),
-            _ => ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["profile"] = [.. result.Errors!] }) { Title = "Invalid profile" }),
+            _ => ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["profile"] = [.. result.Errors!] }) { Title = "Invalid profile", Detail = string.Join(" ", result.Errors!) }),
         };
     }
 }

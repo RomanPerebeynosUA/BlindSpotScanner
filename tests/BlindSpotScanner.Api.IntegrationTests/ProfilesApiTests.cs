@@ -54,6 +54,20 @@ public class ProfilesApiTests(QueueOnlyApiFactory factory) : IClassFixture<Queue
     }
 
     [Fact]
+    public async Task Put_Invalid_DetailListsTheErrors()
+    {
+        // Arrange (the web shows ProblemDetails.detail, so the reasons must be in it)
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient();
+
+        // Act
+        using var response = await client.PutAsJsonAsync($"/api/repositories/{id}/profile", Body(1, testGlobs: []));
+
+        // Assert
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("detail").GetString().Should().Be("At least one test glob is required.");
+    }
+
+    [Fact]
     public async Task Put_StaleBase_Returns409()
     {
         // Arrange

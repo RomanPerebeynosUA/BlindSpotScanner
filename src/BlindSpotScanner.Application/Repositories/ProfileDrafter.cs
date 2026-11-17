@@ -25,6 +25,8 @@ public sealed class ProfileDrafter(IRepositoryStore repositories, IGitHubClient 
 {
     public const string TruncatedQuestion = "The repository tree was truncated by GitHub; some folders may be missing from this draft.";
 
+    public const string CappedQuestion = "The repository has more than 3000 files, so only the first 3000 paths (alphabetically) were sent; some folders may be missing from this draft.";
+
     private const int MaxTreePaths = 3000;
     private const int MaxBuildFiles = 20;
     private const int MaxSampleTests = 5;
@@ -40,6 +42,7 @@ public sealed class ProfileDrafter(IRepositoryStore repositories, IGitHubClient 
         }
 
         GitTree tree;
+        var capped = false;
         string owner = repository.Owner, name = repository.Name;
         List<object> buildFiles, sampleTests;
         List<string> paths;
@@ -52,6 +55,7 @@ public sealed class ProfileDrafter(IRepositoryStore repositories, IGitHubClient 
                 .OrderBy(e => e.Path, StringComparer.Ordinal)
                 .ToList();
             paths = blobs.Take(MaxTreePaths).Select(e => e.Path).ToList();
+            capped = blobs.Count > MaxTreePaths;
             var readable = blobs.Where(e => e.Size is null || e.Size <= maxFileBytes).ToList();
             buildFiles = await ReadAsync(readable.Where(e => IsBuildFile(e.Path)).Take(MaxBuildFiles), ct);
             sampleTests = await ReadAsync(
@@ -74,6 +78,11 @@ public sealed class ProfileDrafter(IRepositoryStore repositories, IGitHubClient 
         }
 
         var questions = output.GetProperty("openQuestions").EnumerateArray().Select(q => q.GetString()!).ToList();
+        if (capped)
+        {
+            questions.Insert(0, CappedQuestion);
+        }
+
         if (tree.Truncated)
         {
             questions.Insert(0, TruncatedQuestion);

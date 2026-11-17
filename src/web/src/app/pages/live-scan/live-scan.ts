@@ -1,6 +1,7 @@
 import { Component, computed, DestroyRef, effect, inject, input, OnInit, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RunsApi } from '../../core/api/runs-api';
 import { isReport, RunBody, RunStatusBody, ScanStep } from '../../core/api/api-types';
 import { ScanProgressService, ScanWatch } from '../../core/scan-progress';
@@ -58,12 +59,13 @@ export class LiveScan implements OnInit {
   }
 
   ngOnInit(): void {
-    this.runs.get(this.runId()).subscribe((body) => {
+    // Every read ends with the page: a late answer must not start watching or navigate after the user left.
+    this.runs.get(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((body) => {
       if (this.handle(body)) {
         return;
       }
 
-      this.runs.steps(this.runId()).subscribe((steps) => this.steps.set(steps));
+      this.runs.steps(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((steps) => this.steps.set(steps));
       this.watch.set(this.progress.watch(this.runId()));
       this.timer = setInterval(() => this.refresh(), POLL_MS);
     });
@@ -89,12 +91,12 @@ export class LiveScan implements OnInit {
 
   protected cancel(): void {
     this.cancelling.set(true);
-    this.runs.cancel(this.runId()).subscribe({ error: () => this.cancelling.set(false) });
+    this.runs.cancel(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => this.cancelling.set(false) });
   }
 
   /** Re-reads the run (hub completion or the D21 poll). */
   private refresh(): void {
-    this.runs.get(this.runId()).subscribe((body) => this.handle(body));
+    this.runs.get(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((body) => this.handle(body));
   }
 
   /** True when the run is finished: a report opens the report page; a failure shows its reasons. */

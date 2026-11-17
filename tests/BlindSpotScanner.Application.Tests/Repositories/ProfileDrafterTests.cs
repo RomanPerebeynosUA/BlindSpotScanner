@@ -114,6 +114,23 @@ public class ProfileDrafterTests
     }
 
     [Fact]
+    public async Task DraftAsync_MoreFilesThanSent_PrependsOpenQuestion()
+    {
+        // Arrange
+        foreach (var i in Enumerable.Range(0, 3000))
+        {
+            _github.Files[$"src/Big/File{i:D4}.cs"] = "x";
+        }
+
+        // Act
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        SentInput().GetProperty("rootTree").GetArrayLength().Should().Be(3000);
+        result.Draft!.OpenQuestions[0].Should().Be(ProfileDrafter.CappedQuestion);
+    }
+
+    [Fact]
     public async Task DraftAsync_UnknownRepository_ReturnsRepositoryNotFound()
     {
         // Act
