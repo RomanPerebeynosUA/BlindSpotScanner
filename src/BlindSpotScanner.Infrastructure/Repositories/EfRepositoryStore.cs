@@ -91,5 +91,6 @@ public sealed class EfRepositoryStore(BlindSpotScannerDbContext db) : IRepositor
         await db.ScanRuns.AsNoTracking()
             .Where(r => r.RepositoryId == repositoryId)
             .OrderByDescending(r => r.GeneratedAt ?? r.QueuedAt)
+            .ThenByDescending(r => r.Id) // a fixed order for equal timestamps, like the trend
             .ToListAsync(ct);
 }

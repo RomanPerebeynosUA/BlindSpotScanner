@@ -239,4 +239,27 @@ public class EfRepositoryStoreTests(PostgresFixture db)
         // Assert
         runs.Select(r => r.Id).Should().Equal(newer.Id, succeeded.Id, older.Id);
     }
+
+    [Fact]
+    public async Task RunsAsync_SameTimestamp_HigherIdFirst()
+    {
+        // Arrange (inserted lower id first, so insertion order alone gives the wrong answer)
+        var repository = await AddAsync(UniqueName());
+        var at = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
+        var low = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var high = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        foreach (var id in new[] { low, high })
+        {
+            await using var add = db.CreateContext();
+            await new PostgresScanQueue(add).EnqueueAsync(ScanRun.Enqueue(id, repository.Id, null, 5m, 1, "claude-sonnet-5-5", "1.0.0", at), CancellationToken.None);
+        }
+
+        await using var context = db.CreateContext();
+
+        // Act
+        var runs = await new EfRepositoryStore(context).RunsAsync(repository.Id, CancellationToken.None);
+
+        // Assert
+        runs.Select(r => r.Id).Should().Equal(high, low);
+    }
 }
