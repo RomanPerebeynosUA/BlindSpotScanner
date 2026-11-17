@@ -93,3 +93,12 @@ GitHub App auth arrives in M11. `GitHubRateLimitHandler` waits on `Retry-After` 
 retries at most 3 times, and otherwise fails with the reset time; any other 403 fails at once.
 `tests/BlindSpotScanner.Infrastructure.Tests` suppresses NU1608 because WireMock.Net's Handlebars
 helpers pin Humanizer 2.14.1 while JsonSchema.Net needs Humanizer.Core 3.x (test project only).
+Waits are measured against the response's `Date` header (not the local clock). A 429 without
+headers, or a 403 whose body names a "secondary rate limit", waits one minute (GitHub's advice).
+
+## D17 — Enumeration excludes are fixed, not per profile (2026-11-17)
+The user's choice: profiles don't carry exclude globs, so the `Exclude` line was dropped from
+`profiles/_template.md`. `EnumeratePhase` always excludes `bin`, `obj`, `node_modules`, `vendor`,
+`third_party`, `dist`, `wwwroot/lib`, `Generated`/`generated`, `*.Designer.cs` and `*.g.cs`.
+Symlinks (mode 120000) are not counted. Blob text is UTF-8 without its BOM; content that isn't
+valid UTF-8 decodes as Latin-1.

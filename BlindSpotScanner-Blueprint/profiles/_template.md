@@ -12,7 +12,6 @@
 ## Production surface (denominator)
 - **Controller globs:** `src/**/Controllers/**/*Controller.cs`
 - **Minimal API files:** `src/**/Endpoints/**/*.cs`
-- **Exclude:** `**/Generated/**`, `**/*.Designer.cs`
 - **Route prefix conventions:** e.g. `api/v{version}/[controller]`
 
 ## Integration tests — how to recognize them
