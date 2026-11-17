@@ -33,7 +33,7 @@ public class FixPullRequestsTests
     }
 
     private FixPullRequests Fixes => new(
-        _runs, _store, new FixContextBuilder(_github), new PathGuard(), _llm, _github, new FixDefaults(_enabled, "http://localhost:8080"));
+        _runs, _store, new FixContextBuilder(_github), new PathGuard(), _llm, _github, _pulls, new Clock(Now), new FixDefaults(_enabled, "http://localhost:8080"));
 
     private Guid AddRun(IntegrationReport report)
     {
@@ -195,6 +195,130 @@ public class FixPullRequestsTests
         draft.Body.Should().Contain("Jira: [BSS-3](https://example.atlassian.net/browse/BSS-3)");
     }
 
+    private static FixCreate Request(string path = NewTestPath, FixAction action = FixAction.Create, bool force = false) =>
+        new([new FixFile(path, action, "public class CancelOrderTests { }")], "coverage/fix-x-a1b2c3d", "test: add", "Body", force);
+
+    private Task<FixResult<RemediationAction>> CreateAsync(FixCreate? request = null, string findingId = "f2") =>
+        Fixes.CreateAsync(_runId, findingId, request ?? Request(), CancellationToken.None);
+
+    [Fact]
+    public async Task CreateAsync_Valid_CallsGitHubInOrderAndStoresAction()
+    {
+        // Act
+        var result = await CreateAsync();
+
+        // Assert
+        new { result.Status, Calls = string.Join(",", _pulls.Calls), result.Value!.ExternalKey, result.Value.Type, Stored = _store.Actions.Count }.Should().Be(new
+        {
+            Status = FixStatus.Ok,
+            Calls = "tree-of-head,blob,tree,commit,ref,pull,labels",
+            ExternalKey = "#7",
+            Type = ActionType.PullRequest,
+            Stored = 1,
+        });
+    }
+
+    [Fact]
+    public async Task CreateAsync_EditedFileOutsideTestProject_Returns422WithoutCallingGitHub()
+    {
+        // Act
+        var result = await CreateAsync(Request("src/Bookstore.Api/Controllers/OrdersController.cs", FixAction.Modify));
+
+        // Assert
+        new { result.Status, Reason = result.Reasons!.Single(), Calls = _pulls.Calls.Count }.Should().Be(new
+        {
+            Status = FixStatus.Rejected,
+            Reason = "src/Bookstore.Api/Controllers/OrdersController.cs: outside the test project tests/Bookstore.IntegrationTests",
+            Calls = 0,
+        });
+    }
+
+    [Fact]
+    public async Task CreateAsync_TargetChangedOnDefaultBranch_ReturnsFilesChanged()
+    {
+        // Arrange (someone edited the test the fix modifies after the scan)
+        _github.ChangedAtHead["tests/Bookstore.IntegrationTests/BooksApiTests.cs"] = "changed";
+
+        // Act
+        var result = await CreateAsync(Request("tests/Bookstore.IntegrationTests/BooksApiTests.cs", FixAction.Modify), "f3");
+
+        // Assert
+        new { result.Status, Path = result.Reasons!.Single(), Calls = _pulls.Calls.Count }
+            .Should().Be(new { Status = FixStatus.FilesChanged, Path = "tests/Bookstore.IntegrationTests/BooksApiTests.cs", Calls = 0 });
+    }
+
+    [Fact]
+    public async Task CreateAsync_StoredPr_ReturnsExists()
+    {
+        // Arrange
+        _store.Actions.Add(Action(ActionType.PullRequest, "#3", "https://github.com/example-org/bookstore-api/pull/3"));
+
+        // Act
+        var result = await CreateAsync();
+
+        // Assert
+        new { result.Status, result.Existing!.ExternalKey, Calls = _pulls.Calls.Count }.Should().Be(new { Status = FixStatus.Exists, ExternalKey = "#3", Calls = 0 });
+    }
+
+    [Fact]
+    public async Task CreateAsync_PullCallFails_StoresNothing()
+    {
+        // Arrange
+        _pulls.FailOn = "pull";
+
+        // Act
+        var act = () => CreateAsync();
+
+        // Assert
+        await act.Should().ThrowAsync<HttpRequestException>();
+        _store.Actions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ActionsAsync_StalePr_RefreshesStatus()
+    {
+        // Arrange
+        var pr = Action(ActionType.PullRequest, "#7", "https://github.com/example-org/bookstore-api/pull/7");
+        pr.StatusCheckedAt = Now.AddMinutes(-30);
+        _store.Actions.Add(pr);
+        _pulls.Statuses[7] = "Open · checks passing";
+        var actions = new RemediationActions(_store, new NoJira(), _pulls, new OneRepository(_repositoryId), new Clock(Now));
+
+        // Act
+        var listed = await actions.ActionsAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        new { listed.Single().Status, listed.Single().StatusCheckedAt }.Should().Be(new { Status = "Open · checks passing", StatusCheckedAt = Now });
+    }
+
+    private sealed class NoJira : IJiraClient
+    {
+        public bool IsConfigured => false;
+
+        public Task<JiraIssueRef> CreateIssueAsync(JiraIssueRequest request, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<JiraIssueRef?> FindByStableKeyAsync(string stableKey, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<string> GetStatusAsync(string key, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    internal sealed class OneRepository(Guid id) : BlindSpotScanner.Application.Repositories.IRepositoryStore
+    {
+        public Task<Repository?> FindAsync(Guid repositoryId, CancellationToken ct) => Task.FromResult<Repository?>(repositoryId == id
+            ? new Repository { Id = id, Owner = "example-org", Name = "bookstore-api", DefaultBranch = "main", HtmlUrl = "https://github.com/example-org/bookstore-api" }
+            : null);
+
+        public Task<Repository?> FindByNameAsync(string owner, string name, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> TryAddAsync(Repository repository, RepoProfile profile, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<BlindSpotScanner.Application.Repositories.RepositorySummary>> ListAsync(CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<Repository?> FindByRunAsync(Guid runId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ScanRun>> RunsAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+    }
+
     private RemediationAction Action(ActionType type, string key, string url) => new()
     {
         Id = Guid.NewGuid(),
@@ -290,8 +414,15 @@ public class FixPullRequestsTests
 
         public Task<Finding> EnsureFindingAsync(Guid runId, ReportFinding finding, CancellationToken ct) => Task.FromResult(new Finding
         {
-            Id = Guid.NewGuid(), ScanRunId = runId, ReportFindingId = finding.Id, Kind = finding.Kind, Severity = finding.Severity,
-            StableKey = finding.StableKey, Headline = finding.Headline, Detail = [], Evidence = [],
+            Id = Guid.NewGuid(),
+            ScanRunId = runId,
+            ReportFindingId = finding.Id,
+            Kind = finding.Kind,
+            Severity = finding.Severity,
+            StableKey = finding.StableKey,
+            Headline = finding.Headline,
+            Detail = [],
+            Evidence = [],
         });
 
         public Task<RemediationAction?> FindActionAsync(Guid repositoryId, string stableKey, ActionType type, CancellationToken ct) =>

@@ -82,7 +82,9 @@ public static class DependencyInjection
         services.AddScoped<FixContextBuilder>();
         services.AddScoped(sp => new FixPullRequests(
             sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<FixContextBuilder>(),
-            sp.GetRequiredService<IFixGuard>(), sp.GetRequiredService<ILlmClient>(), sp.GetRequiredService<IGitHubClient>(), FixDefaultsFrom(sp)));
+            sp.GetRequiredService<IFixGuard>(), sp.GetRequiredService<ILlmClient>(), sp.GetRequiredService<IGitHubClient>(),
+            sp.GetRequiredService<IGitHubPullRequests>(), sp.GetRequiredService<TimeProvider>(), FixDefaultsFrom(sp)));
+        services.AddScoped<RemediationActions>();
         services.AddScoped(sp =>
         {
             var jira = sp.GetRequiredService<IOptions<JiraOptions>>().Value;

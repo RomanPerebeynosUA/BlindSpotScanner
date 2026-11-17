@@ -24,6 +24,9 @@ public class JiraTicketsTests
 
     private JiraTickets Tickets => new(_runs, _store, _jira, _clock, new JiraDefaults("BSS", "Task", ["integration-coverage", "qa"], "http://localhost:8080"));
 
+    private RemediationActions Actions =>
+        new(_store, _jira, new FixPullRequestsTests.RecordingPulls(), new FixPullRequestsTests.OneRepository(_repositoryId), _clock);
+
     private Guid AddRun(IntegrationReport report)
     {
         var meta = report.Meta;
@@ -260,7 +263,7 @@ public class JiraTicketsTests
         _jira.Statuses["BSS-1"] = "Done";
 
         // Act
-        var actions = await Tickets.ActionsAsync(_repositoryId, CancellationToken.None);
+        var actions = await Actions.ActionsAsync(_repositoryId, CancellationToken.None);
 
         // Assert
         new { actions.Single().Status, actions.Single().StatusCheckedAt, _store.Saves }.Should().Be(new { Status = "Done", StatusCheckedAt = Now, Saves = 1 });
@@ -274,7 +277,7 @@ public class JiraTicketsTests
         _jira.Statuses["BSS-1"] = "Done";
 
         // Act
-        var actions = await Tickets.ActionsAsync(_repositoryId, CancellationToken.None);
+        var actions = await Actions.ActionsAsync(_repositoryId, CancellationToken.None);
 
         // Assert
         actions.Single().Status.Should().Be("To Do");
@@ -288,7 +291,7 @@ public class JiraTicketsTests
         _jira.StatusFailure = new JiraException("Jira returned 503 for reading an issue.");
 
         // Act
-        var actions = await Tickets.ActionsAsync(_repositoryId, CancellationToken.None);
+        var actions = await Actions.ActionsAsync(_repositoryId, CancellationToken.None);
 
         // Assert
         // The check time moves on, so a ticket Jira can't read (for example deleted) waits 10 minutes before the next try.
