@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["files", "rationale", "assumptions", "riskNotes", "prTitle", "prBody"],
+  "properties": {
+    "files": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "action", "content"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "action": { "enum": ["create", "modify"] },
+          "content": { "type": "string" }
+        }
+      }
+    },
+    "rationale": { "type": "string" },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "riskNotes": { "type": "array", "items": { "type": "string" } },
+    "prTitle": { "type": "string", "minLength": 1 },
+    "prBody": { "type": "string" }
+  }
+}

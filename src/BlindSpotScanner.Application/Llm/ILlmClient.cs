@@ -35,4 +35,5 @@ public static class Prompts
     public const string MapCoverage = "map-coverage";
     public const string GradeQuality = "grade-quality";
     public const string DraftProfile = "draft-profile";
+    public const string GenerateFix = "generate-fix";
 }

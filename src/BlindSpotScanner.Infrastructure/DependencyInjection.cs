@@ -79,10 +79,14 @@ public static class DependencyInjection
         services.AddScoped<RepositoryService>();
         services.AddScoped<RunComparison>();
         services.AddScoped<IRemediationStore, EfRemediationStore>();
+        services.AddScoped<FixContextBuilder>();
+        services.AddScoped(sp => new FixPullRequests(
+            sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<FixContextBuilder>(),
+            sp.GetRequiredService<IFixGuard>(), sp.GetRequiredService<ILlmClient>(), sp.GetRequiredService<IGitHubClient>(), FixDefaultsFrom(sp)));
         services.AddScoped(sp =>
         {
             var jira = sp.GetRequiredService<IOptions<JiraOptions>>().Value;
-            var publicUrl = sp.GetRequiredService<IConfiguration>()["App:PublicUrl"] is { Length: > 0 } url ? url : "http://localhost:8080";
+            var publicUrl = PublicUrl(sp.GetRequiredService<IConfiguration>());
             return new JiraTickets(
                 sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IJiraClient>(), sp.GetRequiredService<TimeProvider>(),
                 new JiraDefaults(jira.ProjectKey, jira.IssueType, jira.Labels, publicUrl));
@@ -108,6 +112,17 @@ public static class DependencyInjection
             sp.GetRequiredService<TimeProvider>()));
         return services;
     }
+
+    /// <summary>Read-only unless <c>Features:PullRequests</c> (default true) and a GitHub token are both set (D25).</summary>
+    private static FixDefaults FixDefaultsFrom(IServiceProvider sp)
+    {
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var enabled = configuration.GetValue("Features:PullRequests", true)
+            && !string.IsNullOrWhiteSpace(sp.GetRequiredService<IOptions<GitHubOptions>>().Value.Token);
+        return new FixDefaults(enabled, PublicUrl(configuration));
+    }
+
+    private static string PublicUrl(IConfiguration configuration) => configuration["App:PublicUrl"] is { Length: > 0 } url ? url : "http://localhost:8080";
 
     private static string ConnectionString(IServiceProvider sp) =>
         sp.GetRequiredService<IConfiguration>().GetConnectionString("Postgres")
