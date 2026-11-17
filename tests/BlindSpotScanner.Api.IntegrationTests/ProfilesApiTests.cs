@@ -128,6 +128,23 @@ public class ProfilesApiTests(QueueOnlyApiFactory factory) : IClassFixture<Queue
     }
 
     [Fact]
+    public async Task Post_Draft_NotAcknowledged_Returns409WithoutCallingClaude()
+    {
+        // Arrange (doc 10: no code leaves the system before LLM data sharing is accepted)
+        var id = await factory.SeedRepositoryAsync(acknowledged: false);
+        using var client = factory.CreateClient();
+        var before = factory.Claude.RequestCount;
+
+        // Act
+        using var response = await client.PostAsync($"/api/repositories/{id}/profile/draft", null);
+
+        // Assert
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        new { response.StatusCode, Title = problem.GetProperty("title").GetString(), Calls = factory.Claude.RequestCount - before }
+            .Should().Be(new { StatusCode = HttpStatusCode.Conflict, Title = "LLM data sharing not acknowledged", Calls = 0 });
+    }
+
+    [Fact]
     public async Task Post_Draft_Returns200WithMarkdownAndQuestions()
     {
         // Arrange

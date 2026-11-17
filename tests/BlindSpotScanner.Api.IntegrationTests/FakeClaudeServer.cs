@@ -40,6 +40,9 @@ public sealed class FakeClaudeServer : IDisposable
 
     public string Url => _server.Url!;
 
+    /// <summary>How many requests reached the fake Claude so far.</summary>
+    public int RequestCount => _server.LogEntries.Count();
+
     public void Dispose() => _server.Stop();
 
     /// <summary>WireMock rejects a zero delay, so a delay is added only when one is asked for.</summary>

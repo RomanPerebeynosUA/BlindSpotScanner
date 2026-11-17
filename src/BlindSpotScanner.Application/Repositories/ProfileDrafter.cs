@@ -13,6 +13,7 @@ public enum DraftProfileStatus
     RepositoryNotFound,
     GitHubFailed,
     LlmFailed,
+    LlmSharingNotAcknowledged,
 }
 
 public sealed record DraftProfileResult(DraftProfileStatus Status, ProfileDraft? Draft = null, IReadOnlyList<string>? Errors = null);
@@ -39,6 +40,12 @@ public sealed class ProfileDrafter(IRepositoryStore repositories, IGitHubClient 
         if (await repositories.FindAsync(repositoryId, ct) is not { } repository)
         {
             return new DraftProfileResult(DraftProfileStatus.RepositoryNotFound);
+        }
+
+        // Doc 10: a draft sends code excerpts to the LLM too, so it needs the same consent as a scan.
+        if (repository.LlmSharingAcknowledgedAt is null)
+        {
+            return new DraftProfileResult(DraftProfileStatus.LlmSharingNotAcknowledged);
         }
 
         GitTree tree;

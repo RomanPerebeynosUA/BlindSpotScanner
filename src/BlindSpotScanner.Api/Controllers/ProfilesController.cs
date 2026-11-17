@@ -34,6 +34,8 @@ public sealed class ProfilesController(ProfileService profiles, ProfileDrafter d
         {
             DraftProfileStatus.Drafted => Ok(result.Draft),
             DraftProfileStatus.RepositoryNotFound => NotFound(),
+            DraftProfileStatus.LlmSharingNotAcknowledged => Problem(
+                "Accept that code excerpts are sent to the LLM (POST …/llm-sharing) before drafting with AI.", statusCode: StatusCodes.Status409Conflict, title: "LLM data sharing not acknowledged"),
             DraftProfileStatus.GitHubFailed => Problem(result.Errors![0], statusCode: StatusCodes.Status502BadGateway, title: "GitHub is unavailable"),
 
             // The LLM's errors can quote its answer, so they are not echoed.

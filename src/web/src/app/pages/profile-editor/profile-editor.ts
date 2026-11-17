@@ -1,3 +1,9 @@
+import { MatDialog } from '@angular/material/dialog';
+import { filter, switchMap } from 'rxjs';
+import { LlmSharingDialog } from '../repo-overview/llm-sharing-dialog/llm-sharing-dialog';
+
+/** The API's 409 title when LLM data sharing hasn't been accepted (D26). */
+const LLM_SHARING_TITLE = 'LLM data sharing not acknowledged';
 import { AuthService } from '../../core/auth/auth';
 import { Component, computed, DOCUMENT, inject, input, OnInit, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -37,6 +43,7 @@ const lines = (text: string): string[] => text.split('\n').map((l) => l.trim()).
 export class ProfileEditor implements OnInit {
   private readonly api = inject(RepositoriesApi);
   private readonly auth = inject(AuthService);
+  private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly document = inject(DOCUMENT);
 
@@ -155,8 +162,25 @@ export class ProfileEditor implements OnInit {
         this.dirty.set(true);
         this.openQuestions.set(draft.openQuestions);
       },
-      error: () => this.drafting.set(false),
+      error: (error: unknown) => {
+        this.drafting.set(false);
+        if (error instanceof HttpErrorResponse && error.status === 409 && (error.error as { title?: string } | null)?.title === LLM_SHARING_TITLE) {
+          this.askLlmSharingThenDraft();
+        }
+      },
     });
+  }
+
+  /** Doc 10: drafting sends code excerpts to the LLM, so it waits for the same consent as a scan. */
+  private askLlmSharingThenDraft(): void {
+    this.dialog
+      .open<LlmSharingDialog, unknown, boolean>(LlmSharingDialog, { maxWidth: 'calc(100vw - 32px)', ariaLabelledBy: 'llm-title' })
+      .afterClosed()
+      .pipe(
+        filter((agreed) => agreed === true),
+        switchMap(() => this.api.acknowledgeLlmSharing(this.id())),
+      )
+      .subscribe(() => this.draft());
   }
 
   protected setList(key: ListField, event: Event): void {
