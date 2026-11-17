@@ -1,12 +1,14 @@
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Llm;
 using BlindSpotScanner.Application.Reports;
+using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Infrastructure.Extraction;
 using BlindSpotScanner.Infrastructure.GitHub;
 using BlindSpotScanner.Infrastructure.Llm;
 using BlindSpotScanner.Infrastructure.Persistence;
 using BlindSpotScanner.Infrastructure.Reports;
+using BlindSpotScanner.Infrastructure.Repositories;
 using BlindSpotScanner.Infrastructure.Scanning;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -65,6 +67,13 @@ public static class DependencyInjection
         services.AddScoped<IScanQueue, PostgresScanQueue>();
         services.AddScoped<IScanEvents, PostgresScanEvents>();
         services.AddScoped<IScanRequestStore, EfScanRequestStore>();
+        services.AddScoped<IRepositoryStore, EfRepositoryStore>();
+        services.AddScoped<RepositoryService>();
+        services.AddScoped<IProfileStore, EfProfileStore>();
+        services.AddScoped<ProfileService>();
+        services.AddScoped(sp => new ProfileDrafter(
+            sp.GetRequiredService<IRepositoryStore>(), sp.GetRequiredService<IGitHubClient>(), sp.GetRequiredService<ILlmClient>(),
+            sp.GetRequiredService<IOptions<ScanOptions>>().Value.MaxFileBytes));
         services.AddScoped(sp =>
         {
             var llm = sp.GetRequiredService<IOptions<LlmOptions>>().Value;

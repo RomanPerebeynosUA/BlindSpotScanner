@@ -1,0 +1,16 @@
+<form class="dialog" (submit)="submit($event)" aria-labelledby="add-title">
+  <h2 id="add-title">Add repository</h2>
+  <label>
+    GitHub URL
+    <input name="url" type="url" required placeholder="https://github.com/owner/repo" [value]="url()" (input)="url.set(read($event))" />
+  </label>
+  <label>
+    Branch (optional)
+    <input name="branch" placeholder="default branch" [value]="branch()" (input)="branch.set(read($event))" />
+  </label>
+  <div class="muted">Next, review the repository's profile: how integration tests look here. You can let the AI draft it.</div>
+  <div class="row actions">
+    <button type="button" class="btn" (click)="cancel()">Cancel</button>
+    <button type="submit" class="btn primary" [disabled]="!url().trim() || busy()">{{ busy() ? 'Adding…' : 'Add repository' }}</button>
+  </div>
+</form>

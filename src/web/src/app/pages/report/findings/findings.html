@@ -1,0 +1,27 @@
+<div class="stack findings">
+  <h2>Findings</h2>
+  <div class="cols3">
+    @for (group of groups(); track group.kind) {
+      <div class="panel" [attr.data-kind]="group.kind">
+        <h3>{{ group.title }}</h3>
+        @for (f of group.items; track f.id) {
+          <div class="stack finding">
+            <div><b>{{ f.headline }}</b> <span class="muted">{{ f.severity }}</span></div>
+            @if (f.detail?.length) {
+              <ul>
+                @for (d of f.detail; track $index) {
+                  <li>{{ d }}</li>
+                }
+              </ul>
+            }
+            @for (citation of f.evidence; track citation) {
+              <app-evidence-link [meta]="meta()" [citation]="citation" />
+            }
+          </div>
+        } @empty {
+          <p class="muted">None.</p>
+        }
+      </div>
+    }
+  </div>
+</div>

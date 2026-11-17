@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["markdown", "openQuestions"],
+  "properties": {
+    "markdown": { "type": "string" },
+    "openQuestions": { "type": "array", "items": { "type": "string" } }
+  }
+}

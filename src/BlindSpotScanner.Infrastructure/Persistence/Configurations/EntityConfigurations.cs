@@ -6,7 +6,13 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Configurations;
 
 internal sealed class RepositoryConfiguration : IEntityTypeConfiguration<Repository>
 {
-    public void Configure(EntityTypeBuilder<Repository> builder) => builder.HasKey(r => r.Id);
+    public void Configure(EntityTypeBuilder<Repository> builder)
+    {
+        builder.HasKey(r => r.Id);
+
+        // GitHub's canonical names: one row per repository however its URL was written (D22).
+        builder.HasIndex(r => new { r.Owner, r.Name }).IsUnique();
+    }
 }
 
 internal sealed class RepoProfileConfiguration : IEntityTypeConfiguration<RepoProfile>

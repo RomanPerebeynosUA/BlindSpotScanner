@@ -1,0 +1,42 @@
+<div class="panel stack scorecard">
+  <h2>Quality scorecard</h2>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Dimension</th><th>Weight</th><th>Score</th><th>Confidence</th><th><span class="sr-only">Details</span></th></tr>
+      </thead>
+      <tbody>
+        @for (row of sorted(); track row.id) {
+          <tr [attr.data-id]="row.id">
+            <td><b>{{ row.dimension }}</b></td>
+            <td>{{ row.weight | percent }}</td>
+            <td>
+              @if (!row.scorable || row.score === null) {
+                <span class="chip s-unverified">N/A</span>
+              } @else {
+                <div class="row"><div class="bar" style="width: 90px"><span [style.width.%]="row.score * 10"></span></div><b>{{ row.score }}</b></div>
+              }
+            </td>
+            <td>{{ row.confidence ?? '—' }}</td>
+            <td><button type="button" class="btn sm" [attr.aria-expanded]="expanded() === row.id" (click)="toggle(row.id)">Why</button></td>
+          </tr>
+          @if (expanded() === row.id) {
+            <tr class="detail">
+              <td colspan="5">
+                <ul>
+                  @for (b of row.justificationBullets; track $index) {
+                    <li>{{ b }}</li>
+                  }
+                </ul>
+                @for (citation of row.evidence ?? []; track citation) {
+                  <div><app-evidence-link [meta]="meta()" [citation]="citation" /></div>
+                }
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+  <div class="note">{{ scoreLabel() }}. The score is computed by the backend, not by the AI.</div>
+</div>

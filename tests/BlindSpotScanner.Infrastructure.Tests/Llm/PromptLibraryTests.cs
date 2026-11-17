@@ -12,6 +12,7 @@ public class PromptLibraryTests
     [InlineData(Prompts.ClassifyTests)]
     [InlineData(Prompts.MapCoverage)]
     [InlineData(Prompts.GradeQuality)]
+    [InlineData(Prompts.DraftProfile)]
     public void Task_KnownPrompts_LoadWithVersion(string name)
     {
         // Act
@@ -39,6 +40,16 @@ public class PromptLibraryTests
 
         // Assert
         task.Should().Contain("Band anchors");
+    }
+
+    [Fact]
+    public void Task_DraftProfile_EndsWithTemplate()
+    {
+        // Act
+        var task = _prompts.Task(Prompts.DraftProfile);
+
+        // Assert
+        task.Should().EndWith(Application.Repositories.ProfileTemplate.Markdown);
     }
 
     [Fact]

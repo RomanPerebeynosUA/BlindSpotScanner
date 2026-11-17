@@ -49,6 +49,7 @@ The Api and Worker each have a `Dockerfile` (build context: repo root). `src/web
 | Restore/install | `dotnet restore` | `npm ci` |
 | Build | `dotnet build` | `npx ng build` |
 | Test | `dotnet test` (Infrastructure and Api integration tests need Docker running) | `npx ng test --watch=false` |
+| E2E | | `npx playwright test` (first run: `npx playwright install chromium`; API and hub are mocked from `examples/`) |
 | Migrations | `dotnet tool restore`, then `dotnet ef migrations add <Name> --project src/BlindSpotScanner.Infrastructure --output-dir Persistence/Migrations` | |
 | Run | `dotnet run --project src/BlindSpotScanner.Api` and `--project src/BlindSpotScanner.Worker` | `npx ng serve` |
 | Lint/format | `dotnet format --verify-no-changes` | `npx ng lint` |

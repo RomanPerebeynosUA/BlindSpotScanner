@@ -51,7 +51,7 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
 
     private static async Task<Guid> SeedRepositoryAsync(Infrastructure.Persistence.BlindSpotScannerDbContext context)
     {
-        var repository = new Repository { Id = Guid.NewGuid(), Owner = "example-org", Name = "bookstore", DefaultBranch = "main", HtmlUrl = "https://github.com/example-org/bookstore" };
+        var repository = new Repository { Id = Guid.NewGuid(), Owner = "example-org", Name = $"bookstore-{Guid.NewGuid():N}", DefaultBranch = "main", HtmlUrl = "https://github.com/example-org/bookstore" };
         context.Repositories.Add(repository);
         context.RepoProfiles.Add(new RepoProfile
         {

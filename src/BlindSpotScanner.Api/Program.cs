@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 builder.Services.AddSignalR();
 builder.Services.AddBlindSpotScannerCore();
 builder.Services.AddSingleton<ScanEventRelay>();

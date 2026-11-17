@@ -1,0 +1,69 @@
+<div class="head">
+  <div>
+    <h1>Repository profile</h1>
+    <div class="muted">How integration tests look in this repository. Scans use the latest saved version.</div>
+    <nav class="tabs" aria-label="Repository">
+      <a [routerLink]="['/repos', id()]">Runs</a>
+      <a [routerLink]="['/repos', id(), 'profile']" aria-current="page" class="on">Profile</a>
+    </nav>
+  </div>
+  <div class="row">
+    <button type="button" class="btn draft" [disabled]="drafting() || readOnly()" (click)="draft()">{{ drafting() ? 'Drafting…' : 'Auto-draft with AI' }}</button>
+    <button type="button" class="btn primary save" [disabled]="saving() || readOnly() || !latest()" (click)="save()">{{ saving() ? 'Saving…' : 'Save' }}</button>
+  </div>
+</div>
+<div class="note">The draft is not saved until you click Save.</div>
+
+@if (viewing(); as old) {
+  <div class="banner row">
+    <span>Viewing version {{ old.version }} (read-only).</span>
+    <button type="button" class="btn sm restore" (click)="restore()">Restore into editor</button>
+  </div>
+}
+
+@if (openQuestions().length > 0) {
+  <div class="panel">
+    <h2>Open questions from the draft</h2>
+    <ul class="questions">
+      @for (q of openQuestions(); track $index) {
+        <li>{{ q }}</li>
+      }
+    </ul>
+  </div>
+}
+
+<div class="layout">
+  <div class="panel stack">
+    <h2>Classification rules</h2>
+    <label>
+      What "integration" means here
+      <select name="integrationMappedTo" [value]="mapping()" [disabled]="readOnly()" (change)="setMapping($event)">
+        @for (m of mappings; track m) {
+          <option [value]="m" [selected]="m === mapping()">{{ m }}</option>
+        }
+      </select>
+    </label>
+    @for (f of listFields; track f.key) {
+      <label>
+        {{ f.label }} <span class="hint">one per line</span>
+        <textarea [name]="f.key" rows="3" [value]="lists()[f.key]" [readOnly]="readOnly()" (input)="setList(f.key, $event)"></textarea>
+      </label>
+    }
+  </div>
+
+  <div class="panel stack">
+    <h2>Profile Markdown</h2>
+    <textarea name="markdown" class="markdown" [value]="markdown()" [readOnly]="readOnly()" (input)="markdown.set(value($event))"></textarea>
+    <h3>Preview</h3>
+    <div class="preview" [innerHTML]="preview()"></div>
+  </div>
+
+  <div class="panel stack versions">
+    <h2>Versions</h2>
+    @for (v of versions(); track v) {
+      <button type="button" class="btn sm" [attr.data-version]="v" [attr.aria-pressed]="(viewing()?.version ?? latest()?.version) === v" (click)="show(v)">
+        v{{ v }} @if (v === latest()?.version) { (latest) }
+      </button>
+    }
+  </div>
+</div>

@@ -1,0 +1,61 @@
+<div class="head">
+  <div>
+    <h1>Scan in progress</h1>
+    <div class="muted mono">run {{ runId() }}</div>
+  </div>
+  @if (!outcome()) {
+    <button type="button" class="btn cancel" [disabled]="cancelling()" (click)="cancel()">{{ cancelling() ? 'Cancelling…' : 'Cancel scan' }}</button>
+  }
+</div>
+
+@if (outcome(); as done) {
+  <div class="panel outcome stack" role="status">
+    <h2>Scan {{ done.status === 'Failed' ? 'failed' : 'cancelled' }}</h2>
+    @if (done.failureReasons.length > 0) {
+      <ul>
+        @for (reason of done.failureReasons; track $index) {
+          <li>{{ reason }}</li>
+        }
+      </ul>
+    } @else {
+      <div class="muted">No report was stored for this run.</div>
+    }
+  </div>
+}
+
+<div class="grid2">
+  <div class="panel stack">
+    <div class="progress" role="progressbar" aria-label="Scan progress" [attr.aria-valuenow]="pct()" aria-valuemin="0" aria-valuemax="100">
+      <span [style.width.%]="pct()"></span>
+    </div>
+    <div class="steps">
+      @for (phase of phases; track phase.id) {
+        @let s = state(phase.id);
+        <div class="step" [attr.data-phase]="phase.id" [attr.data-state]="s">
+          <span class="dot" [class.done]="s === 'done'" [class.run]="s === 'running'" [class.fail]="s === 'failed'" aria-hidden="true">
+            {{ s === 'done' ? '✓' : s === 'failed' ? '✕' : '' }}
+          </span>
+          <div>
+            <b>{{ phase.label }}</b>
+            @if (notes(phase.id); as note) {
+              <div class="muted note-text">{{ note }}</div>
+            }
+          </div>
+          <span class="muted mono">{{ s === 'waiting' ? 'waiting' : s }}</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="panel stack">
+    <h2>Activity</h2>
+    <div class="log" aria-live="polite">
+      @for (e of events(); track $index) {
+        <div>{{ e.at | date: 'HH:mm:ss' }} {{ e.message }}</div>
+      } @empty {
+        <div>Waiting for the worker…</div>
+      }
+    </div>
+    <div class="note">Items the scan cannot finish within the budget become <b>Unverified</b>. They are never guessed.</div>
+  </div>
+</div>

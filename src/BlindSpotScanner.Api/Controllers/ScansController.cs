@@ -20,8 +20,8 @@ public sealed class ScansController(ScanRequests scans) : ControllerBase
         {
             StartScanStatus.Accepted => Accepted(new StartScanResponse(result.RunId!.Value)),
             StartScanStatus.RepositoryNotFound => NotFound(),
-            StartScanStatus.NoProfile => Conflict(new { error = "The repository has no profile yet." }),
-            _ => BadRequest(new { error = "maxCostUsd must be greater than 0." }),
+            StartScanStatus.NoProfile => Problem("The repository has no profile yet.", statusCode: StatusCodes.Status409Conflict, title: "No profile"),
+            _ => Problem("maxCostUsd must be greater than 0.", statusCode: StatusCodes.Status400BadRequest, title: "Invalid scan request"),
         };
     }
 }

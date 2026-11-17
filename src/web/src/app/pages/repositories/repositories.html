@@ -1,0 +1,47 @@
+<div class="head">
+  <div>
+    <h1>Repositories</h1>
+    <div class="muted">Each scan is kept, so trends and comparisons are always available.</div>
+  </div>
+  <button type="button" class="btn primary" (click)="add()">Add repository</button>
+</div>
+
+@if (repositories(); as list) {
+  @if (list.length === 0) {
+    <div class="panel muted">No repositories yet. Add one to start scanning.</div>
+  } @else {
+    <div class="panel tablewrap">
+      <table>
+        <thead>
+          <tr><th>Repository</th><th>Last scan</th><th>Quality score</th><th>Covered</th><th>Status</th><th><span class="sr-only">Action</span></th></tr>
+        </thead>
+        <tbody>
+          @for (repo of list; track repo.id) {
+            <tr>
+              <td><b>{{ repo.fullName }}</b><div class="muted mono">{{ repo.defaultBranch }}</div></td>
+              <td>{{ repo.lastScanAt ? (repo.lastScanAt | date: 'd MMM y') : '—' }}</td>
+              <td>{{ repo.lastScore === null ? '—' : (repo.lastScore | number: '1.1-1') + '/10' }}</td>
+              <td>{{ repo.lastCoveredShare === null ? '—' : (repo.lastCoveredShare | percent) }}</td>
+              <td>
+                @if (repo.activeRunId) {
+                  <span class="chip s-running">Scanning</span>
+                } @else if (repo.lastRunId) {
+                  <span class="chip s-succeeded">Scanned</span>
+                } @else {
+                  <span class="chip s-unverified">Not scanned</span>
+                }
+              </td>
+              <td>
+                @if (repo.activeRunId) {
+                  <a class="btn sm" [routerLink]="['/runs', repo.activeRunId, 'live']">Watch</a>
+                } @else {
+                  <a class="btn sm" [routerLink]="['/repos', repo.id]">Open</a>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

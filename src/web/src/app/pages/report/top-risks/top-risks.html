@@ -1,0 +1,19 @@
+<div class="panel stack risks">
+  <h2>Top risks</h2>
+  @for (risk of ranked(); track risk.rank; let first = $first) {
+    <details class="risk" [class]="'risk ' + risk.severity" [open]="first">
+      <summary>{{ risk.rank }}. {{ risk.headline }} <span class="sev">{{ risk.severity }}</span></summary>
+      <div class="muted why">{{ risk.whyItMatters }}</div>
+      <ul>
+        @for (d of risk.detail; track $index) {
+          <li>{{ d }}</li>
+        }
+      </ul>
+      @for (citation of risk.evidence ?? []; track citation) {
+        <div><app-evidence-link [meta]="meta()" [citation]="citation" /></div>
+      }
+    </details>
+  } @empty {
+    <div class="muted">None.</div>
+  }
+</div>

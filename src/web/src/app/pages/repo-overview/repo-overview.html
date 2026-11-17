@@ -1,0 +1,50 @@
+<div class="head">
+  <div>
+    @if (repository(); as repo) {
+      <h1><a [href]="repo.htmlUrl" target="_blank" rel="noopener">{{ repo.fullName }}</a></h1>
+      <div class="muted mono">{{ repo.defaultBranch }}</div>
+    }
+    <nav class="tabs" aria-label="Repository">
+      <a [routerLink]="['/repos', id()]" aria-current="page" class="on">Runs</a>
+      <a [routerLink]="['/repos', id(), 'profile']">Profile</a>
+    </nav>
+  </div>
+  <button type="button" class="btn primary" [disabled]="starting()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
+</div>
+
+@if (runs(); as list) {
+  @if (list.length === 0) {
+    <div class="panel muted">No scans yet.</div>
+  } @else {
+    <div class="panel tablewrap">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Branch</th><th>Commit</th><th>Status</th><th>Score</th><th>Covered</th></tr>
+        </thead>
+        <tbody>
+          @for (run of list; track run.runId) {
+            <tr>
+              <td><a [routerLink]="link(run)">{{ run.generatedAt ?? run.queuedAt | date: 'd MMM y, HH:mm' }}</a></td>
+              <td class="mono">{{ run.branch }}</td>
+              <td class="mono sha">{{ run.commitSha.slice(0, 7) }}</td>
+              <td>
+                <app-status-chip [status]="run.status" />
+                @if (run.status === 'Failed' && run.failureReasons.length > 0) {
+                  <div class="muted reason">{{ run.failureReasons[0] }}</div>
+                }
+              </td>
+              <td class="score">
+                @if (run.status === 'Succeeded') {
+                  {{ run.score === null ? 'N/A' : (run.score | number: '1.1-1') }}
+                } @else {
+                  —
+                }
+              </td>
+              <td>{{ run.endpointsTotal === null ? '—' : run.endpointsCovered + ' / ' + run.endpointsTotal }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

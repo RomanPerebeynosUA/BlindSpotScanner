@@ -40,7 +40,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         {
             Id = Guid.NewGuid(),
             Owner = "example-org",
-            Name = "bookstore-api",
+            Name = $"bookstore-api-{Guid.NewGuid():N}", // (Owner, Name) is unique (D22)
             DefaultBranch = "main",
             HtmlUrl = "https://github.com/example-org/bookstore-api",
         };
@@ -51,12 +51,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     /// <summary>Saves a run carrying the fixture's report; succeeded when <paramref name="succeed"/> is true.</summary>
-    public async Task<ScanRun> AddRunWithReportAsync(string fixture, bool succeed)
+    public async Task<ScanRun> AddRunWithReportAsync(string fixture, bool succeed, Guid? repositoryId = null)
     {
-        var repository = await AddRepositoryAsync();
+        var repoId = repositoryId ?? (await AddRepositoryAsync()).Id;
         var report = LoadReport(fixture, Guid.NewGuid());
         var meta = report.Meta;
-        var run = new ScanRun(meta.RunId, repository.Id, meta.Branch, meta.CommitSha, meta.ModelId, meta.PromptSetVersion, meta.ProfileVersion);
+        var run = new ScanRun(meta.RunId, repoId, meta.Branch, meta.CommitSha, meta.ModelId, meta.PromptSetVersion, meta.ProfileVersion);
         run.RecordReport(report);
         if (succeed)
         {

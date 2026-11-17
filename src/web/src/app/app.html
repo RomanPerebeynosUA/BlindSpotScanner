@@ -1,6 +1,10 @@
-<header>
-  <h1>BlindSpotScanner</h1>
-</header>
-<main>
-  <router-outlet />
-</main>
+<div class="shell">
+  <nav class="rail" aria-label="Main">
+    <div class="brand"><i aria-hidden="true"></i>BlindSpotScanner</div>
+    <a class="navbtn" routerLink="/" routerLinkActive="active" ariaCurrentWhenActive="page" [routerLinkActiveOptions]="{ exact: false }">Repositories</a>
+    <button type="button" class="navbtn theme" (click)="toggleTheme()">Light / dark theme</button>
+  </nav>
+  <main>
+    <router-outlet />
+  </main>
+</div>

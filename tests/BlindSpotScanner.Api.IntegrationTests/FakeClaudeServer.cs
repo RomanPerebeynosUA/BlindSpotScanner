@@ -33,6 +33,7 @@ public sealed class FakeClaudeServer : IDisposable
         Answer(3, ["map integration tests", "BooksController"], BooksMap);
         Answer(4, ["map integration tests"], OrdersMap);
         Answer(5, ["classify ambiguous test files"], Classify);
+        Answer(6, ["draft a repo profile"], Draft);
         Answer(0, ["classify ambiguous test files", SlowMarker], Classify, SlowDelay);
     }
 
@@ -61,6 +62,10 @@ public sealed class FakeClaudeServer : IDisposable
 
     private const string Classify = """
         {"files":[{"path":"tests/Bookstore.UnitTests/PriceTests.cs","kind":"unit","confidence":"High","reason":"pure arithmetic, no host or database","evidenceKind":"observed"}]}
+        """;
+
+    public const string Draft = """
+        {"markdown":"# Repo profile — example-org/bookstore (drafted)","openQuestions":["Is the payment gateway a real seam?"]}
         """;
 
     private const string BooksMap = $$"""
