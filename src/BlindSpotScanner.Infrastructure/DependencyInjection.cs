@@ -19,16 +19,14 @@ namespace BlindSpotScanner.Infrastructure;
 public static class DependencyInjection
 {
     /// <summary>Everything the api and the worker share: persistence, GitHub, the LLM, the pipeline, the queue and events.</summary>
-    public static IServiceCollection AddBlindSpotScannerCore(this IServiceCollection services, IConfiguration configuration)
+    /// <remarks>Configuration is read when services are resolved, not here, so a host (or a test factory) can still add sources after registration.</remarks>
+    public static IServiceCollection AddBlindSpotScannerCore(this IServiceCollection services)
     {
-        var connectionString = configuration.GetConnectionString("Postgres")
-            ?? throw new InvalidOperationException("ConnectionStrings:Postgres is not configured.");
-
-        services.AddDbContext<BlindSpotScannerDbContext>(o => o.UseNpgsql(connectionString).UseSnakeCaseNamingConvention());
-        services.AddSingleton(new ScanEventListener(connectionString));
-        services.Configure<GitHubOptions>(configuration.GetSection("GitHub"));
-        services.Configure<LlmOptions>(configuration.GetSection("Llm"));
-        services.Configure<ScanOptions>(configuration.GetSection("Scan"));
+        services.AddDbContext<BlindSpotScannerDbContext>((sp, o) => o.UseNpgsql(ConnectionString(sp)).UseSnakeCaseNamingConvention());
+        services.AddSingleton(sp => new ScanEventListener(ConnectionString(sp)));
+        services.AddOptions<GitHubOptions>().BindConfiguration("GitHub");
+        services.AddOptions<LlmOptions>().BindConfiguration("Llm");
+        services.AddOptions<ScanOptions>().BindConfiguration("Scan");
         services.TryAddSingleton(TimeProvider.System);
 
         // The typed client owns its HttpClient; the rate-limit handler sits in its handler chain (D16).
@@ -83,4 +81,8 @@ public static class DependencyInjection
             sp.GetRequiredService<TimeProvider>()));
         return services;
     }
+
+    private static string ConnectionString(IServiceProvider sp) =>
+        sp.GetRequiredService<IConfiguration>().GetConnectionString("Postgres")
+            ?? throw new InvalidOperationException("ConnectionStrings:Postgres is not configured.");
 }

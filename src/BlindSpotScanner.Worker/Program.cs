@@ -1,8 +1,8 @@
 using BlindSpotScanner.Infrastructure;
-using BlindSpotScanner.Worker;
+using BlindSpotScanner.Infrastructure.Scanning;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddBlindSpotScannerCore(builder.Configuration);
+builder.Services.AddBlindSpotScannerCore();
 builder.Services.AddHostedService<ScanWorker>();
 
 var host = builder.Build();

@@ -1,14 +1,17 @@
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Domain.Enums;
-using BlindSpotScanner.Infrastructure.Scanning;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace BlindSpotScanner.Worker;
+namespace BlindSpotScanner.Infrastructure.Scanning;
 
 /// <summary>
 /// Runs scans from the queue (doc 02), <c>Scan:MaxConcurrentScans</c> at a time. Each scan keeps its
 /// lease alive with a heartbeat; a cancel request or a lost lease cancels it at the next phase.
 /// Failures are logged by type and run id only: messages may name repositories, never secrets.
+/// It lives here, not in the Worker project, so the end-to-end tests can host it next to the api.
 /// </summary>
 public sealed partial class ScanWorker(IServiceScopeFactory scopes, IOptions<ScanOptions> options, TimeProvider time, ILogger<ScanWorker> logger) : BackgroundService
 {

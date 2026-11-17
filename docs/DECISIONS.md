@@ -154,3 +154,21 @@ endpoint ids and on unresolvable evidence. The scrubber also covers `ASIA` keys,
 Slack `xox?-`, Google `AIza`, Azure `AccountKey=`/`SharedAccessKey=`/`SharedAccessSignature=`,
 `.WithPassword("…")` and JSON `"password": "…"`. The citation verifier, budgets, queue and DI
 wiring are M6.
+
+## D21 — Orchestrator, queue, worker and progress (2026-11-17)
+The user's choice: repository and profile endpoints arrive in M7 with the pages that use them; M6
+builds the scan/run endpoints only (tests seed repositories in the database). The OpenAPI contract
+wins over doc 03: cancel is `POST /api/runs/{runId}/cancel` (202), plus `GET /api/runs/{runId}/steps`.
+The queue lives on `scan_runs` (`queued_at`, `attempts`, `leased_until`, `cancel_requested`,
+`failure_reasons`): `FOR UPDATE SKIP LOCKED` dequeue, a heartbeat extends the lease, an expired
+lease is retried once, then the run is Failed. A cancelled queued run ends at once; a running one
+stops at its next phase and ends Cancelled with no report; a host shutdown leaves it Running so the
+lease retry picks it up. Progress travels by `pg_notify('scan_events')` and is relayed to SignalR
+groups `run:{id}` on `/hubs/scans`. Citations: every `path::Name` in the report (evidence arrays and
+scorecard evidence bullets) is re-read at the pinned commit; coverage evidence must name a test
+method, other citations any method (fixtures are evidence). The cost cap (`Llm:MaxCostUsdPerScan`,
+or the request's `maxCostUsd`) stops further LLM calls, records the reason, and the run still
+succeeds. The api applies migrations at startup. New options: `Scan:LeaseSeconds` 120,
+`Scan:HeartbeatSeconds` 30, `Scan:PollMilliseconds` 2000. `ScanWorker` lives in Infrastructure so
+the end-to-end tests host it next to the api; the Worker project only hosts it. Configuration is
+read when services resolve, so hosts and test factories can add sources after registration.

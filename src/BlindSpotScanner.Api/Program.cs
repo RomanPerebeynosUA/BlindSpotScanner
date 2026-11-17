@@ -7,7 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
-builder.Services.AddBlindSpotScannerCore(builder.Configuration);
+builder.Services.AddBlindSpotScannerCore();
 builder.Services.AddSingleton<ScanEventRelay>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ScanEventRelay>());
 
