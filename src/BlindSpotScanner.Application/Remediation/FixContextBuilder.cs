@@ -53,7 +53,15 @@ public sealed class FixContextBuilder(IGitHubClient github)
             return null;
         }
 
+        // The guard trusts this folder, so it must be a real test project, never a production project
+        // that happens to hold tests, nor the repository root (D25).
         var projectFolder = Folder(projectPath);
+        var project = new SourceFile(projectPath, await github.GetBlobTextAsync(owner, name, blobs[projectPath], ct));
+        if (projectFolder.Length == 0 || !IsTestProject(project.Content))
+        {
+            return null;
+        }
+
         var fixturePaths = blobs.Keys
             .Where(p => p.StartsWith(projectFolder + "/", StringComparison.Ordinal) && p.EndsWith(".cs", StringComparison.Ordinal) && !siblingPaths.Contains(p))
             .Where(p => FileName(p).Contains("Fixture", StringComparison.Ordinal) || FileName(p).Contains("Factory", StringComparison.Ordinal))
@@ -79,12 +87,19 @@ public sealed class FixContextBuilder(IGitHubClient github)
             controllerSource,
             siblings,
             fixtures,
-            await ReadAsync(projectPath),
+            project,
             projectFolder,
             Folder(siblingPaths[0]) + "/",
             anchor is null ? null : siblings.Single(s => s.Path == anchor),
             blobs);
     }
+
+    /// <summary>A project that references a test SDK or framework, or says it is one.</summary>
+    private static bool IsTestProject(string csproj) =>
+        TestProjectMarkers.Any(m => csproj.Contains(m, StringComparison.OrdinalIgnoreCase));
+
+    private static readonly string[] TestProjectMarkers =
+        ["Microsoft.NET.Test.Sdk", "\"xunit", "\"nunit", "\"MSTest", "<IsTestProject>true</IsTestProject>", "Microsoft.Testing.Platform"];
 
     private static ControllerCoverage? ControllerOf(IntegrationReport report, ReportFinding finding) =>
         finding.Detail is [var endpoint, ..]

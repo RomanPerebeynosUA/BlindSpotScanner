@@ -24,8 +24,16 @@ public class FixContextBuilderTests
 
     private static ReportFinding Finding(string id) => Report.Findings.Single(f => f.Id == id);
 
-    private static Task<FixContext?> BuildAsync(string findingId, IReadOnlyList<string>? files = null) =>
-        new FixContextBuilder(new TreeGitHub(files ?? BookstoreFiles)).BuildAsync(Report, Finding(findingId), Report.Meta.CommitSha, CancellationToken.None);
+    private static Task<FixContext?> BuildAsync(string findingId, IReadOnlyList<string>? files = null, Dictionary<string, string>? contents = null)
+    {
+        var github = new TreeGitHub(files ?? BookstoreFiles);
+        foreach (var (path, content) in contents ?? [])
+        {
+            github.Contents[path] = content;
+        }
+
+        return new FixContextBuilder(github).BuildAsync(Report, Finding(findingId), Report.Meta.CommitSha, CancellationToken.None);
+    }
 
     [Fact]
     public async Task BuildAsync_UncoveredEndpoint_ReadsControllerAndSiblings()
@@ -87,6 +95,32 @@ public class FixContextBuilderTests
     }
 
     [Fact]
+    public async Task BuildAsync_NearestProjectIsNotATestProject_ReturnsNull()
+    {
+        // Arrange (tests living inside a production project would let the guard accept production edits)
+        var files = BookstoreFiles.Where(f => !f.EndsWith("IntegrationTests.csproj", StringComparison.Ordinal)).Append("tests/Bookstore.Tests.csproj").ToList();
+
+        // Act
+        var context = await BuildAsync("f2", files, new() { ["tests/Bookstore.Tests.csproj"] = "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />" });
+
+        // Assert
+        context.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BuildAsync_TestProjectAtRepositoryRoot_ReturnsNull()
+    {
+        // Arrange (a root project makes every path "inside the test project")
+        var files = BookstoreFiles.Where(f => !f.EndsWith("IntegrationTests.csproj", StringComparison.Ordinal)).Append("Bookstore.Tests.csproj").ToList();
+
+        // Act
+        var context = await BuildAsync("f2", files);
+
+        // Assert
+        context.Should().BeNull();
+    }
+
+    [Fact]
     public async Task BuildAsync_BlobShasCoverTheTree()
     {
         // Act
@@ -127,7 +161,15 @@ public class FixContextBuilderTests
 
         public Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) =>
-            Task.FromResult($"// {blobSha["sha:".Length..]}");
+        /// <summary>Content overrides by path; other .csproj files reference xunit (a test project), other files are "// {path}".</summary>
+        public Dictionary<string, string> Contents { get; } = [];
+
+        public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct)
+        {
+            var path = blobSha["sha:".Length..];
+            return Task.FromResult(Contents.TryGetValue(path, out var content) ? content
+                : path.EndsWith(".csproj", StringComparison.Ordinal) ? "<Project><ItemGroup><PackageReference Include=\"xunit\" /></ItemGroup></Project>"
+                : $"// {path}");
+        }
     }
 }
