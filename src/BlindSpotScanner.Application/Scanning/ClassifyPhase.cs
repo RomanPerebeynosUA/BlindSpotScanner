@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Domain.Entities;
 using Microsoft.Extensions.FileSystemGlobbing;
@@ -9,7 +10,7 @@ namespace BlindSpotScanner.Application.Scanning;
 /// P4 (doc 05), deterministic part: the profile's rules decide what they can (D18), first match
 /// wins. Files no rule decides are Ambiguous and wait for the LLM step (M5); they are never guessed.
 /// </summary>
-public sealed class ClassifyPhase(IBlobReader blobs, ITestSyntaxReader reader)
+public sealed partial class ClassifyPhase(IBlobReader blobs, ITestSyntaxReader reader)
 {
     public async Task<TestClassification> ClassifyAsync(RunContext run, RepositoryInventory inventory, RepoProfile profile, CancellationToken ct)
     {
@@ -40,7 +41,7 @@ public sealed class ClassifyPhase(IBlobReader blobs, ITestSyntaxReader reader)
         {
             // A class base (not an interface, not a known integration helper base) may carry the tests.
             var inheritedFrom = facts.BaseTypes.FirstOrDefault(b =>
-                !IsInterfaceName(NameBefore(b, '<'))
+                !IsInterfaceName(NameBefore(Unqualified(b), '<'))
                 && !profile.IntegrationBaseTypes.Select(RemoveWhitespace).Any(entry => BaseTypeMatches(entry, b)));
             return inheritedFrom is null
                 ? (TestFileKind.Other, "no test methods")
@@ -82,11 +83,26 @@ public sealed class ClassifyPhase(IBlobReader blobs, ITestSyntaxReader reader)
             ? string.Equals(entry, attribute, StringComparison.Ordinal)
             : string.Equals(entry, NameBefore(attribute, '('), StringComparison.Ordinal);
 
-    /// <summary>An entry without type arguments matches any generic arity.</summary>
-    private static bool BaseTypeMatches(string entry, string baseType) =>
-        entry.Contains('<', StringComparison.Ordinal)
-            ? string.Equals(entry, baseType, StringComparison.Ordinal)
-            : string.Equals(entry, NameBefore(baseType, '<'), StringComparison.Ordinal);
+    /// <summary>
+    /// Namespaces are ignored on both sides. An entry with type arguments must match exactly; one
+    /// without matches the base or any type argument by name, so <c>WebApplicationFactory</c> matches
+    /// <c>IClassFixture&lt;WebApplicationFactory&lt;Program&gt;&gt;</c>.
+    /// </summary>
+    private static bool BaseTypeMatches(string entry, string baseType)
+    {
+        var (name, type) = (Unqualified(entry), Unqualified(baseType));
+        return name.Contains('<', StringComparison.Ordinal)
+            ? string.Equals(name, type, StringComparison.Ordinal)
+            : TypeName().Matches(type).Any(m => string.Equals(m.Value, name, StringComparison.Ordinal));
+    }
+
+    private static string Unqualified(string type) => Qualifier().Replace(type, string.Empty);
+
+    [GeneratedRegex(@"\b(?:[A-Za-z_]\w*\.)+")]
+    private static partial Regex Qualifier();
+
+    [GeneratedRegex(@"[A-Za-z_]\w*")]
+    private static partial Regex TypeName();
 
     private static bool IsInterfaceName(string name) => name.Length > 1 && name[0] == 'I' && char.IsUpper(name[1]);
 

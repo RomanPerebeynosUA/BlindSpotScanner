@@ -64,8 +64,15 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         return new ExtractionResult(controllers, warnings);
     }
 
+    /// <summary>Minimal API registrations this extractor doesn't read; each one is reported.</summary>
+    private static readonly HashSet<string> UnsupportedMaps = new(StringComparer.Ordinal) { "Map", "MapMethods", "MapFallback" };
+
+    /// <summary>ASP.NET Core's rule: public, not abstract or static, not [NonController].</summary>
     private static bool IsController(ClassDeclarationSyntax type) =>
-        !type.Modifiers.Any(SyntaxKind.AbstractKeyword)
+        type.Modifiers.Any(SyntaxKind.PublicKeyword)
+        && !type.Modifiers.Any(SyntaxKind.AbstractKeyword)
+        && !type.Modifiers.Any(SyntaxKind.StaticKeyword)
+        && !Attributes(type.AttributeLists).Any(a => Name(a) == "NonController")
         && (Attributes(type.AttributeLists).Any(a => Name(a) == "ApiController")
             || type.BaseList?.Types.Any(t => SimpleName(t.Type) is "Controller" or "ControllerBase") == true
             || type.Identifier.ValueText.EndsWith("Controller", StringComparison.Ordinal));
@@ -73,6 +80,14 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
     private static void ExtractController(string path, ClassDeclarationSyntax type, List<ExtractedController> controllers, List<string> warnings)
     {
         var name = type.Identifier.ValueText;
+        var areaAttribute = Attributes(type.AttributeLists).FirstOrDefault(a => Name(a) == "Area");
+        string? area = null;
+        if (areaAttribute is not null && !TryTemplate(areaAttribute, out area))
+        {
+            warnings.Add($"{path}: area of {name} is not a string literal; endpoints not extracted");
+            return;
+        }
+
         var prefixes = new List<string?>();
         foreach (var route in Attributes(type.AttributeLists).Where(a => Name(a) == "Route"))
         {
@@ -82,7 +97,13 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
                 return;
             }
 
-            prefixes.Add(Clean(ReplaceTokens(classTemplate, name, action: null)));
+            if (area is null && classTemplate.Contains("[area]", StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"{path}: {name} uses [area] without an [Area] attribute; endpoints not extracted");
+                return;
+            }
+
+            prefixes.Add(Clean(ReplaceTokens(classTemplate, name, action: null, area)));
         }
 
         if (prefixes.Count == 0)
@@ -106,7 +127,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         var warningsBefore = warnings.Count;
         foreach (var method in type.Members.OfType<MethodDeclarationSyntax>().Where(IsAction))
         {
-            ExtractAction(path, name, method, prefixes, endpoints, warnings);
+            ExtractAction(path, name, area, method, prefixes, endpoints, warnings);
         }
 
         if (endpoints.Count > 0)
@@ -120,10 +141,11 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
     }
 
     /// <summary>One endpoint per class route × verb template (a verb without a template takes each method [Route]).</summary>
-    private static void ExtractAction(string path, string controller, MethodDeclarationSyntax method, List<string?> prefixes, List<ExtractedEndpoint> endpoints, List<string> warnings)
+    private static void ExtractAction(string path, string controller, string? area, MethodDeclarationSyntax method, List<string?> prefixes, List<ExtractedEndpoint> endpoints, List<string> warnings)
     {
         var action = method.Identifier.ValueText;
         var attributes = Attributes(method.AttributeLists).ToList();
+        var actionName = ActionName(method, attributes);
         var verbs = attributes.Where(a => Verbs.ContainsKey(Name(a))).ToList();
         var methodRoutes = attributes.Where(a => Name(a) == "Route").ToList();
         if (verbs.Count == 0)
@@ -148,14 +170,26 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
                     return;
                 }
 
-                templates.Add(ReplaceTokens(template, controller, action));
+                templates.Add(ReplaceTokens(template, controller, actionName, area));
             }
 
             endpoints.AddRange(
                 from prefix in prefixes
                 from template in templates
-                select new ExtractedEndpoint(Verbs[Name(verb)], Combine(prefix, template)));
+                select new ExtractedEndpoint(Verbs[Name(verb)], Combine(prefix, template).Replace("[action]", actionName, StringComparison.OrdinalIgnoreCase)));
         }
+    }
+
+    /// <summary>The [action] value: [ActionName], else the method name without ASP.NET's trimmed "Async" suffix.</summary>
+    private static string ActionName(MethodDeclarationSyntax method, List<AttributeSyntax> attributes)
+    {
+        if (attributes.FirstOrDefault(a => Name(a) == "ActionName") is { } attribute && TryTemplate(attribute, out var named) && named.Length > 0)
+        {
+            return named;
+        }
+
+        var name = method.Identifier.ValueText;
+        return name.Length > "Async".Length && name.EndsWith("Async", StringComparison.Ordinal) ? name[..^"Async".Length] : name;
     }
 
     private static bool IsInterfaceName(string name) => name.Length > 1 && name[0] == 'I' && char.IsUpper(name[1]);
@@ -165,14 +199,25 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         var endpoints = new List<ExtractedEndpoint>();
         foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
-            if (call.Expression is not MemberAccessExpressionSyntax access
-                || !MapVerbs.TryGetValue(access.Name.Identifier.ValueText, out var method)
-                || call.ArgumentList.Arguments.Count == 0)
+            if (call.Expression is not MemberAccessExpressionSyntax access)
             {
                 continue;
             }
 
             var line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            var callName = access.Name.Identifier.ValueText;
+            if (UnsupportedMaps.Contains(callName)
+                && (callName == "MapFallback" || call.ArgumentList.Arguments.FirstOrDefault() is { } first && TryLiteral(first.Expression, out _)))
+            {
+                warnings.Add($"{path}: {callName} call at line {line} is not supported; endpoint not extracted");
+                continue;
+            }
+
+            if (!MapVerbs.TryGetValue(callName, out var method) || call.ArgumentList.Arguments.Count == 0)
+            {
+                continue;
+            }
+
             if (!TryLiteral(call.ArgumentList.Arguments[0].Expression, out var template))
             {
                 warnings.Add($"{path}: route of {access.Name.Identifier.ValueText} call at line {line} is not a string literal; endpoint not extracted");
@@ -229,9 +274,9 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
                 prefix = Clean($"{outer}/{group}");
                 return true;
             case IdentifierNameSyntax identifier:
-                if (NearestLocal(identifier) is { Initializer: { } initializer })
+                if (NearestValue(identifier) is { } value)
                 {
-                    return TryGroupPrefix(initializer.Value, depth - 1, out prefix);
+                    return TryGroupPrefix(value, depth - 1, out prefix);
                 }
 
                 var name = identifier.Identifier.ValueText;
@@ -247,17 +292,29 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         }
     }
 
-    /// <summary>The latest declaration of this local, before it, in a scope that contains it.</summary>
-    private static VariableDeclaratorSyntax? NearestLocal(IdentifierNameSyntax identifier)
+    /// <summary>
+    /// The value most recently given to this local before it: its initializer or a later plain
+    /// assignment, from a statement whose scope contains the use.
+    /// </summary>
+    private static ExpressionSyntax? NearestValue(IdentifierNameSyntax identifier)
     {
         var name = identifier.Identifier.ValueText;
         var ancestors = identifier.Ancestors().ToHashSet();
-        return identifier.SyntaxTree.GetRoot().DescendantNodes().OfType<VariableDeclaratorSyntax>()
-            .Where(v => v.Identifier.ValueText == name && v.Initializer is not null && v.SpanStart < identifier.SpanStart)
-            .Where(v => v.Parent?.Parent is LocalDeclarationStatementSyntax statement
-                && (statement.Parent is GlobalStatementSyntax global ? global.Parent : statement.Parent) is { } scope
-                && ancestors.Contains(scope))
-            .MaxBy(v => v.SpanStart);
+        bool InScope(SyntaxNode? statement) =>
+            statement is not null
+            && (statement.Parent is GlobalStatementSyntax global ? global.Parent : statement.Parent) is { } scope
+            && ancestors.Contains(scope);
+
+        var nodes = identifier.SyntaxTree.GetRoot().DescendantNodes().Where(n => n.SpanStart < identifier.SpanStart).ToList();
+        var initializers = nodes.OfType<VariableDeclaratorSyntax>()
+            .Where(v => v.Identifier.ValueText == name && v.Initializer is not null && v.Parent?.Parent is LocalDeclarationStatementSyntax && InScope(v.Parent.Parent))
+            .Select(v => (v.SpanStart, Value: v.Initializer!.Value));
+        var assignments = nodes.OfType<AssignmentExpressionSyntax>()
+            .Where(a => a.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                && a.Left is IdentifierNameSyntax left && left.Identifier.ValueText == name
+                && a.Parent is ExpressionStatementSyntax && InScope(a.Parent))
+            .Select(a => (a.SpanStart, Value: a.Right));
+        return initializers.Concat(assignments).OrderByDescending(c => c.SpanStart).Select(c => c.Value).FirstOrDefault();
     }
 
     private static bool IsAction(MethodDeclarationSyntax method) =>
@@ -281,10 +338,11 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         return route.Trim('/');
     }
 
-    private static string ReplaceTokens(string template, string controller, string? action)
+    private static string ReplaceTokens(string template, string controller, string? action, string? area)
     {
-        var area = controller.EndsWith("Controller", StringComparison.Ordinal) ? controller[..^"Controller".Length] : controller;
-        var result = template.Replace("[controller]", area, StringComparison.OrdinalIgnoreCase);
+        var name = controller.EndsWith("Controller", StringComparison.Ordinal) ? controller[..^"Controller".Length] : controller;
+        var result = template.Replace("[controller]", name, StringComparison.OrdinalIgnoreCase);
+        result = area is null ? result : result.Replace("[area]", area, StringComparison.OrdinalIgnoreCase);
         return action is null ? result : result.Replace("[action]", action, StringComparison.OrdinalIgnoreCase);
     }
 

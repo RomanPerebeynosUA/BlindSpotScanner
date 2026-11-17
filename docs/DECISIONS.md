@@ -115,8 +115,11 @@ without brackets, e.g. `Trait("Category","Integration")`; an entry without `(` m
 `AspNetCoreEndpointExtractor` reads C# syntax with Roslyn (no compilation). Supported: attribute
 routing (every class `[Route]` × every verb template or method `[Route]`, `[controller]`/`[action]`
 tokens, absolute `/` and `~/` templates) and minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapPatch`/
-`MapDelete`, with `MapGroup` prefixes through call chains and the nearest in-scope local). Not
-supported: conventional routing, `[Area]`, `MapMethods`. These become unverified reasons, so nothing
+`MapDelete`, with `MapGroup` prefixes through call chains and the nearest in-scope initializer or
+assignment). `[action]` honours `[ActionName]` and ASP.NET's trimmed `Async` suffix; `[area]` takes
+the class's `[Area]`. Controllers follow ASP.NET's rule: public, not abstract or static, not
+`[NonController]`. Not supported: conventional routing, and `Map`/`MapMethods`/`MapFallback`
+registrations (reported). These become unverified reasons, so nothing
 is dropped silently: a non-literal route; a controller with no attribute-routed actions; a partial
 controller or one deriving from a custom base (an inherited or other-file `[Route]` isn't read); an
 action routed without an `Http*` verb; a minimal API whose group prefix comes from a parameter or

@@ -114,4 +114,25 @@ public class CSharpTestSyntaxReaderTests
         // Assert
         facts.TestMethods.Should().Equal("StockTests.A", "StockTests.B", "StockTests.C");
     }
+
+    [Fact]
+    public void Read_NestedTestClass_NamedWithOuterClass()
+    {
+        // Arrange
+        const string source = """
+            public class BooksApiTests
+            {
+                public class WhenEmpty
+                {
+                    [Fact] public void Lists_nothing() { }
+                }
+            }
+            """;
+
+        // Act
+        var facts = new CSharpTestSyntaxReader().Read(source);
+
+        // Assert
+        facts.TestMethods.Should().Equal("BooksApiTests.WhenEmpty.Lists_nothing");
+    }
 }

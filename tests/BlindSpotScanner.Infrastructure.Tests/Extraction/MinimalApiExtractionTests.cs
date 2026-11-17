@@ -181,4 +181,46 @@ public class MinimalApiExtractionTests
         // Assert
         result.Warnings.Should().Equal("src/Api/Endpoints/HealthEndpoints.cs: group prefix of MapGet call at line 5 cannot be resolved; endpoint not extracted");
     }
+
+    [Fact]
+    public void Extract_MapMethods_IsWarned()
+    {
+        // Arrange
+        const string source = """
+            public static class Legacy
+            {
+                public static void Map(WebApplication app) =>
+                    app.MapMethods("/x", new[] { "GET" }, () => Results.Ok());
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        result.Warnings.Should().Equal("src/Api/Endpoints/HealthEndpoints.cs: MapMethods call at line 4 is not supported; endpoint not extracted");
+    }
+
+    [Fact]
+    public void Extract_GroupAssignedAfterDeclaration_UsesAssignment()
+    {
+        // Arrange
+        const string source = """
+            public static class Endpoints
+            {
+                public static void Map(WebApplication app)
+                {
+                    RouteGroupBuilder group;
+                    group = app.MapGroup("/books");
+                    group.MapGet("/{id}", (int id) => Results.Ok());
+                }
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get books/{id}");
+    }
 }

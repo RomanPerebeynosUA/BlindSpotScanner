@@ -363,4 +363,106 @@ public class AspNetCoreControllerExtractionTests
         // Assert
         Routes(result).Should().Equal("Get api/books/x");
     }
+
+    [Fact]
+    public void Extract_AsyncSuffix_IsTrimmedForActionToken()
+    {
+        // Arrange
+        const string source = """
+            [Route("api/[controller]/[action]")]
+            public class BooksController : ControllerBase
+            {
+                [HttpGet] public Task<IActionResult> GetBooksAsync() => null!;
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get api/Books/GetBooks");
+    }
+
+    [Fact]
+    public void Extract_ActionName_ReplacesActionToken()
+    {
+        // Arrange
+        const string source = """
+            [Route("api/[controller]/[action]")]
+            public class BooksController : ControllerBase
+            {
+                [HttpGet, ActionName("latest")] public IActionResult GetLatest() => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get api/Books/latest");
+    }
+
+    [Fact]
+    public void Extract_AreaToken_UsesAreaAttribute()
+    {
+        // Arrange
+        const string source = """
+            [Area("admin")]
+            [Route("[area]/[controller]")]
+            public class UsersController : ControllerBase
+            {
+                [HttpGet] public IActionResult List() => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get admin/Users");
+    }
+
+    [Fact]
+    public void Extract_AreaTokenWithoutArea_IsWarned()
+    {
+        // Arrange
+        const string source = """
+            [Route("[area]/[controller]")]
+            public class UsersController : ControllerBase
+            {
+                [HttpGet] public IActionResult List() => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        new { result.Controllers, result.Warnings }.Should().BeEquivalentTo(new
+        {
+            Controllers = Array.Empty<ExtractedController>(),
+            Warnings = new[] { "src/Api/Controllers/X.cs: UsersController uses [area] without an [Area] attribute; endpoints not extracted" },
+        });
+    }
+
+    [Fact]
+    public void Extract_NonControllerInternalAndStatic_AreSkipped()
+    {
+        // Arrange
+        const string source = """
+            [NonController] public class FakeController { [HttpGet("a")] public IActionResult A() => null!; }
+            internal class HiddenController : ControllerBase { [HttpGet("b")] public IActionResult B() => null!; }
+            public static class RoutesController { }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        new { result.Controllers, result.Warnings }.Should().BeEquivalentTo(new
+        {
+            Controllers = Array.Empty<ExtractedController>(),
+            Warnings = Array.Empty<string>(),
+        });
+    }
 }

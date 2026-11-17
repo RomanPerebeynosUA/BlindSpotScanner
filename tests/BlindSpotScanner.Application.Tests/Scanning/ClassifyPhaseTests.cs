@@ -19,7 +19,7 @@ public class ClassifyPhaseTests
         TestGlobs = ["tests/**/*.cs"],
         IntegrationGlobs = ["tests/*.IntegrationTests/**"],
         IntegrationAttributes = ["[Trait(\"Category\", \"Integration\")]", "Collection"],
-        IntegrationBaseTypes = ["WebApplicationFactory"],
+        IntegrationBaseTypes = ["WebApplicationFactory", "IClassFixture<ApiFactory>"],
         NotIntegrationGlobs = ["**/*Fixture.cs"],
     };
 
@@ -145,5 +145,25 @@ public class ClassifyPhaseTests
 
         // Assert
         new { file.Kind, file.Reason }.Should().BeEquivalentTo(new { Kind = TestFileKind.Ambiguous, Reason = "not a C# file; profile rules apply to C# only" });
+    }
+
+    [Fact]
+    public async Task Classify_QualifiedBaseType_MatchesUnqualifiedEntry()
+    {
+        // Act
+        var file = await ClassifyOne("tests/Api.UnitTests/StockTests.cs", baseTypes: ["Xunit.IClassFixture<Bookstore.ApiFactory>"]);
+
+        // Assert
+        new { file.Kind, file.Reason }.Should().BeEquivalentTo(new { Kind = TestFileKind.Integration, Reason = "derives from IClassFixture<ApiFactory>" });
+    }
+
+    [Fact]
+    public async Task Classify_GenericArgumentBaseType_MatchesNameOnlyEntry()
+    {
+        // Act
+        var file = await ClassifyOne("tests/Api.UnitTests/StockTests.cs", baseTypes: ["IClassFixture<WebApplicationFactory<Program>>"]);
+
+        // Assert
+        new { file.Kind, file.Reason }.Should().BeEquivalentTo(new { Kind = TestFileKind.Integration, Reason = "derives from WebApplicationFactory" });
     }
 }

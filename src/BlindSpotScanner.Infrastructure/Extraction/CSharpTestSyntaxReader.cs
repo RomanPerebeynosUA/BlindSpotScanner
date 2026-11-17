@@ -35,11 +35,15 @@ public sealed class CSharpTestSyntaxReader : ITestSyntaxReader
         var baseTypes = classes.SelectMany(c => c.BaseList?.Types ?? default).Select(t => Tokens(t.Type)).ToList();
         var testMethods = methods
             .Where(m => m.Method.AttributeLists.SelectMany(l => l.Attributes).Any(a => IsTestAttribute(SyntaxNames.Of(a))))
-            .Select(m => $"{m.Class.Identifier.ValueText}.{m.Method.Identifier.ValueText}")
+            .Select(m => $"{QualifiedName(m.Class)}.{m.Method.Identifier.ValueText}")
             .ToList();
 
         return new TestFileFacts(attributes, baseTypes, testMethods);
     }
+
+    /// <summary>Nested classes keep their outer classes, so two nested classes with one name stay distinct.</summary>
+    private static string QualifiedName(ClassDeclarationSyntax type) =>
+        string.Join('.', type.AncestorsAndSelf().OfType<ClassDeclarationSyntax>().Reverse().Select(c => c.Identifier.ValueText));
 
     private static bool IsTestAttribute(string name) =>
         TestAttributes.Contains(name) || TestAttributeSuffixes.Any(suffix => name.EndsWith(suffix, StringComparison.Ordinal));
