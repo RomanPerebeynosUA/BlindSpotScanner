@@ -7,7 +7,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace BlindSpotScanner.Infrastructure.Extraction;
 
 /// <summary>
-/// ASP.NET Core endpoints from C# syntax (no compilation): attribute-routed controllers (D19).
+/// ASP.NET Core endpoints from C# syntax (no compilation): attribute-routed controllers and minimal
+/// APIs with MapGroup prefixes (D19). A file's minimal APIs form one controller named after the file.
 /// Comments are trivia, so commented-out attributes never count. A route that is not a string
 /// literal can't be read syntactically and is reported as a warning, never dropped silently.
 /// </summary>
@@ -24,6 +25,18 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         ["HttpOptions"] = EndpointMethod.Options,
     };
 
+    private static readonly Dictionary<string, EndpointMethod> MapVerbs = new(StringComparer.Ordinal)
+    {
+        ["MapGet"] = EndpointMethod.Get,
+        ["MapPost"] = EndpointMethod.Post,
+        ["MapPut"] = EndpointMethod.Put,
+        ["MapPatch"] = EndpointMethod.Patch,
+        ["MapDelete"] = EndpointMethod.Delete,
+    };
+
+    /// <summary>Bounds group-variable chasing (a variable defined from itself would loop).</summary>
+    private const int MaxGroupDepth = 16;
+
     public ExtractionResult Extract(string path, string source)
     {
         var root = CSharpSyntaxTree.ParseText(source, path: path).GetRoot();
@@ -32,6 +45,12 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         foreach (var type in root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(IsController))
         {
             ExtractController(path, type, controllers, warnings);
+        }
+
+        var minimal = ExtractMinimalApis(path, root, warnings);
+        if (minimal.Count > 0)
+        {
+            controllers.Add(new ExtractedController(System.IO.Path.GetFileNameWithoutExtension(path), path, RoutePrefix: null, minimal));
         }
 
         return new ExtractionResult(controllers, warnings);
@@ -91,6 +110,75 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         }
     }
 
+    private static List<ExtractedEndpoint> ExtractMinimalApis(string path, SyntaxNode root, List<string> warnings)
+    {
+        var endpoints = new List<ExtractedEndpoint>();
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax access
+                || !MapVerbs.TryGetValue(access.Name.Identifier.ValueText, out var method)
+                || call.ArgumentList.Arguments.Count == 0)
+            {
+                continue;
+            }
+
+            if (!TryLiteral(call.ArgumentList.Arguments[0].Expression, out var template)
+                || !TryGroupPrefix(access.Expression, root, MaxGroupDepth, out var prefix))
+            {
+                var line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                warnings.Add($"{path}: route of {access.Name.Identifier.ValueText} call at line {line} is not a string literal; endpoint not extracted");
+                continue;
+            }
+
+            // In minimal APIs a leading "/" is normal and still sits under the group prefix.
+            endpoints.Add(new ExtractedEndpoint(method, Clean($"{prefix}/{template}")));
+        }
+
+        return endpoints;
+    }
+
+    /// <summary>
+    /// The MapGroup prefix of a route builder expression: MapGroup calls add their prefix, other calls
+    /// (WithTags, RequireAuthorization, …) pass through, and a local variable is followed to its initializer.
+    /// </summary>
+    private static bool TryGroupPrefix(ExpressionSyntax builder, SyntaxNode root, int depth, out string prefix)
+    {
+        prefix = string.Empty;
+        if (depth == 0)
+        {
+            return false;
+        }
+
+        switch (builder)
+        {
+            case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } call:
+                if (!TryGroupPrefix(access.Expression, root, depth - 1, out var outer))
+                {
+                    return false;
+                }
+
+                if (access.Name.Identifier.ValueText != "MapGroup")
+                {
+                    prefix = outer;
+                    return true;
+                }
+
+                if (call.ArgumentList.Arguments.Count == 0 || !TryLiteral(call.ArgumentList.Arguments[0].Expression, out var group))
+                {
+                    return false;
+                }
+
+                prefix = Clean($"{outer}/{group}");
+                return true;
+            case IdentifierNameSyntax identifier:
+                var declaration = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
+                    .FirstOrDefault(v => v.Identifier.ValueText == identifier.Identifier.ValueText && v.Initializer is not null);
+                return declaration is null || TryGroupPrefix(declaration.Initializer!.Value, root, depth - 1, out prefix);
+            default:
+                return true;
+        }
+    }
+
     private static bool IsAction(MethodDeclarationSyntax method) =>
         method.Modifiers.Any(SyntaxKind.PublicKeyword)
         && !method.Modifiers.Any(SyntaxKind.StaticKeyword)
@@ -102,7 +190,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
             ? Clean(template.TrimStart('~'))
             : Clean($"{prefix}/{template}");
 
-    internal static string Clean(string route)
+    private static string Clean(string route)
     {
         while (route.Contains("//", StringComparison.Ordinal))
         {
@@ -137,7 +225,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         return TryLiteral(argument.Expression, out template);
     }
 
-    internal static bool TryLiteral(ExpressionSyntax expression, out string value)
+    private static bool TryLiteral(ExpressionSyntax expression, out string value)
     {
         if (expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
         {
