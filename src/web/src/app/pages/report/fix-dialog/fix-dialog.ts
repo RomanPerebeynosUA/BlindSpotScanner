@@ -54,11 +54,12 @@ export class FixDialog {
     this.generate();
   }
 
-  protected generate(): void {
+  /** `regenerate` builds against the default branch head, after "files changed" (D25). */
+  protected generate(regenerate = false): void {
     this.draft.set(null);
     this.changed.set([]);
     this.reasons.set([]);
-    this.api.fixPreview(this.data.runId, this.data.findingId).subscribe({
+    this.api.fixPreview(this.data.runId, this.data.findingId, regenerate).subscribe({
       next: (draft) => {
         this.draft.set(draft);
         this.files.set(draft.files.map((f) => ({ ...f, editing: false })));
@@ -108,6 +109,7 @@ export class FixDialog {
       title: this.title().trim(),
       body: this.body(),
       force: this.existing() !== null,
+      baseSha: this.draft()!.baseSha,
     };
     this.api.createPullRequest(this.data.runId, this.data.findingId, body).subscribe({
       next: (action) => this.dialog.close(action),

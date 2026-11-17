@@ -21,6 +21,7 @@ const draft = (): FixDraft => ({
   body: 'Adds a test.',
   costUsd: 0.04,
   existing: null,
+  baseSha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
 });
 
 describe('FixDialog', () => {
@@ -98,7 +99,7 @@ describe('FixDialog', () => {
     // Assert
     const body: FixCreate = {
       files: [{ path: 'tests/Bookstore.IntegrationTests/CancelOrderTests.cs', action: 'create', content: 'public class Edited { }' }],
-      branch: 'coverage/fix-cancel', title: 'test: cancel an order', body: 'Adds a test.', force: false,
+      branch: 'coverage/fix-cancel', title: 'test: cancel an order', body: 'Adds a test.', force: false, baseSha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
     };
     expect(createPullRequest).toHaveBeenCalledWith('run1', 'f2', body);
     expect(close).toHaveBeenCalledWith(created);
@@ -117,7 +118,7 @@ describe('FixDialog', () => {
     await settle();
 
     // Assert
-    expect([banner?.includes('tests/Bookstore.IntegrationTests/BooksApiTests.cs'), fixPreview.mock.calls.length]).toEqual([true, 2]);
+    expect([banner?.includes('tests/Bookstore.IntegrationTests/BooksApiTests.cs'), fixPreview.mock.calls[1]]).toEqual([true, ['run1', 'f2', true]]);
   });
 
   it('rejected shows the reasons', async () => {

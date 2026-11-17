@@ -154,6 +154,7 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
           body: 'Strengthens the test.',
           costUsd: 0.04,
           existing: null,
+          baseSha: String(report.meta.commitSha),
         });
       }
       if (options.filesChanged) {

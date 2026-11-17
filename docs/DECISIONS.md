@@ -272,3 +272,8 @@ click. GitHub is tested with WireMock only; no live test.
 - Contract additions: `GET /api/features` (`{ pullRequests, jira }`) for the UI; the fix-preview
   body (`files[{path, action, content, original}]`, rationale, assumptions, riskNotes, branch,
   title, body, costUsd, existing).
+- Base commit: a first draft is generated from the scanned commit; "Regenerate" (`fix-preview?regenerate=true`)
+  generates from the repository's default branch head. The draft carries that `baseSha`, and
+  create compares the target files at `baseSha` with the default branch head, so a regenerated fix
+  can be opened. The PR always goes against the default branch head (doc 09 step 5). The action is
+  stored as soon as GitHub returns the PR; the `integration-coverage` label is best effort.

@@ -33,7 +33,8 @@ public class FixPullRequestsTests
     }
 
     private FixPullRequests Fixes => new(
-        _runs, _store, new FixContextBuilder(_github), new PathGuard(), _llm, _github, _pulls, new Clock(Now), new FixDefaults(_enabled, "http://localhost:8080"));
+        _runs, _store, new OneRepository(_repositoryId, "trunk"), new FixContextBuilder(_github), new PathGuard(), _llm, _github, _pulls, new Clock(Now),
+        new FixDefaults(_enabled, "http://localhost:8080"));
 
     private Guid AddRun(IntegrationReport report)
     {
@@ -55,7 +56,10 @@ public class FixPullRequestsTests
         prBody = "Adds an integration test.",
     });
 
-    private Task<FixResult<FixDraft>> PreviewAsync(string findingId = "f2") => Fixes.PreviewAsync(_runId, findingId, CancellationToken.None);
+    private const string RunSha = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+
+    private Task<FixResult<FixDraft>> PreviewAsync(string findingId = "f2", bool regenerate = false) =>
+        Fixes.PreviewAsync(_runId, findingId, regenerate, CancellationToken.None);
 
     [Fact]
     public async Task PreviewAsync_UncoveredEndpoint_ReturnsDraftWithBranchAndFooter()
@@ -195,8 +199,8 @@ public class FixPullRequestsTests
         draft.Body.Should().Contain("Jira: [BSS-3](https://example.atlassian.net/browse/BSS-3)");
     }
 
-    private static FixCreate Request(string path = NewTestPath, FixAction action = FixAction.Create, bool force = false) =>
-        new([new FixFile(path, action, "public class CancelOrderTests { }")], "coverage/fix-x-a1b2c3d", "test: add", "Body", force);
+    private static FixCreate Request(string path = NewTestPath, FixAction action = FixAction.Create, bool force = false, string baseSha = RunSha) =>
+        new([new FixFile(path, action, "public class CancelOrderTests { }")], "coverage/fix-x-a1b2c3d", "test: add", "Body", force, baseSha);
 
     private Task<FixResult<RemediationAction>> CreateAsync(FixCreate? request = null, string findingId = "f2") =>
         Fixes.CreateAsync(_runId, findingId, request ?? Request(), CancellationToken.None);
@@ -275,6 +279,65 @@ public class FixPullRequestsTests
     }
 
     [Fact]
+    public async Task CreateAsync_LabelFails_StillStoresThePr()
+    {
+        // Arrange (the PR exists on GitHub once the pulls call returns; the label is extra)
+        _pulls.FailOn = "labels";
+
+        // Act
+        var result = await CreateAsync();
+
+        // Assert
+        new { result.Status, Stored = _store.Actions.Single().ExternalKey }.Should().Be(new { Status = FixStatus.Ok, Stored = "#7" });
+    }
+
+    [Fact]
+    public async Task PreviewAsync_FirstDraft_IsBasedOnTheScannedCommit()
+    {
+        // Act
+        var draft = (await PreviewAsync()).Value!;
+
+        // Assert
+        draft.BaseSha.Should().Be(RunSha);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Regenerate_BuildsFromDefaultBranchHead()
+    {
+        // Arrange
+        _github.ChangedAtHead["tests/Bookstore.IntegrationTests/BooksApiTests.cs"] = "sha:changed";
+
+        // Act
+        var draft = (await PreviewAsync(regenerate: true)).Value!;
+
+        // Assert
+        new { draft.BaseSha, Branch = _github.HeadOf.Single() }.Should().Be(new { BaseSha = "head-sha", Branch = "trunk" });
+    }
+
+    [Fact]
+    public async Task CreateAsync_RegeneratedAtHead_PassesStalenessAndOpensPr()
+    {
+        // Arrange (the file changed after the scan, and the user regenerated against head)
+        _github.ChangedAtHead["tests/Bookstore.IntegrationTests/BooksApiTests.cs"] = "sha:changed";
+
+        // Act
+        var result = await CreateAsync(Request("tests/Bookstore.IntegrationTests/BooksApiTests.cs", FixAction.Modify, baseSha: "head-sha"), "f3");
+
+        // Assert
+        result.Status.Should().Be(FixStatus.Ok);
+    }
+
+    [Fact]
+    public async Task CreateAsync_TargetsTheRepositoryDefaultBranch()
+    {
+        // Act
+        await CreateAsync();
+
+        // Assert
+        new { _pulls.PullBase, Head = _github.HeadOf.Single() }.Should().Be(new { PullBase = (string?)"trunk", Head = "trunk" });
+    }
+
+    [Fact]
     public async Task ActionsAsync_StalePr_RefreshesStatus()
     {
         // Arrange
@@ -302,10 +365,10 @@ public class FixPullRequestsTests
         public Task<string> GetStatusAsync(string key, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    internal sealed class OneRepository(Guid id) : BlindSpotScanner.Application.Repositories.IRepositoryStore
+    internal sealed class OneRepository(Guid id, string defaultBranch = "main") : BlindSpotScanner.Application.Repositories.IRepositoryStore
     {
         public Task<Repository?> FindAsync(Guid repositoryId, CancellationToken ct) => Task.FromResult<Repository?>(repositoryId == id
-            ? new Repository { Id = id, Owner = "example-org", Name = "bookstore-api", DefaultBranch = "main", HtmlUrl = "https://github.com/example-org/bookstore-api" }
+            ? new Repository { Id = id, Owner = "example-org", Name = "bookstore-api", DefaultBranch = defaultBranch, HtmlUrl = "https://github.com/example-org/bookstore-api" }
             : null);
 
         public Task<Repository?> FindByNameAsync(string owner, string name, CancellationToken ct) => throw new NotSupportedException();
@@ -391,8 +454,13 @@ public class FixPullRequestsTests
 
         public Task CreateBranchAsync(string owner, string name, string branch, string commitSha, CancellationToken ct) => Task.FromResult(Record("ref", 0));
 
-        public Task<OpenedPullRequest> CreateDraftPullRequestAsync(string owner, string name, string title, string body, string head, string baseBranch, CancellationToken ct) =>
-            Task.FromResult(Record("pull", new OpenedPullRequest(7, "https://github.com/example-org/bookstore-api/pull/7")));
+        public string? PullBase { get; private set; }
+
+        public Task<OpenedPullRequest> CreateDraftPullRequestAsync(string owner, string name, string title, string body, string head, string baseBranch, CancellationToken ct)
+        {
+            PullBase = baseBranch;
+            return Task.FromResult(Record("pull", new OpenedPullRequest(7, "https://github.com/example-org/bookstore-api/pull/7")));
+        }
 
         public Task AddLabelsAsync(string owner, string name, int number, IReadOnlyList<string> labels, CancellationToken ct) => Task.FromResult(Record("labels", 0));
 

@@ -30,9 +30,10 @@ public sealed class FixContextBuilder(IGitHubClient github)
     private const int MaxSiblings = 3;
     private const int MaxFixtures = 3;
 
-    public async Task<FixContext?> BuildAsync(IntegrationReport report, ReportFinding finding, CancellationToken ct)
+    /// <param name="commitSha">The commit to read: the scanned one, or the default branch head when regenerating (D25).</param>
+    public async Task<FixContext?> BuildAsync(IntegrationReport report, ReportFinding finding, string commitSha, CancellationToken ct)
     {
-        var (owner, name, sha) = (report.Meta.Repo.Owner, report.Meta.Repo.Name, report.Meta.CommitSha);
+        var (owner, name, sha) = (report.Meta.Repo.Owner, report.Meta.Repo.Name, commitSha);
         var tree = await github.GetTreeAsync(owner, name, sha, recursive: true, ct);
         var blobs = tree.Entries.Where(e => e.Type == GitEntryType.Blob).ToDictionary(e => e.Path, e => e.Sha, StringComparer.Ordinal);
 

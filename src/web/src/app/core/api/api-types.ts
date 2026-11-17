@@ -174,6 +174,8 @@ export interface FixDraft {
   body: string;
   costUsd: number;
   existing: RemediationAction | null;
+  /** The commit the fix was generated from: the scanned one, or the default branch head after Regenerate (D25). */
+  baseSha: string;
 }
 
 /** POST …/pull-request body; `force` is "Open anyway". */
@@ -183,4 +185,5 @@ export interface FixCreate {
   title: string;
   body: string;
   force: boolean;
+  baseSha: string;
 }

@@ -44,9 +44,17 @@ describe('RemediationApi', () => {
     expect(http.expectOne('/api/runs/run1/findings/f2/fix-preview').request.method).toBe('POST');
   });
 
+  it('fixPreview with regenerate asks for the default branch head', () => {
+    // Act
+    api.fixPreview('run1', 'f2', true).subscribe();
+
+    // Assert
+    expect(http.expectOne('/api/runs/run1/findings/f2/fix-preview?regenerate=true').request.method).toBe('POST');
+  });
+
   it('createPullRequest posts the body to /api/runs/{id}/findings/{fid}/pull-request', () => {
     // Arrange
-    const body: FixCreate = { files: [{ path: 'tests/A.cs', action: 'create', content: 'class A {}' }], branch: 'coverage/fix-x', title: 't', body: 'b', force: false };
+    const body: FixCreate = { files: [{ path: 'tests/A.cs', action: 'create', content: 'class A {}' }], branch: 'coverage/fix-x', title: 't', body: 'b', force: false, baseSha: 'abc' };
 
     // Act
     api.createPullRequest('run1', 'f2', body).subscribe();

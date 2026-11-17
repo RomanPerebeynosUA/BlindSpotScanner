@@ -37,6 +37,7 @@ public class FixApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnlyA
             ["title"] = draft["title"]!.GetValue<string>(),
             ["body"] = draft["body"]!.GetValue<string>(),
             ["force"] = false,
+            ["baseSha"] = draft["baseSha"]!.GetValue<string>(),
         });
 
     [Fact]

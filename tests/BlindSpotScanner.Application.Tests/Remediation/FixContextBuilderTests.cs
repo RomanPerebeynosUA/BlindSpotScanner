@@ -25,7 +25,7 @@ public class FixContextBuilderTests
     private static ReportFinding Finding(string id) => Report.Findings.Single(f => f.Id == id);
 
     private static Task<FixContext?> BuildAsync(string findingId, IReadOnlyList<string>? files = null) =>
-        new FixContextBuilder(new TreeGitHub(files ?? BookstoreFiles)).BuildAsync(Report, Finding(findingId), CancellationToken.None);
+        new FixContextBuilder(new TreeGitHub(files ?? BookstoreFiles)).BuildAsync(Report, Finding(findingId), Report.Meta.CommitSha, CancellationToken.None);
 
     [Fact]
     public async Task BuildAsync_UncoveredEndpoint_ReadsControllerAndSiblings()
@@ -104,7 +104,14 @@ public class FixContextBuilderTests
 
         public Task<GitHubRepository> GetRepositoryAsync(string owner, string name, CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<string> GetBranchHeadShaAsync(string owner, string name, string branch, CancellationToken ct) => Task.FromResult("head-sha");
+        /// <summary>The branches whose head was asked for, in order.</summary>
+        public List<string> HeadOf { get; } = [];
+
+        public Task<string> GetBranchHeadShaAsync(string owner, string name, string branch, CancellationToken ct)
+        {
+            HeadOf.Add(branch);
+            return Task.FromResult("head-sha");
+        }
 
         public Task<GitTree> GetTreeAsync(string owner, string name, string treeSha, bool recursive, CancellationToken ct)
         {

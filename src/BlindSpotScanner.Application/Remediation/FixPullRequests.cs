@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Llm;
+using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Application.Reports;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Domain.Entities;
@@ -14,12 +15,14 @@ namespace BlindSpotScanner.Application.Remediation;
 /// <param name="Enabled">Pull requests are on and a GitHub token is configured (read-only otherwise, D25).</param>
 public sealed record FixDefaults(bool Enabled, string PublicUrl);
 
-/// <param name="Original">The file's content at the scanned commit, for a modify (the diff's left side).</param>
+/// <param name="Original">The file's content at the draft's base commit, for a modify (the diff's left side).</param>
 public sealed record FixDraftFile(string Path, FixAction Action, string Content, string? Original);
 
 /// <param name="Force">"Open anyway" despite a stored PR for this finding.</param>
-public sealed record FixCreate(IReadOnlyList<FixFile> Files, string Branch, string Title, string Body, bool Force);
+/// <param name="BaseSha">The commit the draft was generated from (<see cref="FixDraft.BaseSha"/>).</param>
+public sealed record FixCreate(IReadOnlyList<FixFile> Files, string Branch, string Title, string Body, bool Force, string BaseSha);
 
+/// <param name="BaseSha">The commit the fix was generated from: the scanned commit, or the default branch head after "Regenerate" (D25).</param>
 public sealed record FixDraft(
     IReadOnlyList<FixDraftFile> Files,
     string Rationale,
@@ -29,7 +32,8 @@ public sealed record FixDraft(
     string Title,
     string Body,
     decimal CostUsd,
-    RemediationAction? Existing);
+    RemediationAction? Existing,
+    string BaseSha);
 
 public enum FixStatus
 {
@@ -49,13 +53,14 @@ public enum FixStatus
 public sealed record FixResult<T>(FixStatus Status, T? Value = default, IReadOnlyList<string>? Reasons = null, RemediationAction? Existing = null);
 
 /// <summary>
-/// Doc 09 fix pull requests: context at the run's commit, <c>prompts/generate-fix.md</c> with the
+/// Doc 09 fix pull requests: context at the run's commit (or the default branch head on "Regenerate"), <c>prompts/generate-fix.md</c> with the
 /// static guard as its validation (a violation re-asks the LLM), an editable draft, and a draft PR
 /// opened only on the user's explicit request (principle 8).
 /// </summary>
 public sealed partial class FixPullRequests(
     IScanRequestStore runs,
     IRemediationStore store,
+    IRepositoryStore repositories,
     FixContextBuilder contexts,
     IFixGuard guard,
     ILlmClient llm,
@@ -73,9 +78,10 @@ public sealed partial class FixPullRequests(
 
     private static readonly FindingKind[] Fixable = [FindingKind.UncoveredEndpoint, FindingKind.WeakTest, FindingKind.FalsePositive, FindingKind.SkippedTest];
 
-    public async Task<FixResult<FixDraft>> PreviewAsync(Guid runId, string findingId, CancellationToken ct)
+    /// <param name="regenerate">Build from the default branch head instead of the scanned commit (after "files changed", D25).</param>
+    public async Task<FixResult<FixDraft>> PreviewAsync(Guid runId, string findingId, bool regenerate, CancellationToken ct)
     {
-        var target = await FindAsync(runId, findingId, ct);
+        var target = await FindAsync(runId, findingId, regenerate ? BaseAt.DefaultBranchHead : BaseAt.ScannedCommit, null, ct);
         if (target.Status != FixStatus.Ok)
         {
             return new FixResult<FixDraft>(target.Status);
@@ -120,18 +126,20 @@ public sealed partial class FixPullRequests(
             answer.GetProperty("prTitle").GetString()!,
             body,
             result.Usage.CostUsd,
-            await store.FindActionAsync(run.RepositoryId, finding.StableKey, ActionType.PullRequest, ct));
+            await store.FindActionAsync(run.RepositoryId, finding.StableKey, ActionType.PullRequest, ct),
+            target.BaseSha!);
         return new FixResult<FixDraft>(FixStatus.Ok, draft);
     }
 
     /// <summary>
-    /// Opens the (edited) fix as a draft PR. The guard runs again on what the client sent; a target
-    /// file changed since the scan refuses (the user regenerates, D25); the finding row is written
-    /// before any GitHub write.
+    /// Opens the (edited) fix as a draft PR against the default branch head (doc 09). The guard runs
+    /// again on what the client sent; a target file that changed since the draft's base commit refuses
+    /// (the user regenerates, D25); the finding row is written before any GitHub write, and the action
+    /// as soon as the PR exists.
     /// </summary>
     public async Task<FixResult<RemediationAction>> CreateAsync(Guid runId, string findingId, FixCreate request, CancellationToken ct)
     {
-        var target = await FindAsync(runId, findingId, ct);
+        var target = await FindAsync(runId, findingId, BaseAt.Given, request.BaseSha, ct);
         if (target.Status != FixStatus.Ok)
         {
             return new FixResult<RemediationAction>(target.Status);
@@ -149,9 +157,7 @@ public sealed partial class FixPullRequests(
             return new FixResult<RemediationAction>(FixStatus.Exists, Existing: stored);
         }
 
-        // The fix targets the branch the scan measured, at its current head.
-        var (owner, name, branch) = (report!.Meta.Repo.Owner, report.Meta.Repo.Name, report.Meta.Branch);
-        var head = await github.GetBranchHeadShaAsync(owner, name, branch, ct);
+        var (owner, name, branch, head) = (report!.Meta.Repo.Owner, report.Meta.Repo.Name, target.DefaultBranch!, target.Head!);
         var headBlobs = (await github.GetTreeAsync(owner, name, head, recursive: true, ct)).Entries
             .Where(e => e.Type == GitEntryType.Blob).ToDictionary(e => e.Path, e => e.Sha, StringComparer.Ordinal);
         var changed = request.Files
@@ -175,7 +181,6 @@ public sealed partial class FixPullRequests(
         var commit = await pulls.CreateCommitAsync(owner, name, request.Title, tree, head, ct);
         await pulls.CreateBranchAsync(owner, name, request.Branch, commit, ct);
         var pr = await pulls.CreateDraftPullRequestAsync(owner, name, request.Title, request.Body, request.Branch, branch, ct);
-        await pulls.AddLabelsAsync(owner, name, pr.Number, [JiraTickets.CoverageLabel], ct);
 
         var now = time.GetUtcNow();
         var action = new RemediationAction
@@ -193,42 +198,78 @@ public sealed partial class FixPullRequests(
             CreatedBy = "anonymous", // until M11 auth (D24)
         };
         await store.AddActionAsync(action, ct);
+
+        // The PR exists and is stored; a missing label must not turn that into an error the user retries.
+        try
+        {
+            await pulls.AddLabelsAsync(owner, name, pr.Number, [JiraTickets.CoverageLabel], ct);
+        }
+        catch (Exception e) when (GitHubFailures.IsUnavailable(e) || e is GitHubNotFoundException)
+        {
+            // Best effort: doc 09 asks for the label, not for failing without it.
+        }
+
         return new FixResult<RemediationAction>(FixStatus.Ok, action);
     }
 
-    /// <summary>Everything preview and create both need, checked in the same order (D25).</summary>
-    private async Task<(FixStatus Status, ScanRun? Run, IntegrationReport? Report, ReportFinding? Finding, FixContext? Context)> FindAsync(
-        Guid runId, string findingId, CancellationToken ct)
+    private enum BaseAt
+    {
+        ScannedCommit,
+        DefaultBranchHead,
+        Given,
+    }
+
+    private sealed record Target(
+        FixStatus Status, ScanRun? Run = null, IntegrationReport? Report = null, ReportFinding? Finding = null, FixContext? Context = null,
+        string? BaseSha = null, string? DefaultBranch = null, string? Head = null)
+    {
+        public void Deconstruct(out FixStatus status, out ScanRun? run, out IntegrationReport? report, out ReportFinding? finding, out FixContext? context) =>
+            (status, run, report, finding, context) = (Status, Run, Report, Finding, Context);
+    }
+
+    /// <summary>Everything preview and create both need, checked in the same order (D25), with the context at the chosen base commit.</summary>
+    private async Task<Target> FindAsync(Guid runId, string findingId, BaseAt baseAt, string? givenSha, CancellationToken ct)
     {
         if (!defaults.Enabled)
         {
-            return (FixStatus.Disabled, null, null, null, null);
+            return new Target(FixStatus.Disabled);
         }
 
         if (await runs.FindRunAsync(runId, ct) is not { } run)
         {
-            return (FixStatus.NotFound, null, null, null, null);
+            return new Target(FixStatus.NotFound);
         }
 
         if (run is not { Status: RunStatus.Succeeded, ReportJson: { } json })
         {
-            return (FixStatus.NoReport, null, null, null, null);
+            return new Target(FixStatus.NoReport);
         }
 
         var report = ReportJsonSerializer.Deserialize(json);
         if (report.Findings.SingleOrDefault(f => f.Id == findingId) is not { } finding)
         {
-            return (FixStatus.NotFound, null, null, null, null);
+            return new Target(FixStatus.NotFound);
         }
 
         if (!Fixable.Contains(finding.Kind))
         {
-            return (FixStatus.NotFixable, null, null, null, null);
+            return new Target(FixStatus.NotFixable);
         }
 
-        return await contexts.BuildAsync(report, finding, ct) is { } context
-            ? (FixStatus.Ok, run, report, finding, context)
-            : (FixStatus.NoContext, null, null, null, null);
+        // Doc 09: the PR goes against the current default branch head.
+        var defaultBranch = (await repositories.FindAsync(run.RepositoryId, ct))?.DefaultBranch ?? report.Meta.Branch;
+        var head = baseAt == BaseAt.ScannedCommit
+            ? null
+            : await github.GetBranchHeadShaAsync(report.Meta.Repo.Owner, report.Meta.Repo.Name, defaultBranch, ct);
+        var baseSha = baseAt switch
+        {
+            BaseAt.ScannedCommit => report.Meta.CommitSha,
+            BaseAt.DefaultBranchHead => head!,
+            _ => string.IsNullOrWhiteSpace(givenSha) ? report.Meta.CommitSha : givenSha,
+        };
+        return await contexts.BuildAsync(report, finding, baseSha, ct) is { } context
+            ? new Target(FixStatus.Ok, run, report, finding, context, baseSha, defaultBranch, head)
+            : new Target(FixStatus.NoContext);
     }
 
     /// <summary>The prompt's input shape (<c>prompts/generate-fix.md</c>).</summary>

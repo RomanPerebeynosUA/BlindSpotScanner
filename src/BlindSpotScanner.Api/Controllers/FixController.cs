@@ -9,18 +9,18 @@ public sealed record FixFileResponse(string Path, string Action, string Content,
 
 public sealed record FixDraftResponse(
     IReadOnlyList<FixFileResponse> Files, string Rationale, IReadOnlyList<string> Assumptions, IReadOnlyList<string> RiskNotes,
-    string Branch, string Title, string Body, decimal CostUsd, ActionResponse? Existing)
+    string Branch, string Title, string Body, decimal CostUsd, ActionResponse? Existing, string BaseSha)
 {
     public static FixDraftResponse From(FixDraft d) => new(
         [.. d.Files.Select(f => new FixFileResponse(f.Path, Name(f.Action), f.Content, f.Original))],
-        d.Rationale, d.Assumptions, d.RiskNotes, d.Branch, d.Title, d.Body, d.CostUsd, d.Existing is null ? null : ActionResponse.From(d.Existing));
+        d.Rationale, d.Assumptions, d.RiskNotes, d.Branch, d.Title, d.Body, d.CostUsd, d.Existing is null ? null : ActionResponse.From(d.Existing), d.BaseSha);
 
     public static string Name(FixAction action) => action == FixAction.Modify ? "modify" : "create";
 }
 
 public sealed record FixFileRequest(string? Path, string? Action, string? Content);
 
-public sealed record FixCreateRequest(IReadOnlyList<FixFileRequest>? Files, string? Branch, string? Title, string? Body, bool Force);
+public sealed record FixCreateRequest(IReadOnlyList<FixFileRequest>? Files, string? Branch, string? Title, string? Body, bool Force, string? BaseSha);
 
 /// <summary>Doc 09 fix PRs (D25): a generated, guarded, editable draft, then a draft PR only on the user's request (principle 8).</summary>
 [ApiController]
@@ -28,12 +28,13 @@ public sealed record FixCreateRequest(IReadOnlyList<FixFileRequest>? Files, stri
 public sealed class FixController(FixPullRequests fixes) : ControllerBase
 {
     [HttpPost("fix-preview")]
-    public async Task<IActionResult> Preview(Guid runId, string findingId, CancellationToken ct)
+    /// <param name="regenerate">Generate from the default branch head (after "files changed", D25).</param>
+    public async Task<IActionResult> Preview(Guid runId, string findingId, [FromQuery] bool regenerate, CancellationToken ct)
     {
         FixResult<FixDraft> result;
         try
         {
-            result = await fixes.PreviewAsync(runId, findingId, ct);
+            result = await fixes.PreviewAsync(runId, findingId, regenerate, ct);
         }
         catch (Exception e) when (IsGitHubFailure(e))
         {
@@ -50,7 +51,7 @@ public sealed class FixController(FixPullRequests fixes) : ControllerBase
         FixResult<Domain.Entities.RemediationAction> result;
         try
         {
-            result = await fixes.CreateAsync(runId, findingId, new FixCreate(files, request.Branch ?? string.Empty, request.Title ?? string.Empty, request.Body ?? string.Empty, request.Force), ct);
+            result = await fixes.CreateAsync(runId, findingId, new FixCreate(files, request.Branch ?? string.Empty, request.Title ?? string.Empty, request.Body ?? string.Empty, request.Force, request.BaseSha ?? string.Empty), ct);
         }
         catch (GitHubBranchExistsException e)
         {

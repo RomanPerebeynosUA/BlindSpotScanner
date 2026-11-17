@@ -16,8 +16,10 @@ export class RemediationApi {
     return this.http.post<RemediationAction>(`/api/runs/${runId}/findings/${findingId}/jira`, body);
   }
 
-  fixPreview(runId: string, findingId: string): Observable<FixDraft> {
-    return this.http.post<FixDraft>(`/api/runs/${runId}/findings/${findingId}/fix-preview`, null);
+  /** `regenerate` builds from the default branch head instead of the scanned commit (D25). */
+  fixPreview(runId: string, findingId: string, regenerate = false): Observable<FixDraft> {
+    const options = regenerate ? { params: { regenerate: 'true' } } : {};
+    return this.http.post<FixDraft>(`/api/runs/${runId}/findings/${findingId}/fix-preview`, null, options);
   }
 
   createPullRequest(runId: string, findingId: string, body: FixCreate): Observable<RemediationAction> {

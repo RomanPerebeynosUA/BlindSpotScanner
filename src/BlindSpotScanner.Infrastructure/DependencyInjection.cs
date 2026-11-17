@@ -81,7 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IRemediationStore, EfRemediationStore>();
         services.AddScoped<FixContextBuilder>();
         services.AddScoped(sp => new FixPullRequests(
-            sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<FixContextBuilder>(),
+            sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IRepositoryStore>(), sp.GetRequiredService<FixContextBuilder>(),
             sp.GetRequiredService<IFixGuard>(), sp.GetRequiredService<ILlmClient>(), sp.GetRequiredService<IGitHubClient>(),
             sp.GetRequiredService<IGitHubPullRequests>(), sp.GetRequiredService<TimeProvider>(), FixDefaultsFrom(sp)));
         services.AddScoped<RemediationActions>();
