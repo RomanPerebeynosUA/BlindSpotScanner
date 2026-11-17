@@ -137,10 +137,18 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
     {
         for (var i = 0; i < risks.Count; i++)
         {
-            // Doc 07 check 6 bans "/" in headlines only; whyItMatters may say "24/7" or "and/or".
-            CheckPlainLanguage(risks[i].Headline, $"topRisks/{i}/headline", HeadlineTechnicalReference(), MaxHeadlineWords, MaxHeadlineChars, violations);
-            CheckPlainLanguage(risks[i].WhyItMatters, $"topRisks/{i}/whyItMatters", TechnicalReference(), MaxWhyItMattersWords, MaxWhyItMattersChars, violations);
+            violations.AddRange(RiskTextViolations(risks[i].Headline, risks[i].WhyItMatters, $"topRisks/{i}"));
         }
+    }
+
+    /// <summary>The plain-language rules for one top risk; P6 uses them to re-ask before a report is assembled.</summary>
+    internal static List<string> RiskTextViolations(string headline, string whyItMatters, string path)
+    {
+        var violations = new List<string>();
+        // Doc 07 check 6 bans "/" in headlines only; whyItMatters may say "24/7" or "and/or".
+        CheckPlainLanguage(headline, $"{path}/headline", HeadlineTechnicalReference(), MaxHeadlineWords, MaxHeadlineChars, violations);
+        CheckPlainLanguage(whyItMatters, $"{path}/whyItMatters", TechnicalReference(), MaxWhyItMattersWords, MaxWhyItMattersChars, violations);
+        return violations;
     }
 
     private static void CheckPlainLanguage(string text, string path, Regex technical, int maxWords, int maxChars, List<string> violations)
