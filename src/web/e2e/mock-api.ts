@@ -5,7 +5,20 @@ import type { Page, WebSocketRoute } from '@playwright/test';
 /** The blueprint's synthetic example report; its run id is the mocked run's id. */
 const report = JSON.parse(readFileSync(join(__dirname, '../../../BlindSpotScanner-Blueprint/examples/sample-report.json'), 'utf8'));
 
+const previousReport = JSON.parse(readFileSync(join(__dirname, '../../../BlindSpotScanner-Blueprint/examples/sample-report-previous.json'), 'utf8'));
+
 export const RUN_ID: string = report.meta.runId;
+export const PREVIOUS_RUN_ID: string = previousReport.meta.runId;
+
+/** A run-history row built from an example report's headline. */
+const historyItem = (r: typeof report) => ({
+  runId: r.meta.runId, status: 'Succeeded', branch: r.meta.branch, commitSha: r.meta.commitSha, queuedAt: r.meta.generatedAt, generatedAt: r.meta.generatedAt,
+  score: r.summary.qualityScore, weightAssessablePct: r.summary.weightAssessablePct, endpointsTotal: r.summary.endpoints.total,
+  endpointsCovered: r.summary.endpoints.covered, endpointsWeak: r.summary.endpoints.weak, endpointsNone: r.summary.endpoints.none,
+  endpointsUnverified: r.summary.endpoints.unverified, costUsd: r.meta.costUsd ?? 0, failureReasons: [],
+});
+
+const headline = (r: typeof report) => ({ runId: r.meta.runId, branch: r.meta.branch, commitSha: r.meta.commitSha, generatedAt: r.meta.generatedAt, score: r.summary.qualityScore });
 export const REPO_ID = '0f0f0f0f-0000-4000-8000-000000000001';
 
 const SEPARATOR = '\u001e';
@@ -43,7 +56,7 @@ export interface MockApi {
  * Serves the REST API (`page.route`) and the `/hubs/scans` SignalR hub (`page.routeWebSocket`, JSON
  * protocol: records end with U+001E) in memory, per test.
  */
-export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean } = {}): Promise<MockApi> {
+export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean } = {}): Promise<MockApi> {
   let registered = options.registered ?? false;
   let finished = options.finished ?? false;
   let hub: WebSocketRoute | null = null;
@@ -57,7 +70,10 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
     if (path === '/api/repositories' && method === 'GET') {
-      return json(registered ? [{ id: REPO_ID, fullName: repository.fullName, defaultBranch: 'main', lastRunId: null, lastScore: null, lastCoveredShare: null, lastScanAt: null, activeRunId: null, latestRunStatus: null, trend: [] }] : []);
+      const trend = finished
+        ? [previousReport, report].map((r) => ({ runId: r.meta.runId, generatedAt: r.meta.generatedAt, score: r.summary.qualityScore, coveredShare: r.summary.endpoints.covered / r.summary.endpoints.total }))
+        : [];
+      return json(registered ? [{ id: REPO_ID, fullName: repository.fullName, defaultBranch: 'main', lastRunId: null, lastScore: null, lastCoveredShare: null, lastScanAt: null, activeRunId: null, latestRunStatus: null, trend }] : []);
     }
     if (path === '/api/repositories' && method === 'POST') {
       registered = true;
@@ -67,7 +83,17 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
       return json(repository);
     }
     if (path === `/api/repositories/${REPO_ID}/runs`) {
-      return json([]);
+      return json(finished ? [historyItem(report), historyItem(previousReport)] : []);
+    }
+    if (path === '/api/runs/compare') {
+      const delta = options.notComparable ? { ...report.delta, comparable: false, comparability: ['integrationMappedTo changed'] } : report.delta;
+      return json({ base: headline(previousReport), target: headline(report), swapped: false, adHoc: false, delta });
+    }
+    if (path === `/api/runs/${RUN_ID}/repository` || path === `/api/runs/${PREVIOUS_RUN_ID}/repository`) {
+      return json(repository);
+    }
+    if (path === `/api/runs/${PREVIOUS_RUN_ID}`) {
+      return json(previousReport);
     }
     if (path === `/api/repositories/${REPO_ID}/profile`) {
       return json(profile);
