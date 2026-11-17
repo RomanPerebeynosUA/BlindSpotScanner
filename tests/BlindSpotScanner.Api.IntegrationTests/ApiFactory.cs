@@ -4,6 +4,7 @@ using BlindSpotScanner.Domain.Reports;
 using BlindSpotScanner.Infrastructure.Persistence;
 using BlindSpotScanner.Infrastructure.Scanning;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -78,6 +79,13 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         });
     }
 
+    public async Task<string?> LlmSharingAcknowledgedByAsync(Guid repositoryId)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>();
+        return (await db.Repositories.AsNoTracking().SingleAsync(r => r.Id == repositoryId)).LlmSharingAcknowledgedBy;
+    }
+
     /// <summary>A client signed in with <paramref name="role"/> ("none" = anonymous).</summary>
     public HttpClient CreateClient(string role, string? user = null)
     {
@@ -96,13 +104,19 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// answers cached by an earlier test never serve this one; <paramref name="marker"/> lets a test
     /// steer the fake Claude (see <see cref="FakeClaudeServer.ForgeMarker"/>).
     /// </summary>
-    public async Task<Guid> SeedRepositoryAsync(bool withProfile = true, string marker = "")
+    public async Task<Guid> SeedRepositoryAsync(bool withProfile = true, string marker = "", bool acknowledged = true)
     {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>();
         // Names are unique (D22); the fake GitHub serves the bookstore under any name of its owner.
         var name = $"{FakeGitHubServer.Name}-{Guid.NewGuid():N}";
         var repository = new Repository { Id = Guid.NewGuid(), Owner = FakeGitHubServer.Owner, Name = name, DefaultBranch = "main", HtmlUrl = $"https://github.com/{FakeGitHubServer.Owner}/{name}" };
+        if (acknowledged)
+        {
+            repository.LlmSharingAcknowledgedAt = DateTimeOffset.UtcNow;
+            repository.LlmSharingAcknowledgedBy = "test-seed";
+        }
+
         db.Repositories.Add(repository);
         if (withProfile)
         {

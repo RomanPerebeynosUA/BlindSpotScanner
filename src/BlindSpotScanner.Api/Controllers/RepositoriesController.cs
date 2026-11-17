@@ -8,9 +8,9 @@ namespace BlindSpotScanner.Api.Controllers;
 
 public sealed record CreateRepositoryRequest(string? Url, string? DefaultBranch);
 
-public sealed record RepositoryResponse(Guid Id, string Owner, string Name, string FullName, string DefaultBranch, string HtmlUrl)
+public sealed record RepositoryResponse(Guid Id, string Owner, string Name, string FullName, string DefaultBranch, string HtmlUrl, bool LlmSharingAcknowledged)
 {
-    public static RepositoryResponse From(Repository r) => new(r.Id, r.Owner, r.Name, $"{r.Owner}/{r.Name}", r.DefaultBranch, r.HtmlUrl);
+    public static RepositoryResponse From(Repository r) => new(r.Id, r.Owner, r.Name, $"{r.Owner}/{r.Name}", r.DefaultBranch, r.HtmlUrl, r.LlmSharingAcknowledgedAt is not null);
 }
 
 public sealed record RunHistoryItemResponse(

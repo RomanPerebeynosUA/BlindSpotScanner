@@ -603,6 +603,10 @@ public class FixPullRequestsTests
 
         public Task<bool> RepositoryExistsAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
 
+        public Task<bool> LlmSharingAcknowledgedAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> AcknowledgeLlmSharingAsync(Guid repositoryId, string by, DateTimeOffset at, CancellationToken ct) => throw new NotSupportedException();
+
         public Task<int?> LatestProfileVersionAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<ScanStep>> StepsAsync(Guid runId, CancellationToken ct) => throw new NotSupportedException();

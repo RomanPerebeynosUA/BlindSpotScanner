@@ -259,6 +259,14 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("html_url");
 
+                    b.Property<DateTimeOffset?>("LlmSharingAcknowledgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("llm_sharing_acknowledged_at");
+
+                    b.Property<string>("LlmSharingAcknowledgedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("llm_sharing_acknowledged_by");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")

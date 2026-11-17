@@ -294,3 +294,7 @@ The user's choices for M11: sign-in is server-side OpenID Connect with an HttpOn
   login redirect. `/health` and `/api/auth/*` are anonymous.
 - Contract additions: `GET /api/me` (`{ name, roles }`), `GET /api/auth/login?returnUrl=` (local
   paths only), `POST /api/auth/logout`.
+- LLM data sharing (doc 10): `POST /api/repositories/{id}/llm-sharing` (Member, idempotent, keeps
+  the first acknowledgement and who gave it); `POST …/scans` returns 409 "LLM data sharing not
+  acknowledged" until then. Repositories registered before M11 need it once. `RepositoryResponse`
+  and `RepositorySummary` carry `llmSharingAcknowledged`; `ActionResponse` carries `createdBy`.

@@ -146,11 +146,72 @@ public class RepositoriesApiTests(ApiFactory factory) : IClassFixture<ApiFactory
     }
 
     [Fact]
+    public async Task StartScan_NotAcknowledged_Returns409()
+    {
+        // Arrange (doc 10: the user must accept LLM data sharing before the first scan)
+        using var client = factory.CreateClient();
+        var id = await AddAsync(client, NewUrl());
+
+        // Act
+        using var response = await client.PostAsJsonAsync($"/api/repositories/{id}/scans", new { });
+
+        // Assert
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        new { response.StatusCode, Title = problem.GetProperty("title").GetString() }
+            .Should().Be(new { StatusCode = HttpStatusCode.Conflict, Title = "LLM data sharing not acknowledged" });
+    }
+
+    [Fact]
+    public async Task AcknowledgeLlmSharing_ShowsOnTheRepository()
+    {
+        // Arrange
+        using var client = factory.CreateClient();
+        var id = await AddAsync(client, NewUrl());
+
+        // Act
+        using var response = await client.PostAsync($"/api/repositories/{id}/llm-sharing", null);
+
+        // Assert
+        var repository = await client.GetFromJsonAsync<JsonElement>($"/api/repositories/{id}");
+        new { response.StatusCode, Acknowledged = repository.GetProperty("llmSharingAcknowledged").GetBoolean() }
+            .Should().Be(new { StatusCode = HttpStatusCode.NoContent, Acknowledged = true });
+    }
+
+    [Fact]
+    public async Task AcknowledgeLlmSharing_RecordsUser()
+    {
+        // Arrange
+        using var client = factory.CreateClient("Member", "dev@example.com");
+        var id = await AddAsync(client, NewUrl());
+
+        // Act
+        await client.PostAsync($"/api/repositories/{id}/llm-sharing", null);
+
+        // Assert
+        (await factory.LlmSharingAcknowledgedByAsync(id)).Should().Be("dev@example.com");
+    }
+
+    [Fact]
+    public async Task AcknowledgeLlmSharing_Viewer_Returns403()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync(acknowledged: false);
+        using var client = factory.CreateClient("Viewer");
+
+        // Act
+        using var response = await client.PostAsync($"/api/repositories/{id}/llm-sharing", null);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task AddRepository_ThenScan_SucceedsWithDefaultProfile()
     {
         // Arrange
         using var client = factory.CreateClient();
         var id = await AddAsync(client, NewUrl());
+        (await client.PostAsync($"/api/repositories/{id}/llm-sharing", null)).EnsureSuccessStatusCode();
 
         // Act
         using var start = await client.PostAsJsonAsync($"/api/repositories/{id}/scans", new { });

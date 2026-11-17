@@ -9,6 +9,26 @@ public sealed class EfScanRequestStore(BlindSpotScannerDbContext db) : IScanRequ
 {
     public Task<bool> RepositoryExistsAsync(Guid repositoryId, CancellationToken ct) => db.Repositories.AnyAsync(r => r.Id == repositoryId, ct);
 
+    public Task<bool> LlmSharingAcknowledgedAsync(Guid repositoryId, CancellationToken ct) =>
+        db.Repositories.AnyAsync(r => r.Id == repositoryId && r.LlmSharingAcknowledgedAt != null, ct);
+
+    public async Task<bool> AcknowledgeLlmSharingAsync(Guid repositoryId, string by, DateTimeOffset at, CancellationToken ct)
+    {
+        if (await db.Repositories.SingleOrDefaultAsync(r => r.Id == repositoryId, ct) is not { } repository)
+        {
+            return false;
+        }
+
+        if (repository.LlmSharingAcknowledgedAt is null)
+        {
+            repository.LlmSharingAcknowledgedAt = at;
+            repository.LlmSharingAcknowledgedBy = by;
+            await db.SaveChangesAsync(ct);
+        }
+
+        return true;
+    }
+
     public Task<int?> LatestProfileVersionAsync(Guid repositoryId, CancellationToken ct) =>
         db.RepoProfiles.Where(p => p.RepositoryId == repositoryId).MaxAsync(p => (int?)p.Version, ct);
 
