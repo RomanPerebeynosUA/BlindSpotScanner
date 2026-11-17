@@ -26,7 +26,8 @@ public sealed class AuthController(IOptions<AuthOptions> options) : ControllerBa
     [HttpGet("auth/login")]
     public IActionResult Login([FromQuery] string? returnUrl)
     {
-        var target = IsLocalPath(returnUrl) ? returnUrl! : "/";
+        // Url.IsLocalUrl also rejects control characters that browsers drop ("/\t/evil" → "//evil").
+        var target = returnUrl is not null && Url.IsLocalUrl(returnUrl) && !returnUrl.Any(char.IsControl) ? returnUrl : "/";
         return options.Value.IsOidc
             ? Challenge(new AuthenticationProperties { RedirectUri = target }, OpenIdConnectDefaults.AuthenticationScheme)
             : Redirect(target);
@@ -38,8 +39,4 @@ public sealed class AuthController(IOptions<AuthOptions> options) : ControllerBa
         options.Value.IsOidc
             ? SignOut(new AuthenticationProperties { RedirectUri = "/" }, CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme)
             : Redirect("/");
-
-    /// <summary>"/x" only: not "//host" or "/\host", which browsers treat as another site.</summary>
-    private static bool IsLocalPath(string? url) =>
-        url is { Length: > 0 } && url[0] == '/' && (url.Length == 1 || (url[1] != '/' && url[1] != '\\'));
 }

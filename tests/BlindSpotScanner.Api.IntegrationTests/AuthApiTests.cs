@@ -131,6 +131,19 @@ public class AuthApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnly
     }
 
     [Fact]
+    public async Task Login_TabSmuggledReturnUrl_RedirectsHome()
+    {
+        // Arrange (browsers drop tabs and newlines while parsing, so "/\t/evil" becomes "//evil")
+        using var client = factory.CreateClient("none");
+
+        // Act
+        var response = await client.GetAsync("/api/auth/login?returnUrl=%2F%09%2Fevil.example");
+
+        // Assert
+        response.Headers.Location?.ToString().Should().Be("/");
+    }
+
+    [Fact]
     public async Task Login_ExternalReturnUrl_RedirectsHome()
     {
         // Arrange (Local mode: no identity provider to visit)
