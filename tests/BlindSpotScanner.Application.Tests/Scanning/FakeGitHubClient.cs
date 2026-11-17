@@ -20,6 +20,9 @@ internal sealed class FakeGitHubClient(string defaultBranch, IReadOnlyDictionary
     /// <summary>Paths of submodules (reported as "commit" entries).</summary>
     public List<string> Submodules { get; } = [];
 
+    /// <summary>Paths of symbolic links (reported as blob entries with mode 120000).</summary>
+    public List<string> Symlinks { get; } = [];
+
     /// <summary>How many tree reads were made (to keep the request count bounded on huge repos).</summary>
     public int TreeRequests { get; private set; }
 
@@ -50,7 +53,12 @@ internal sealed class FakeGitHubClient(string defaultBranch, IReadOnlyDictionary
             .Where(s => recursive || !s.Contains('/', StringComparison.Ordinal))
             .Select(s => new GitTreeEntry(s, GitEntryType.Commit, $"commit:{prefix}{s}", null));
         var truncated = recursive ? TruncatedRecursive.Contains(root) : TruncatedFlat.Contains(root);
-        return Task.FromResult(new GitTree(entries.Concat(submodules).ToList(), truncated));
+        var symlinks = Symlinks
+            .Where(s => s.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(s => s[prefix.Length..])
+            .Where(s => recursive || !s.Contains('/', StringComparison.Ordinal))
+            .Select(s => new GitTreeEntry(s, GitEntryType.Symlink, $"symlink:{prefix}{s}", 20));
+        return Task.FromResult(new GitTree(entries.Concat(submodules).Concat(symlinks).ToList(), truncated));
 
         IEnumerable<GitTreeEntry> AllEntries(string relative)
         {

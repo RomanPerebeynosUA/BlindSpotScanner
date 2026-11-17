@@ -88,6 +88,41 @@ public class EnumeratePhaseTests
     }
 
     [Fact]
+    public async Task Enumerate_LowercaseGeneratedThirdPartyDistAndWwwrootLib_AreExcluded()
+    {
+        // Arrange
+        var phase = new EnumeratePhase(Repo(
+        [
+            .. Bookstore,
+            "src/Api/generated/Controllers/ClientController.cs",
+            "src/third_party/Controllers/VendorController.cs",
+            "src/Web/dist/Controllers/BundleController.cs",
+            "src/Web/wwwroot/lib/Controllers/JsController.cs",
+        ]));
+
+        // Act
+        var inventory = await phase.EnumerateAsync(Run, Profile, CancellationToken.None);
+
+        // Assert
+        inventory.ControllerFileCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Enumerate_Symlink_IsNotCounted()
+    {
+        // Arrange
+        var repo = Repo(Bookstore);
+        repo.Symlinks.Add("src/Api/Controllers/AliasController.cs");
+        var phase = new EnumeratePhase(repo);
+
+        // Act
+        var inventory = await phase.EnumerateAsync(Run, Profile, CancellationToken.None);
+
+        // Assert
+        inventory.ControllerFileCount.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Enumerate_TruncatedRecursiveTree_WalksSubtrees()
     {
         // Arrange

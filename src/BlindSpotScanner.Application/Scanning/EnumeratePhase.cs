@@ -13,7 +13,8 @@ public sealed class EnumeratePhase(IGitHubClient github)
     /// <summary>Vendored, generated and build-output paths are never production or test code.</summary>
     private static readonly string[] DefaultExcludes =
     [
-        "**/bin/**", "**/obj/**", "**/node_modules/**", "**/vendor/**", "**/Generated/**", "**/*.Designer.cs", "**/*.g.cs",
+        "**/bin/**", "**/obj/**", "**/node_modules/**", "**/vendor/**", "**/third_party/**", "**/dist/**", "**/wwwroot/lib/**",
+        "**/Generated/**", "**/generated/**", "**/*.Designer.cs", "**/*.g.cs",
     ];
 
     public async Task<RepositoryInventory> EnumerateAsync(RunContext run, RepoProfile profile, CancellationToken ct)
