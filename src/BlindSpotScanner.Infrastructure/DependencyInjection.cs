@@ -69,6 +69,8 @@ public static class DependencyInjection
         services.AddScoped<IScanRequestStore, EfScanRequestStore>();
         services.AddScoped<IRepositoryStore, EfRepositoryStore>();
         services.AddScoped<RepositoryService>();
+        services.AddScoped<IProfileStore, EfProfileStore>();
+        services.AddScoped<ProfileService>();
         services.AddScoped(sp =>
         {
             var llm = sp.GetRequiredService<IOptions<LlmOptions>>().Value;

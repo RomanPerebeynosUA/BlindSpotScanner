@@ -1,0 +1,52 @@
+using BlindSpotScanner.Application.Repositories;
+using BlindSpotScanner.Domain.Entities;
+using Microsoft.AspNetCore.Mvc;
+
+namespace BlindSpotScanner.Api.Controllers;
+
+public sealed record ProfileResponse(
+    int Version, string Markdown, string IntegrationMappedTo, string[] TestGlobs, string[] ControllerGlobs, string[] MinimalApiGlobs,
+    string[] IntegrationGlobs, string[] IntegrationAttributes, string[] IntegrationBaseTypes, string[] NotIntegrationGlobs)
+{
+    public static ProfileResponse From(RepoProfile p) => new(
+        p.Version, p.Markdown, ProfileService.MappingName(p.IntegrationMappedTo), p.TestGlobs, p.ControllerGlobs, p.MinimalApiGlobs,
+        p.IntegrationGlobs, p.IntegrationAttributes, p.IntegrationBaseTypes, p.NotIntegrationGlobs);
+}
+
+/// <param name="BaseVersion">The version the user edited; 409 when another save came first.</param>
+public sealed record SaveProfileRequest(
+    int BaseVersion, string? Markdown, string? IntegrationMappedTo, string[]? TestGlobs, string[]? ControllerGlobs, string[]? MinimalApiGlobs,
+    string[]? IntegrationGlobs, string[]? IntegrationAttributes, string[]? IntegrationBaseTypes, string[]? NotIntegrationGlobs);
+
+[ApiController]
+[Route("api/repositories/{repoId:guid}/profile")]
+public sealed class ProfilesController(ProfileService profiles) : ControllerBase
+{
+    /// <summary>The latest profile, or <paramref name="version"/> when given.</summary>
+    [HttpGet]
+    public async Task<IActionResult> Get(Guid repoId, [FromQuery] int? version, CancellationToken ct) =>
+        await profiles.GetAsync(repoId, version, ct) is { } profile ? Ok(ProfileResponse.From(profile)) : NotFound();
+
+    [HttpGet("versions")]
+    public async Task<IActionResult> Versions(Guid repoId, CancellationToken ct) =>
+        await profiles.VersionsAsync(repoId, ct) is { } versions ? Ok(versions) : NotFound();
+
+    /// <summary>Saves the next version (profiles are never edited in place).</summary>
+    [HttpPut]
+    public async Task<IActionResult> Save(Guid repoId, [FromBody] SaveProfileRequest request, CancellationToken ct)
+    {
+        var input = new ProfileInput(
+            request.Markdown ?? string.Empty, request.IntegrationMappedTo ?? string.Empty, request.TestGlobs ?? [], request.ControllerGlobs ?? [],
+            request.MinimalApiGlobs ?? [], request.IntegrationGlobs ?? [], request.IntegrationAttributes ?? [], request.IntegrationBaseTypes ?? [],
+            request.NotIntegrationGlobs ?? []);
+        var result = await profiles.SaveAsync(repoId, request.BaseVersion, input, ct);
+        return result.Status switch
+        {
+            SaveProfileStatus.Saved => Ok(ProfileResponse.From(result.Profile!)),
+            SaveProfileStatus.RepositoryNotFound => NotFound(),
+            SaveProfileStatus.Conflict => Problem(
+                "The profile was saved by someone else meanwhile. Reload it and apply your changes again.", statusCode: StatusCodes.Status409Conflict, title: "Profile changed"),
+            _ => ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["profile"] = [.. result.Errors!] }) { Title = "Invalid profile" }),
+        };
+    }
+}
