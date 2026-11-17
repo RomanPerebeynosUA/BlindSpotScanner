@@ -1,0 +1,80 @@
+<div class="head">
+  <div>
+    <h1>Compare runs</h1>
+    <div class="muted">{{ repositoryName() }}</div>
+  </div>
+  @if (base() && target()) {
+    <div class="row">
+      <label>
+        Baseline
+        <select name="base" (change)="pick('base', $event)">
+          @for (run of choices(); track run.runId) {
+            <option [value]="run.runId" [selected]="run.runId === base()">{{ run.generatedAt | date: 'd MMM y' }} · {{ run.commitSha.slice(0, 7) }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Target
+        <select name="target" (change)="pick('target', $event)">
+          @for (run of choices(); track run.runId) {
+            <option [value]="run.runId" [selected]="run.runId === target()">{{ run.generatedAt | date: 'd MMM y' }} · {{ run.commitSha.slice(0, 7) }}</option>
+          }
+        </select>
+      </label>
+    </div>
+  }
+</div>
+
+@if (!base() || !target()) {
+  <div class="panel muted">Pick two runs to compare.</div>
+} @else if (failed()) {
+  <div class="panel muted">These runs can't be compared.</div>
+} @else if (comparison(); as c) {
+  @let d = c.delta;
+  @if (!d.comparable) {
+    <div class="banner" role="alert">Not comparable: {{ d.comparability.join('; ') }}. Changes are listed but not counted as progress.</div>
+  } @else if (d.comparability.length === 0) {
+    <div class="banner ok">These runs are like-for-like: same endpoint list, same definition of integration, same profile and prompt version.</div>
+  } @else {
+    <div class="note">Comparable despite: {{ d.comparability.join('; ') }}.</div>
+  }
+  @if (c.adHoc) {
+    <div class="muted">Ad-hoc comparison (not adjacent runs).</div>
+  }
+  @if (c.swapped) {
+    <div class="muted">Swapped to compare older → newer.</div>
+  }
+
+  <div class="panel tablewrap metrics">
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>{{ c.base.generatedAt | date: 'd MMM' }}</th>
+          <th>{{ c.target.generatedAt | date: 'd MMM' }}</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (m of d.metrics; track m.name) {
+          <tr>
+            <td>{{ label(m.name) }}</td>
+            <td>{{ value(m.name, m.prev) }}</td>
+            <td>{{ value(m.name, m.curr) }}</td>
+            <td [class]="tone(m.direction, d.comparable)">{{ change(m.name, m.change, m.direction, d.comparable) }}</td>
+          </tr>
+        }
+        @for (s of d.scorecard; track s.dimension) {
+          <tr>
+            <td>{{ s.dimension }}</td>
+            <td>{{ s.prev ?? 'N/A' }}</td>
+            <td>{{ s.curr ?? 'N/A' }}</td>
+            <td>{{ change(s.dimension, s.change, null, d.comparable) }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <app-delta-changes [delta]="d" />
+}
