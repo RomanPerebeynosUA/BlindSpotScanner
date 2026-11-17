@@ -15,7 +15,40 @@ public class SecretScrubberTests
         "github_pat_" + new string('b', 30),
         "eyJ" + "hbGciOiJIUzI1NiJ9" + ".eyJ" + "zdWIiOiIxIn0" + ".c2lnbmF0dXJl",
         "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEow\nIBAAK\n-----END RSA " + "PRIVATE KEY-----",
+        "ASIA" + "ABCDEFGHIJKLMNOP",
+        "sk-ant-" + "api03-" + new string('c', 40),
+        "sk-" + new string('d', 40),
+        "xoxb-" + "1234567890-" + new string('e', 20),
+        "AIza" + new string('f', 35),
     };
+
+    [Theory]
+    [InlineData("DefaultEndpointsProtocol=https;AccountName=x;AccountKey=abc123==;EndpointSuffix=core", "DefaultEndpointsProtocol=https;AccountName=x;AccountKey=«redacted»;EndpointSuffix=core")]
+    [InlineData("Endpoint=sb://x/;SharedAccessKeyName=root;SharedAccessKey=k3y=;", "Endpoint=sb://x/;SharedAccessKeyName=root;SharedAccessKey=«redacted»;")]
+    [InlineData("?sv=1&SharedAccessSignature=sig\"", "?sv=1&SharedAccessSignature=«redacted»\"")]
+    [InlineData("new PostgreSqlBuilder().WithPassword(\"s3cret\").Build()", "new PostgreSqlBuilder().WithPassword(\"«redacted»\").Build()")]
+    [InlineData("{ \"password\": \"s3cret\", \"user\": \"bob\" }", "{ \"password\": \"«redacted»\", \"user\": \"bob\" }")]
+    public void Scrub_KeyValueSecret_KeepsKeyRedactsValue(string input, string expected)
+    {
+        // Act
+        var scrubbed = SecretScrubber.Scrub(input);
+
+        // Assert
+        scrubbed.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Scrub_PasswordComparison_IsUnchanged()
+    {
+        // Arrange
+        const string code = "if (user.Password==input) { return Ok(); }";
+
+        // Act
+        var scrubbed = SecretScrubber.Scrub(code);
+
+        // Assert
+        scrubbed.Should().Be(code);
+    }
 
     [Theory]
     [MemberData(nameof(Secrets))]

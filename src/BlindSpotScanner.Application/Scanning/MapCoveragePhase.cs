@@ -61,7 +61,10 @@ public sealed partial class MapCoveragePhase(ILlmClient llm, IBlobReader blobs)
             }
             else
             {
-                var result = await llm.CompleteAsync(new LlmRequest(Prompts.MapCoverage, Input(controller, candidates, allIncluded, profile), LlmSchemas.Get(Prompts.MapCoverage)), ct);
+                var sent = candidates.Select(c => c.File).ToList();
+                var result = await llm.CompleteAsync(
+                    new LlmRequest(Prompts.MapCoverage, Input(controller, candidates, allIncluded, profile), LlmSchemas.Get(Prompts.MapCoverage), answer => Check(answer, controller, sent)),
+                    ct);
                 usage = usage.Add(result.Usage);
                 if (result.Output is { } output)
                 {
@@ -155,6 +158,43 @@ public sealed partial class MapCoveragePhase(ILlmClient llm, IBlobReader blobs)
             var falsePositive = status is CoverageStatus.Covered or CoverageStatus.Weak ? answer.GetProperty("falsePositive").GetBoolean() : (bool?)null;
             return Result(endpoint, status, verified: true, evidence.Distinct(StringComparer.Ordinal).ToList()!, falsePositive, notes);
         }).ToList();
+    }
+
+    /// <summary>
+    /// Re-ask rules: every sent id answered exactly once, no invented ids, and covered/weak/skipped
+    /// evidence naming a test of a sent file. <see cref="Apply"/> still coerces whatever slips through.
+    /// </summary>
+    private static List<string> Check(JsonElement answer, ExtractedController controller, List<ClassifiedTestFile> sent)
+    {
+        var errors = new List<string>();
+        var ids = controller.Endpoints.Select((_, i) => Id(i)).ToHashSet(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var endpoint in answer.GetProperty("endpoints").EnumerateArray())
+        {
+            var id = endpoint.GetProperty("id").GetString()!;
+            if (!ids.Contains(id))
+            {
+                errors.Add($"endpoints: unknown id {id}");
+                continue;
+            }
+
+            if (!seen.Add(id))
+            {
+                errors.Add($"endpoints: {id} is answered more than once");
+                continue;
+            }
+
+            if (Status(endpoint.GetProperty("status").GetString()!) is CoverageStatus.Covered or CoverageStatus.Weak or CoverageStatus.Skipped)
+            {
+                errors.AddRange(endpoint.GetProperty("evidence").EnumerateArray()
+                    .Select(e => e.GetString()!)
+                    .Where(e => Resolve(e, sent) is null)
+                    .Select(e => $"endpoints/{id}: evidence '{e}' does not name a test method of a file that was sent"));
+            }
+        }
+
+        errors.AddRange(ids.Where(id => !seen.Contains(id)).Order(StringComparer.Ordinal).Select(id => $"endpoints: no answer for {id}"));
+        return errors;
     }
 
     /// <summary>"path::Test" when the path was sent and the test is one of its methods (by method name or Class.Method); else null.</summary>

@@ -11,7 +11,7 @@ using Npgsql;
 namespace BlindSpotScanner.Infrastructure.Llm;
 
 /// <summary>
-/// Caches accepted LLM answers in <c>llm_cache</c>, keyed by a hash of (prompt, prompt version,
+/// Caches accepted LLM answers in <c>llm_cache</c>, keyed by a hash of (prompt name and texts,
 /// model, schema, input) (doc 02), so a re-scan at the same SHA is cheap. Failed answers are never
 /// cached. A cached answer is re-checked with the request's rules; one that fails them is replaced.
 /// </summary>
@@ -57,7 +57,9 @@ public sealed class CachingLlmClient(BlindSpotScannerDbContext db, ILlmClient in
 
     private string Key(LlmRequest request)
     {
-        var material = string.Join('\n', request.Prompt, prompts.Version(request.Prompt), options.Value.Model, request.OutputSchemaJson, request.InputJson);
+        // The full prompt texts, not just their version: an edit to the system prompt or the embedded
+        // rubric without a version bump must not serve stale answers. The unit separator keeps fields apart.
+        var material = string.Join('\u001f', request.Prompt, prompts.System, prompts.Task(request.Prompt), options.Value.Model, request.OutputSchemaJson, request.InputJson);
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(material)));
     }
 }

@@ -65,6 +65,30 @@ public class CachingLlmClientTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task Complete_ChangedSystemPrompt_IsAMiss()
+    {
+        // Arrange (same task prompt and version; only the system prompt was edited)
+        var inner = new CountingLlmClient(Answer("""{"kind":"integration"}"""));
+        var request = NewRequest();
+        static PromptLibrary Library(string system) => new(new Dictionary<string, string>
+        {
+            ["_system"] = system,
+            [Application.Llm.Prompts.ClassifyTests] = "# Task: classify ambiguous test files — v1.0.0",
+        });
+        await using (var first = db.CreateContext())
+        {
+            await new CachingLlmClient(first, inner, Library("Rules v1"), Options.Create(new LlmOptions())).CompleteAsync(request, CancellationToken.None);
+        }
+
+        // Act
+        await using var second = db.CreateContext();
+        await new CachingLlmClient(second, inner, Library("Rules v1, plus a new rule"), Options.Create(new LlmOptions())).CompleteAsync(request, CancellationToken.None);
+
+        // Assert
+        inner.Calls.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Complete_FailedOutput_IsNotCached()
     {
         // Arrange

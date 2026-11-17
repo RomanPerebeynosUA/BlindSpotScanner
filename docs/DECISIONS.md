@@ -146,5 +146,11 @@ only when the repository has no integration tests at all, otherwise `unverified`
 path, over `Scan:MaxFileBytes`) and P2 reported nothing unverified.
 Evidence that doesn't name a test method of a sent file makes the endpoint `unverified`. P6 takes
 dimension names and weights from code; without an answer all 7 dimensions are unscorable.
-`productionSeams` is sent empty (the seams are in the profile Markdown). The citation verifier,
-budgets, queue and DI wiring are M6.
+`productionSeams` is sent empty (the seams are in the profile Markdown). A refusal is not re-asked
+(it comes after the whole fallback chain declined). Cost sums `usage.iterations` when present (all
+attempts, priced at the configured rates). The cache key hashes the full system and task prompt
+texts, so an edit without a version bump is a miss. P5 re-asks on missing, duplicate or unknown
+endpoint ids and on unresolvable evidence. The scrubber also covers `ASIA` keys, `sk-ant-`/`sk-`,
+Slack `xox?-`, Google `AIza`, Azure `AccountKey=`/`SharedAccessKey=`/`SharedAccessSignature=`,
+`.WithPassword("…")` and JSON `"password": "…"`. The citation verifier, budgets, queue and DI
+wiring are M6.

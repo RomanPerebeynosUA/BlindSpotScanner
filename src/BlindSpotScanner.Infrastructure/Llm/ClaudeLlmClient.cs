@@ -84,6 +84,12 @@ public sealed class ClaudeLlmClient : ILlmClient
                 return new LlmResult(output, [], usage, FromCache: false);
             }
 
+            // A refusal arrives after the whole fallback chain declined; asking again only costs more.
+            if (response.StopReason is { } stop && stop == BetaStopReason.Refusal)
+            {
+                return new LlmResult(null, errors, usage, FromCache: false);
+            }
+
             messages.Add(new BetaAssistantMessageParam { Content = text.Length > 0 ? text : "(no answer)" });
             messages.Add(new BetaUserMessageParam { Content = $"Your previous answer was rejected:\n- {string.Join("\n- ", errors)}\nReturn corrected JSON only." });
         }
@@ -140,10 +146,24 @@ public sealed class ClaudeLlmClient : ILlmClient
         };
     }
 
+    /// <summary>
+    /// With server-side fallback, top-level usage covers only the attempt that answered; usage.iterations
+    /// lists every attempt. All are priced at the configured rates (fallback models may bill differently).
+    /// </summary>
     private LlmUsage Usage(BetaMessage response)
     {
-        var input = (int)response.Usage.InputTokens;
-        var output = (int)response.Usage.OutputTokens;
-        return new LlmUsage(input, output, (input * _options.InputUsdPerMTok + output * _options.OutputUsdPerMTok) / 1_000_000m);
+        var (input, output) = response.Usage.Iterations is { Count: > 0 } iterations
+            ? iterations.Select(Tokens).Aggregate((0L, 0L), (sum, t) => (sum.Item1 + t.Input, sum.Item2 + t.Output))
+            : (response.Usage.InputTokens, response.Usage.OutputTokens);
+        return new LlmUsage((int)input, (int)output, (input * _options.InputUsdPerMTok + output * _options.OutputUsdPerMTok) / 1_000_000m);
     }
+
+    private static (long Input, long Output) Tokens(BetaUsageIteration iteration) => iteration.Value switch
+    {
+        BetaMessageIterationUsage m => (m.InputTokens, m.OutputTokens),
+        BetaFallbackMessageIterationUsage f => (f.InputTokens, f.OutputTokens),
+        BetaCompactionIterationUsage c => (c.InputTokens, c.OutputTokens),
+        BetaAdvisorMessageIterationUsage a => (a.InputTokens, a.OutputTokens),
+        _ => (0, 0),
+    };
 }

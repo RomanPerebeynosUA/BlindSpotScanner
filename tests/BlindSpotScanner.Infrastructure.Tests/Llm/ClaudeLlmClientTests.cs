@@ -159,16 +159,53 @@ public sealed class ClaudeLlmClientTests : IDisposable
     }
 
     [Fact]
-    public async Task Complete_Refusal_CountsAsFailedAttempt()
+    public async Task Complete_Refusal_IsNotReasked()
     {
-        // Arrange
-        RespondInOrder(Reply("", stopReason: "refusal"), Reply("""{"answer":"ok"}"""));
+        // Arrange (a refusal comes after the whole fallback chain declined; asking again won't help)
+        RespondInOrder(Reply("""{"answer":"x"}""", stopReason: "refusal"), Reply("""{"answer":"ok"}"""));
 
         // Act
         var result = await CreateClient().CompleteAsync(Call(), CancellationToken.None);
 
         // Assert
-        new { Answer = result.Output?.GetProperty("answer").GetString(), Requests = RequestBodies().Count }.Should().BeEquivalentTo(new { Answer = "ok", Requests = 2 });
+        new { result.Output, Errors = result.Errors, Requests = RequestBodies().Count }.Should().BeEquivalentTo(new
+        {
+            Output = (JsonElement?)null,
+            Errors = new[] { "the answer stopped early (refusal)" },
+            Requests = 1,
+        });
+    }
+
+    [Fact]
+    public async Task Complete_FallbackIterations_AreAllCounted()
+    {
+        // Arrange (top-level usage covers only the attempt that answered; iterations has every attempt)
+        _server.Given(Request.Create().WithPath("/v1/messages").UsingPost()).RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new
+        {
+            id = "msg_1",
+            type = "message",
+            role = "assistant",
+            model = "claude-sonnet-5",
+            content = new[] { new { type = "text", text = """{"answer":"x"}""" } },
+            stop_reason = "end_turn",
+            stop_sequence = (string?)null,
+            usage = new
+            {
+                input_tokens = 300,
+                output_tokens = 50,
+                iterations = new object[]
+                {
+                    new { type = "message", input_tokens = 1000, output_tokens = 0 },
+                    new { type = "fallback_message", input_tokens = 300, output_tokens = 50 },
+                },
+            },
+        }));
+
+        // Act
+        var result = await CreateClient().CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        result.Usage.Should().Be(new LlmUsage(1300, 50, 0.0031m));
     }
 
     [Fact]

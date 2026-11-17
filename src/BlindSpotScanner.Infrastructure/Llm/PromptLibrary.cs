@@ -21,6 +21,9 @@ public sealed partial class PromptLibrary
         _texts[Application.Llm.Prompts.GradeQuality] += "\n\n" + Read(assembly, "rubric.md");
     }
 
+    /// <summary>A prompt set given as texts, keyed by name ("_system" for the system prompt).</summary>
+    public PromptLibrary(IReadOnlyDictionary<string, string> texts) => _texts = new Dictionary<string, string>(texts, StringComparer.Ordinal);
+
     public string System => _texts[SystemName];
 
     public string Task(string name) =>

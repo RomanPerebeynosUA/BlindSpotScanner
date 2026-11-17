@@ -241,4 +241,32 @@ public class MapCoveragePhaseTests
         new { Books = llm.Requests.Single().InputJson.Contains(BooksTests, StringComparison.Ordinal), Health = llm.Requests.Single().InputJson.Contains(HealthTests, StringComparison.Ordinal) }
             .Should().BeEquivalentTo(new { Books = true, Health = true });
     }
+
+    private static async Task<IReadOnlyList<string>> ValidateWith(string answerJson)
+    {
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(Endpoint("e1", "none"), Endpoint("e2", "none"))));
+        await MapBooks(llm);
+        using var answer = System.Text.Json.JsonDocument.Parse(answerJson);
+        return llm.Requests.Single().Validate!(answer.RootElement);
+    }
+
+    [Fact]
+    public async Task Map_Validator_RejectsMissingDuplicateAndUnknownIds()
+    {
+        // Act
+        var errors = await ValidateWith(Answer(Endpoint("e1", "none"), Endpoint("e1", "none"), Endpoint("e9", "none")));
+
+        // Assert
+        errors.Should().Equal("endpoints: e1 is answered more than once", "endpoints: unknown id e9", "endpoints: no answer for e2");
+    }
+
+    [Fact]
+    public async Task Map_Validator_RejectsUnresolvedEvidence()
+    {
+        // Act
+        var errors = await ValidateWith(Answer(Endpoint("e1", "covered", HealthTests + "::Ping"), Endpoint("e2", "none")));
+
+        // Assert
+        errors.Should().Equal($"endpoints/e1: evidence '{HealthTests}::Ping' does not name a test method of a file that was sent");
+    }
 }
