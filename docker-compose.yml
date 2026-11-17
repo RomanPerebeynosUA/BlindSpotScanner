@@ -26,6 +26,7 @@ services:
       Jira__ApiToken: ${JIRA_API_TOKEN:-}
       Jira__ProjectKey: ${JIRA_PROJECT_KEY:-}
       App__PublicUrl: ${APP_PUBLIC_URL:-http://localhost:8080}
+      Features__PullRequests: ${FEATURES_PULL_REQUESTS:-true}
     ports:
       - "5080:8080"
     depends_on:

@@ -68,6 +68,9 @@ public sealed partial class FixPullRequests(
 
     private const int MaxSlug = 60;
 
+    /// <summary>False in read-only mode (D25).</summary>
+    public bool Enabled => defaults.Enabled;
+
     private static readonly FindingKind[] Fixable = [FindingKind.UncoveredEndpoint, FindingKind.WeakTest, FindingKind.FalsePositive, FindingKind.SkippedTest];
 
     public async Task<FixResult<FixDraft>> PreviewAsync(Guid runId, string findingId, CancellationToken ct)

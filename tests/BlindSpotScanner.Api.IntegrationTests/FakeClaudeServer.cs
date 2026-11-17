@@ -34,6 +34,7 @@ public sealed class FakeClaudeServer : IDisposable
         Answer(4, ["map integration tests"], OrdersMap);
         Answer(5, ["classify ambiguous test files"], Classify);
         Answer(6, ["draft a repo profile"], Draft);
+        Answer(7, ["generate an integration test that fixes a finding"], Fix);
         Answer(0, ["classify ambiguous test files", SlowMarker], Classify, SlowDelay);
     }
 
@@ -62,6 +63,11 @@ public sealed class FakeClaudeServer : IDisposable
 
     private const string Classify = """
         {"files":[{"path":"tests/Bookstore.UnitTests/PriceTests.cs","kind":"unit","confidence":"High","reason":"pure arithmetic, no host or database","evidenceKind":"observed"}]}
+        """;
+
+    /// <summary>One new test inside the bookstore test project (passes the guard).</summary>
+    public const string Fix = """
+        {"files":[{"path":"tests/Bookstore.IntegrationTests/CancelOrderTests.cs","action":"create","content":"namespace Bookstore.IntegrationTests;\n\npublic class CancelOrderTests\n{\n}\n"}],"rationale":"Covers cancelling an order.","assumptions":["Orders are seeded through DbFixture."],"riskNotes":[],"prTitle":"test: add integration test for POST api/orders/{id}/cancel","prBody":"Adds an integration test for cancelling an order."}
         """;
 
     public const string Draft = """

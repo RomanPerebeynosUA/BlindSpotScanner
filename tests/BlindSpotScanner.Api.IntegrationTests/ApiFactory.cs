@@ -31,6 +31,9 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>False leaves the Jira API token unset, so Jira counts as not configured (D24).</summary>
     protected virtual bool JiraConfigured => true;
 
+    /// <summary>False is read-only mode: no fix PRs (D25).</summary>
+    protected virtual bool PullRequests => true;
+
     public Task InitializeAsync() => _db.StartAsync();
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -46,6 +49,8 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseSetting("ConnectionStrings:Postgres", _db.GetConnectionString());
         builder.UseSetting("GitHub:ApiBaseUrl", GitHub.Url);
+        builder.UseSetting("GitHub:Token", "ghp_test-token");
+        builder.UseSetting("Features:PullRequests", PullRequests ? "true" : "false");
         builder.UseSetting("Llm:BaseUrl", Claude.Url);
         builder.UseSetting("Llm:ApiKey", "test-key");
         builder.UseSetting("Scan:PollMilliseconds", "500");
@@ -103,12 +108,17 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// ids are rewritten (run id, previous run id, the stored delta's base) so tests don't collide and
     /// the stored-delta link points at <paramref name="previousRunId"/>.
     /// </summary>
-    public async Task SeedSucceededRunAsync(Guid repositoryId, string fixture, Guid runId, Guid? previousRunId)
+    /// <param name="repoName">Rewrites the report's repository name (the fake GitHub serves any name), so tests get separate GitHub call logs.</param>
+    public async Task SeedSucceededRunAsync(Guid repositoryId, string fixture, Guid runId, Guid? previousRunId, string? repoName = null)
     {
         var report = ReportJsonSerializer.Deserialize(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture)));
         report = report with
         {
-            Meta = report.Meta with { RunId = runId },
+            Meta = report.Meta with
+            {
+                RunId = runId,
+                Repo = repoName is null ? report.Meta.Repo : report.Meta.Repo with { Name = repoName, Url = $"https://github.com/{report.Meta.Repo.Owner}/{repoName}" },
+            },
             Summary = report.Summary with { PreviousRunId = previousRunId },
             Delta = report.Delta is null || previousRunId is null ? report.Delta : report.Delta with { BaseRunId = previousRunId.Value },
         };
@@ -135,4 +145,12 @@ public sealed class NoJiraApiFactory : ApiFactory
     protected override bool RunWorker => false;
 
     protected override bool JiraConfigured => false;
+}
+
+/// <summary>The api without a worker in read-only mode (Features:PullRequests=false).</summary>
+public sealed class ReadOnlyApiFactory : ApiFactory
+{
+    protected override bool RunWorker => false;
+
+    protected override bool PullRequests => false;
 }
