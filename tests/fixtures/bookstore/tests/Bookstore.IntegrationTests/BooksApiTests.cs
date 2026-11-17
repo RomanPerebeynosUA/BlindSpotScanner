@@ -28,4 +28,11 @@ public class BooksApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var created = await response.Content.ReadFromJsonAsync<Book>();
         Assert.Equal("Dune", (await _client.GetFromJsonAsync<Book>($"api/books/{created!.Id}"))!.Title);
     }
+
+    [Fact]
+    public async Task Create_rejects_missing_title()
+    {
+        var response = await _client.PostAsJsonAsync("api/books", new { title = "" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

@@ -20,6 +20,8 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
+    public string ConnectionString => _container.GetConnectionString();
+
     public BlindSpotScannerDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<BlindSpotScannerDbContext>()
             .UseBlindSpotScannerNpgsql(_container.GetConnectionString())
@@ -66,7 +68,18 @@ public sealed class PostgresFixture : IAsyncLifetime
         await context.SaveChangesAsync();
         return run;
     }
+
+    /// <summary>Empties every table; only for collections that own their container (the scan queue sees all runs).</summary>
+    public async Task ResetAsync()
+    {
+        await using var context = CreateContext();
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE repositories, scan_runs, scan_steps, findings, remediation_actions, repo_profiles CASCADE");
+    }
 }
 
 [CollectionDefinition("postgres")]
 public sealed class PostgresCollection : ICollectionFixture<PostgresFixture>;
+
+/// <summary>Its own container: the queue takes any queued run, so these tests must not see runs from other collections.</summary>
+[CollectionDefinition("scan-queue")]
+public sealed class ScanQueueCollection : ICollectionFixture<PostgresFixture>;

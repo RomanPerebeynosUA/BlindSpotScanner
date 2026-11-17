@@ -30,7 +30,7 @@ public class ScanPipelineTests
         NotIntegrationGlobs = ["**/*Fixture.cs"],
     };
 
-    private static Task<ScanOutcome> ScanAsync(ILlmClient llm)
+    private static Task<ScanOutcome> ScanAsync(ILlmClient llm, IntegrationReport? previous = null, IScanObserver? observer = null)
     {
         var repo = FixtureRepository.Bookstore();
         var pipeline = new ScanPipeline(
@@ -38,7 +38,7 @@ public class ScanPipelineTests
             new ReportValidator(new ReportSchemaValidator()),
             new FakeTimeProvider(new DateTimeOffset(2026, 11, 17, 12, 0, 0, TimeSpan.Zero)),
             new ScanPipelineOptions("claude-sonnet-5-5", "1.0.0", 200_000));
-        return pipeline.RunAsync(Guid.NewGuid(), "https://github.com/example-org/bookstore", Profile, CancellationToken.None);
+        return pipeline.RunAsync(Guid.NewGuid(), "https://github.com/example-org/bookstore", Profile, previous, observer ?? NoScanObserver.Instance, CancellationToken.None);
     }
 
     [Fact]
@@ -80,6 +80,55 @@ public class ScanPipelineTests
             Unverified = outcome.Report.Summary.Endpoints.Unverified,
             outcome.Report.Summary.QualityScore,
         }.Should().BeEquivalentTo(new { Violations = Array.Empty<string>(), Unverified = 6, QualityScore = (decimal?)null });
+    }
+
+    [Fact]
+    public async Task Pipeline_Observer_SeesEveryPhaseInOrder()
+    {
+        // Arrange
+        var observer = new RecordingObserver();
+
+        // Act
+        await ScanAsync(new CannedLlmClient(), observer: observer);
+
+        // Assert
+        observer.Events.Should().Equal(ScanPhases.All.SelectMany(p => new[] { $"start {p}", $"end {p}" }));
+    }
+
+    [Fact]
+    public async Task Pipeline_PreviousReport_ProducesDelta()
+    {
+        // Arrange
+        var first = await ScanAsync(new CannedLlmClient());
+
+        // Act
+        var second = await ScanAsync(new CannedLlmClient(), previous: first.Report);
+
+        // Assert
+        new { Comparable = second.Report.Delta?.Comparable, second.Violations }.Should().BeEquivalentTo(new { Comparable = (bool?)true, Violations = Array.Empty<string>() });
+    }
+
+    private sealed class RecordingObserver : IScanObserver
+    {
+        public List<string> Events { get; } = [];
+
+        public Task PhaseStartedAsync(string phase, CancellationToken ct)
+        {
+            Events.Add($"start {phase}");
+            return Task.CompletedTask;
+        }
+
+        public Task PhaseCompletedAsync(PhaseReport report, CancellationToken ct)
+        {
+            Events.Add($"end {report.Phase}");
+            return Task.CompletedTask;
+        }
+
+        public Task PhaseFailedAsync(string phase, string reason, CancellationToken ct)
+        {
+            Events.Add($"failed {phase}");
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FailingLlmClient : ILlmClient

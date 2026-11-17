@@ -262,4 +262,59 @@ public sealed class GitHubClientTests : IDisposable
         // Assert
         new { http.BaseAddress, HeaderCount = http.DefaultRequestHeaders.Count() }.Should().BeEquivalentTo(new { BaseAddress = (Uri?)null, HeaderCount = 0 });
     }
+
+    private const string CommitSha = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+
+    [Fact]
+    public async Task GetFileText_Exists_ReturnsRawText()
+    {
+        // Arrange
+        _server.Given(Request.Create().WithPath("/repos/example-org/bookstore-api/contents/tests/BooksApiTests.cs").WithParam("ref", CommitSha).UsingGet()
+                .WithHeader("Accept", "application/vnd.github.raw+json"))
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody("public class BooksApiTests { }"));
+
+        // Act
+        var text = await CreateClient().GetFileTextAsync("example-org", "bookstore-api", "tests/BooksApiTests.cs", CommitSha, CancellationToken.None);
+
+        // Assert
+        text.Should().Be("public class BooksApiTests { }");
+    }
+
+    [Fact]
+    public async Task GetFileText_NotFound_ReturnsNull()
+    {
+        // Arrange
+        Respond("/repos/example-org/bookstore-api/contents/tests/Gone.cs", 404, new { message = "Not Found" });
+
+        // Act
+        var text = await CreateClient().GetFileTextAsync("example-org", "bookstore-api", "tests/Gone.cs", CommitSha, CancellationToken.None);
+
+        // Assert
+        text.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetFileText_PathWithSpaces_EscapesSegments()
+    {
+        // Arrange (WireMock decodes %20 before logging, so the outgoing URI is recorded directly)
+        var recorder = new RecordingHandler();
+        var client = new GitHubClient(new HttpClient(recorder), Options.Create(new GitHubOptions { ApiBaseUrl = "https://api.github.test", Token = Token }));
+
+        // Act
+        await client.GetFileTextAsync("example-org", "bookstore-api", "tests/My Tests/A.cs", CommitSha, CancellationToken.None);
+
+        // Assert
+        recorder.RequestUri!.AbsoluteUri.Should().Be($"https://api.github.test/repos/example-org/bookstore-api/contents/tests/My%20Tests/A.cs?ref={CommitSha}");
+    }
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public Uri? RequestUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("x") });
+        }
+    }
 }

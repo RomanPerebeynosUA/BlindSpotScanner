@@ -1,0 +1,36 @@
+using BlindSpotScanner.Domain.Entities;
+using BlindSpotScanner.Domain.Enums;
+using BlindSpotScanner.Domain.Reports;
+
+namespace BlindSpotScanner.Application.Scanning;
+
+/// <param name="Profile">The profile version the run was queued with, or null when it no longer exists.</param>
+/// <param name="Previous">The latest succeeded report of the same repository and branch (for the delta).</param>
+public sealed record ScanJob(ScanRun Run, Repository Repository, RepoProfile? Profile, IntegrationReport? Previous);
+
+/// <summary>What the orchestrator reads and writes about one run.</summary>
+public interface IScanStore
+{
+    Task<ScanJob?> LoadAsync(Guid runId, CancellationToken ct);
+
+    Task SaveStepAsync(ScanStep step, CancellationToken ct);
+
+    /// <summary>Removes steps an earlier attempt recorded, so a retry's steps describe one attempt.</summary>
+    Task ClearStepsAsync(Guid runId, CancellationToken ct);
+
+    Task<bool> IsCancelRequestedAsync(Guid runId, CancellationToken ct);
+
+    /// <summary>
+    /// Persists the run's state (pin, report, outcome). False when someone else changed the run's
+    /// status or took its lease since it was loaded: their state stands and this save is dropped.
+    /// </summary>
+    Task<bool> SaveAsync(ScanRun run, CancellationToken ct);
+}
+
+/// <summary>Progress for the UI (doc 03: ScanProgress / ScanCompleted on /hubs/scans).</summary>
+public interface IScanEvents
+{
+    Task ProgressAsync(Guid runId, string phase, int pct, string message, CancellationToken ct);
+
+    Task CompletedAsync(Guid runId, RunStatus status, CancellationToken ct);
+}

@@ -25,6 +25,12 @@ internal sealed class ScanRunConfiguration : IEntityTypeConfiguration<ScanRun>
         builder.HasKey(r => r.Id);
         builder.HasOne<Repository>().WithMany().HasForeignKey(r => r.RepositoryId);
         builder.Property(r => r.ReportJson).HasColumnType("jsonb");
+        // The scan queue (D21) takes the oldest queued run, or an expired running one.
+        builder.HasIndex(r => new { r.Status, r.QueuedAt });
+        // A save only applies if nobody else changed the status or took the lease since it was read:
+        // a stale worker or a cancel racing a dequeue fails with a concurrency error instead of overwriting.
+        builder.Property(r => r.Status).IsConcurrencyToken();
+        builder.Property(r => r.LeaseOwner).IsConcurrencyToken();
     }
 }
 

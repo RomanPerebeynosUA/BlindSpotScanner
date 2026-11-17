@@ -135,4 +135,23 @@ public class CSharpTestSyntaxReaderTests
         // Assert
         facts.TestMethods.Should().Equal("BooksApiTests.WhenEmpty.Lists_nothing");
     }
+
+    [Fact]
+    public void Read_Methods_IncludeNonTestMethods()
+    {
+        // Arrange
+        const string source = """
+            public class ApiFactory : WebApplicationFactory<Program>
+            {
+                public Task InitializeAsync() => Task.CompletedTask;
+                [Fact] public void Smoke() { }
+            }
+            """;
+
+        // Act
+        var facts = new CSharpTestSyntaxReader().Read(source);
+
+        // Assert
+        facts.Methods.Should().Equal("ApiFactory.InitializeAsync", "ApiFactory.Smoke");
+    }
 }

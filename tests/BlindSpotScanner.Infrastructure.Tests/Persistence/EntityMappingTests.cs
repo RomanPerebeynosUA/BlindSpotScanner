@@ -73,6 +73,27 @@ public class EntityMappingTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task ScanRun_JobColumns_RoundTrip()
+    {
+        // Arrange
+        var repository = await db.AddRepositoryAsync();
+        var run = ScanRun.Enqueue(Guid.NewGuid(), repository.Id, "release/1.2", 2.5m, 3, "claude-sonnet-5-5", "1.0.0", new DateTimeOffset(2026, 11, 17, 9, 0, 0, TimeSpan.Zero));
+        run.Fail(["citation: a.cs::B: no test named B"]);
+        await using (var write = db.CreateContext())
+        {
+            write.ScanRuns.Add(run);
+            await write.SaveChangesAsync();
+        }
+
+        // Act
+        await using var read = db.CreateContext();
+        var loaded = await read.ScanRuns.AsNoTracking().SingleAsync(r => r.Id == run.Id);
+
+        // Assert
+        loaded.Should().BeEquivalentTo(run);
+    }
+
+    [Fact]
     public async Task Save_RunWithStepAndFinding_RoundTripsChildren()
     {
         // Arrange

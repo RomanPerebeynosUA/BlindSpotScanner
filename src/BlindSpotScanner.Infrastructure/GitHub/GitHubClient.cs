@@ -77,10 +77,26 @@ public sealed class GitHubClient(HttpClient http, IOptions<GitHubOptions> option
     private static string Repo(string owner, string name) => $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}";
 
     /// <param name="notFound">The 404 message for this call; defaults to the repository message.</param>
-    private async Task<T> GetAsync<T>(string owner, string name, string path, CancellationToken ct, string? notFound = null)
+    /// <summary>The file's text at a commit (contents API, raw media type), or null when it doesn't exist there.</summary>
+    public async Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_baseAddress, path));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        var escapedPath = string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+        using var request = NewRequest($"{Repo(owner, name)}/contents/{escapedPath}?ref={Uri.EscapeDataString(commitSha)}", "application/vnd.github.raw+json");
+        using var response = await http.SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        ThrowForAccessErrors(response, owner, name);
+        response.EnsureSuccessStatusCode();
+        return Decode(await response.Content.ReadAsByteArrayAsync(ct));
+    }
+
+    private HttpRequestMessage NewRequest(string path, string accept)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_baseAddress, path));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("BlindSpotScanner", null));
         if (!string.IsNullOrEmpty(options.Value.Token))
@@ -88,6 +104,24 @@ public sealed class GitHubClient(HttpClient http, IOptions<GitHubOptions> option
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Value.Token);
         }
 
+        return request;
+    }
+
+    private static void ThrowForAccessErrors(HttpResponseMessage response, string owner, string name)
+    {
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.Unauthorized:
+                throw new GitHubAuthenticationException("GitHub rejected the credentials; check the configured token.");
+            case HttpStatusCode.Forbidden:
+                // Rate-limit 403s were already handled by GitHubRateLimitHandler; this is missing permission or SSO.
+                throw new GitHubAuthenticationException($"GitHub denied access to {owner}/{name}; the token lacks permission or SSO authorization.");
+        }
+    }
+
+    private async Task<T> GetAsync<T>(string owner, string name, string path, CancellationToken ct, string? notFound = null)
+    {
+        using var request = NewRequest(path, "application/vnd.github+json");
         using var response = await http.SendAsync(request, ct);
         switch (response.StatusCode)
         {

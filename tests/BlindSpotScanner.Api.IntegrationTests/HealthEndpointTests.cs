@@ -1,11 +1,9 @@
 using System.Net;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace BlindSpotScanner.Api.IntegrationTests;
 
-public class HealthEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public class HealthEndpointTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnlyApiFactory>
 {
     [Fact]
     public async Task GetHealth_WhenApiIsRunning_Returns200()

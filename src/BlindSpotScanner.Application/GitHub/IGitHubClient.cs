@@ -14,6 +14,9 @@ public interface IGitHubClient
     Task<GitTree> GetTreeAsync(string owner, string name, string treeSha, bool recursive, CancellationToken ct);
 
     /// <summary>The blob's content decoded as UTF-8.</summary>
+    /// <summary>A file's text at a commit, or null when the file doesn't exist there (the citation check, D21).</summary>
+    Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct);
+
     Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct);
 }
 

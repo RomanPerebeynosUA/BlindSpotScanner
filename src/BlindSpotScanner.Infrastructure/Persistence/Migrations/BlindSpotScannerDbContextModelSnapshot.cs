@@ -277,10 +277,18 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
                     b.Property<string>("Branch")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("branch");
+
+                    b.Property<bool>("CancelRequested")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cancel_requested");
 
                     b.Property<string>("CommitSha")
                         .IsRequired()
@@ -311,9 +319,27 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("endpoints_weak");
 
+                    b.PrimitiveCollection<string[]>("FailureReasons")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("failure_reasons");
+
                     b.Property<DateTimeOffset?>("GeneratedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("generated_at");
+
+                    b.Property<Guid?>("LeaseOwner")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_owner");
+
+                    b.Property<DateTimeOffset?>("LeasedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("leased_until");
+
+                    b.Property<decimal>("MaxCostUsd")
+                        .HasColumnType("numeric")
+                        .HasColumnName("max_cost_usd");
 
                     b.Property<string>("ModelId")
                         .IsRequired()
@@ -333,6 +359,10 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("prompt_set_version");
 
+                    b.Property<DateTimeOffset?>("QueuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("queued_at");
+
                     b.Property<string>("ReportJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("report_json");
@@ -341,11 +371,16 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("repository_id");
 
+                    b.Property<string>("RequestedBranch")
+                        .HasColumnType("text")
+                        .HasColumnName("requested_branch");
+
                     b.Property<decimal?>("Score")
                         .HasColumnType("numeric")
                         .HasColumnName("score");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("status");
@@ -359,6 +394,9 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RepositoryId")
                         .HasDatabaseName("ix_scan_runs_repository_id");
+
+                    b.HasIndex("Status", "QueuedAt")
+                        .HasDatabaseName("ix_scan_runs_status_queued_at");
 
                     b.ToTable("scan_runs", (string)null);
                 });

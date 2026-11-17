@@ -38,7 +38,8 @@ public sealed class CSharpTestSyntaxReader : ITestSyntaxReader
             .Select(m => $"{QualifiedName(m.Class)}.{m.Method.Identifier.ValueText}")
             .ToList();
 
-        return new TestFileFacts(attributes, baseTypes, testMethods);
+        var allMethods = methods.Select(m => $"{QualifiedName(m.Class)}.{m.Method.Identifier.ValueText}").ToList();
+        return new TestFileFacts(attributes, baseTypes, testMethods, allMethods);
     }
 
     /// <summary>Nested classes keep their outer classes, so two nested classes with one name stay distinct.</summary>
