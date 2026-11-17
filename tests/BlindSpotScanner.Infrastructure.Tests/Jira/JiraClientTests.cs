@@ -53,7 +53,7 @@ public sealed class JiraClientTests : IDisposable
         },
     };
 
-    private JsonNode SentBody() => JsonNode.Parse(_server.LogEntries.Single().RequestMessage!.Body!)!;
+    private JsonNode SentBody() => JsonNode.Parse(_server.LogEntries.First(e => e.RequestMessage!.Method == "POST").RequestMessage!.Body!)!;
 
     [Fact]
     public async Task CreateIssueAsync_Draft_SendsExactPayload()
@@ -90,7 +90,7 @@ public sealed class JiraClientTests : IDisposable
         await CreateClient().CreateIssueAsync(Draft(), CancellationToken.None);
 
         // Assert
-        _server.LogEntries.Single().RequestMessage!.Headers!["Authorization"].Single()
+        _server.LogEntries.First().RequestMessage!.Headers!["Authorization"].Single()
             .Should().Be("Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{Email}:{Token}")));
     }
 
@@ -105,6 +105,36 @@ public sealed class JiraClientTests : IDisposable
 
         // Assert
         issue.Should().Be(new JiraIssueRef("BSS-1", $"{_server.Url}/browse/BSS-1", "To Do"));
+    }
+
+    [Fact]
+    public async Task CreateIssueAsync_Created_ReadsTheWorkflowStatus()
+    {
+        // Arrange
+        RespondCreated();
+        _server.Given(Request.Create().WithPath("/rest/api/3/issue/BSS-1").WithParam("fields", "status").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new { fields = new { status = new { name = "Backlog" } } }));
+
+        // Act
+        var issue = await CreateClient().CreateIssueAsync(Draft(), CancellationToken.None);
+
+        // Assert
+        issue.Status.Should().Be("Backlog");
+    }
+
+    [Fact]
+    public async Task CreateIssueAsync_KeyWithMarkdown_FooterStaysOnePlainTextNode()
+    {
+        // Arrange (LLM-authored subjects can contain backticks or link syntax)
+        RespondCreated();
+        const string key = "uncovered-seam:the `PaymentClient` [fake](x)";
+
+        // Act
+        await CreateClient().CreateIssueAsync(Draft() with { StableKey = key }, CancellationToken.None);
+
+        // Assert
+        var last = SentBody()["fields"]!["description"]!["content"]!.AsArray()[^1]!;
+        JsonNode.DeepEquals(last, JsonNode.Parse($$"""{"type":"paragraph","content":[{"type":"text","text":"BlindSpotScanner key: {{key}}"}]}""")).Should().BeTrue(last.ToJsonString());
     }
 
     [Fact]
@@ -132,7 +162,11 @@ public sealed class JiraClientTests : IDisposable
         await CreateClient().FindByStableKeyAsync(StableKey, CancellationToken.None);
 
         // Assert
-        SentBody()["jql"]!.GetValue<string>().Should().Be("labels = integration-coverage AND text ~ \"uncovered endpoint POST api orders cancel\"");
+        new { Jql = SentBody()["jql"]!.GetValue<string>(), Max = SentBody()["maxResults"]!.GetValue<int>() }.Should().Be(new
+        {
+            Jql = "labels = integration-coverage AND text ~ \"\\\"uncovered endpoint POST api orders cancel\\\"\"",
+            Max = 50,
+        });
     }
 
     [Fact]

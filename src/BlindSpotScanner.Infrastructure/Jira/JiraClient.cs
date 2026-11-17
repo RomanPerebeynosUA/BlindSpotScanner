@@ -34,7 +34,7 @@ public sealed partial class JiraClient(HttpClient http, IOptions<JiraOptions> op
                 ["project"] = new JsonObject { ["key"] = request.ProjectKey },
                 ["issuetype"] = new JsonObject { ["name"] = request.IssueType },
                 ["summary"] = request.Summary,
-                ["description"] = AdfConverter.ToAdf($"{request.DescriptionMarkdown.TrimEnd()}\n\n{FooterPrefix}{request.StableKey}"),
+                ["description"] = WithFooter(AdfConverter.ToAdf(request.DescriptionMarkdown), request.StableKey),
                 ["priority"] = new JsonObject { ["name"] = request.Priority },
                 ["labels"] = new JsonArray([.. request.Labels.Select(l => (JsonNode)l)]),
             },
@@ -43,8 +43,33 @@ public sealed partial class JiraClient(HttpClient http, IOptions<JiraOptions> op
         var created = await SendAsync(HttpMethod.Post, "/rest/api/3/issue", body, "creating an issue", ct);
         var key = created["key"]!.GetValue<string>();
 
-        // Jira's create response has no status; a new issue starts in the workflow's first status.
-        return new JiraIssueRef(key, Browse(key), "To Do");
+        // Jira's create response has no status, and workflows name their first one differently.
+        // The ticket exists either way, so a failed read falls back to "To Do" until the next refresh.
+        string status;
+        try
+        {
+            status = await GetStatusAsync(key, ct);
+        }
+        catch (JiraException)
+        {
+            status = "To Do";
+        }
+
+        return new JiraIssueRef(key, Browse(key), status);
+    }
+
+    /// <summary>
+    /// The stable-key footer as its own plain text node, outside the Markdown converter, so a key
+    /// holding backticks or link syntax still matches exactly when searched (D24).
+    /// </summary>
+    private static JsonObject WithFooter(JsonObject adf, string stableKey)
+    {
+        adf["content"]!.AsArray().Add(new JsonObject
+        {
+            ["type"] = "paragraph",
+            ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = FooterPrefix + stableKey }),
+        });
+        return adf;
     }
 
     public async Task<JiraIssueRef?> FindByStableKeyAsync(string stableKey, CancellationToken ct)
@@ -54,9 +79,10 @@ public sealed partial class JiraClient(HttpClient http, IOptions<JiraOptions> op
         var phrase = Spaces().Replace(NonAlphanumeric().Replace(stableKey, " "), " ").Trim();
         var body = new JsonObject
         {
-            ["jql"] = $"labels = integration-coverage AND text ~ \"{phrase}\"",
+            // An inner quoted phrase keeps the words together, so look-alike keys rank lower.
+            ["jql"] = $"labels = integration-coverage AND text ~ \"\\\"{phrase}\\\"\"",
             ["fields"] = new JsonArray("status", "description"),
-            ["maxResults"] = 10,
+            ["maxResults"] = 50,
         };
 
         var found = await SendAsync(HttpMethod.Post, "/rest/api/3/search/jql", body, "searching issues", ct);

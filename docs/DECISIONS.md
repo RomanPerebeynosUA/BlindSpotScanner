@@ -234,9 +234,10 @@ with auth. "Create Jira" is offered on the Findings section and on untested endp
 - `findingId` in the API is the report's finding id (`f2`). Its `findings` row is created lazily
   when the first action needs it (unique on run + report finding id), so older runs work too.
 - Dedup: a stored JiraTicket action for the same repository and `StableKey`, then JQL
-  `labels = integration-coverage AND text ~ "<key with non-alphanumerics as spaces>"`. A search
-  hit counts only when its description holds the footer `BlindSpotScanner key: <stableKey>`,
-  which the server always appends (and `integration-coverage` is always among the labels), so a
+  `labels = integration-coverage AND text ~ "\"<key with non-alphanumerics as spaces>\""` (a
+  phrase search, first 50 hits). A search hit counts only when its description holds the footer
+  `BlindSpotScanner key: <stableKey>` as one plain text node, which the server always appends
+  outside the Markdown conversion (and `integration-coverage` is always among the labels), so a
   user's edits can't break dedup. A ticket found only in Jira is stored as an action (adopted).
   "Create anyway" (`force`) skips both checks.
 - `CreatedBy` is `anonymous` until M11 auth. Jira not configured → 503 ProblemDetails naming the
