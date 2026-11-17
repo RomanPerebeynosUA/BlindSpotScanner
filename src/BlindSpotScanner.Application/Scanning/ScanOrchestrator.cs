@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using BlindSpotScanner.Application.Llm;
 using BlindSpotScanner.Application.Reports;
@@ -36,13 +37,17 @@ public sealed class ScanOrchestrator(
 
         // Doc 10: every log line of the scan carries its run id; phase lines also carry the phase.
         using var scope = logger.BeginScope(new Dictionary<string, object> { ["runId"] = runId });
+        using var span = ScanTelemetry.Source.StartActivity("scan.run");
+        span?.SetTag("run.id", runId.ToString());
+        var started = time.GetUtcNow();
         var run = job.Run;
         var budget = new BudgetedLlmClient(llm(), run.MaxCostUsd);
+        var recorder = new StepRecorder(run, store, events, time, logger, span);
         try
         {
             // A retry starts over, so its steps replace those of the attempt that died.
             await store.ClearStepsAsync(run.Id, ct);
-            await ScanAsync(job, budget, ct);
+            await ScanAsync(job, budget, recorder, ct);
         }
         catch (RunTakenOverException)
         {
@@ -76,10 +81,26 @@ public sealed class ScanOrchestrator(
 
         await events.CompletedAsync(run.Id, run.Status, CancellationToken.None);
         logger.LogInformation("Scan finished {status}", run.Status);
+        Record(run, recorder, budget.SpentUsd, time.GetUtcNow() - started, span);
         return run.Status;
     }
 
-    private async Task ScanAsync(ScanJob job, BudgetedLlmClient budget, CancellationToken ct)
+    /// <summary>Doc 10 metrics for a finished scan.</summary>
+    private static void Record(ScanRun run, StepRecorder recorder, decimal spentUsd, TimeSpan elapsed, Activity? span)
+    {
+        var status = new KeyValuePair<string, object?>("status", run.Status.ToString());
+        span?.SetTag("status", run.Status.ToString());
+        ScanTelemetry.Duration.Record(elapsed.TotalSeconds, status);
+        ScanTelemetry.Tokens.Add(recorder.InputTokens, new KeyValuePair<string, object?>("direction", "input"));
+        ScanTelemetry.Tokens.Add(recorder.OutputTokens, new KeyValuePair<string, object?>("direction", "output"));
+        ScanTelemetry.Cost.Add((double)spentUsd);
+        if (run.Status == RunStatus.Failed && run.FailureReasons is [var reason, ..])
+        {
+            ScanTelemetry.Failures.Add(1, new KeyValuePair<string, object?>("reason", reason.Length > 60 ? reason[..60] : reason));
+        }
+    }
+
+    private async Task ScanAsync(ScanJob job, BudgetedLlmClient budget, StepRecorder recorder, CancellationToken ct)
     {
         var run = job.Run;
         var worker = pipelines.Options;
@@ -98,7 +119,7 @@ public sealed class ScanOrchestrator(
 
         var pipeline = pipelines.Create(budget);
         var url = job.Repository.HtmlUrl.TrimEnd('/') + (run.RequestedBranch is { Length: > 0 } branch ? $"/tree/{branch}" : string.Empty);
-        var outcome = await pipeline.RunAsync(run.Id, url, job.Profile, job.Previous, new StepRecorder(run, store, events, time, logger), ct);
+        var outcome = await pipeline.RunAsync(run.Id, url, job.Profile, job.Previous, recorder, ct);
 
         var (report, violations) = (outcome.Report, outcome.Violations);
         if (budget.Exhausted)
@@ -133,9 +154,14 @@ public sealed class ScanOrchestrator(
     /// as each phase starts and ends (reaching 100), and stops the scan at a phase boundary once a
     /// cancel is requested. Phases run one after another, so one start time field is enough.
     /// </summary>
-    private sealed class StepRecorder(ScanRun run, IScanStore store, IScanEvents events, TimeProvider time, ILogger logger) : IScanObserver
+    private sealed class StepRecorder(ScanRun run, IScanStore store, IScanEvents events, TimeProvider time, ILogger logger, Activity? runSpan) : IScanObserver
     {
         private DateTimeOffset _started;
+        private Activity? _phase;
+
+        public long InputTokens { get; private set; }
+
+        public long OutputTokens { get; private set; }
 
         public async Task PhaseStartedAsync(string phase, CancellationToken ct)
         {
@@ -145,6 +171,10 @@ public sealed class ScanOrchestrator(
             }
 
             _started = time.GetUtcNow();
+
+            // Phases report through these callbacks, so the span gets the run span as its explicit parent.
+            _phase = ScanTelemetry.Source.StartActivity("scan.phase", ActivityKind.Internal, runSpan?.Context ?? default);
+            _phase?.SetTag("phase", phase);
             logger.LogInformation("Phase {phase} started", phase);
             await events.ProgressAsync(run.Id, phase, Index(phase) * 100 / ScanPhases.All.Count, $"{phase} started", ct);
         }
@@ -162,6 +192,9 @@ public sealed class ScanOrchestrator(
             }
 
             logger.LogInformation("Phase {phase} done: {inputTokens} input and {outputTokens} output tokens, {costUsd} USD", report.Phase, report.Usage.InputTokens, report.Usage.OutputTokens, report.Usage.CostUsd);
+            InputTokens += report.Usage.InputTokens;
+            OutputTokens += report.Usage.OutputTokens;
+            EndPhase(ActivityStatusCode.Ok);
             await store.SaveStepAsync(Step(report.Phase, RunStatus.Succeeded, report.Usage, report.ReadInFull, report.Notes.Count == 0 ? null : string.Join("\n", report.Notes)), ct);
             await events.ProgressAsync(run.Id, report.Phase, (Index(report.Phase) + 1) * 100 / ScanPhases.All.Count, $"{report.Phase} done", ct);
         }
@@ -169,7 +202,15 @@ public sealed class ScanOrchestrator(
         public Task PhaseFailedAsync(string phase, string reason, CancellationToken ct)
         {
             logger.LogWarning("Phase {phase} failed: {reason}", phase, reason);
+            EndPhase(ActivityStatusCode.Error);
             return store.SaveStepAsync(Step(phase, RunStatus.Failed, LlmUsage.None, 0, reason), ct);
+        }
+
+        private void EndPhase(ActivityStatusCode status)
+        {
+            _phase?.SetStatus(status);
+            _phase?.Dispose();
+            _phase = null;
         }
 
         private static int Index(string phase) => ScanPhases.All.ToList().IndexOf(phase);

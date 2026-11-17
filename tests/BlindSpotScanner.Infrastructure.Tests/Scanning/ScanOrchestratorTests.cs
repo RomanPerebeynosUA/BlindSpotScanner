@@ -94,6 +94,57 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RunAsync_EmitsRunAndPhaseSpans()
+    {
+        // Arrange (doc 10: one span per phase, under the run's span)
+        var runId = await RunningScanAsync();
+        var spans = new List<System.Diagnostics.Activity>();
+        using var listener = new System.Diagnostics.ActivityListener
+        {
+            ShouldListenTo = s => s.Name == ScanTelemetry.SourceName,
+            Sample = (ref System.Diagnostics.ActivityCreationOptions<System.Diagnostics.ActivityContext> _) => System.Diagnostics.ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = a => { lock (spans) { spans.Add(a); } },
+        };
+        System.Diagnostics.ActivitySource.AddActivityListener(listener);
+
+        // Act
+        await OrchestrateAsync(runId);
+
+        // Assert
+        var run = spans.Single(s => s.OperationName == "scan.run" && Equals(s.GetTagItem("run.id"), runId.ToString()));
+        var phases = spans.Where(s => s.OperationName == "scan.phase" && s.ParentSpanId == run.SpanId).OrderBy(s => s.StartTimeUtc).Select(s => s.GetTagItem("phase")).ToList();
+        phases.Should().Equal(ScanPhases.All);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsTokensAndCost()
+    {
+        // Arrange
+        var runId = await RunningScanAsync();
+        var measured = new Dictionary<string, double>();
+        using var listener = new System.Diagnostics.Metrics.MeterListener
+        {
+            InstrumentPublished = (instrument, l) =>
+            {
+                if (instrument.Meter.Name == ScanTelemetry.SourceName)
+                {
+                    l.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        listener.SetMeasurementEventCallback<long>((i, v, _, _) => { lock (measured) { measured[i.Name] = measured.GetValueOrDefault(i.Name) + v; } });
+        listener.SetMeasurementEventCallback<double>((i, v, _, _) => { lock (measured) { measured[i.Name] = measured.GetValueOrDefault(i.Name) + v; } });
+        listener.Start();
+
+        // Act
+        await OrchestrateAsync(runId);
+
+        // Assert
+        new { Tokens = measured.GetValueOrDefault("bss.scan.tokens") > 0, Duration = measured.ContainsKey("bss.scan.duration"), Cost = measured.ContainsKey("bss.scan.cost") }
+            .Should().Be(new { Tokens = true, Duration = true, Cost = true });
+    }
+
+    [Fact]
     public async Task RunAsync_LogsWithRunIdAndPhaseScopes()
     {
         // Arrange (doc 10: logs carry the run id and the phase)

@@ -2,8 +2,11 @@ using BlindSpotScanner.Api.Auth;
 using BlindSpotScanner.Api.Hubs;
 using BlindSpotScanner.Infrastructure;
 using BlindSpotScanner.Infrastructure.Logging;
+using BlindSpotScanner.Infrastructure.Telemetry;
 using BlindSpotScanner.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHealthChecks();
@@ -15,6 +18,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<BlindSpotScanner.Application.ICurrentUser, HttpCurrentUser>();
 builder.Services.AddBlindSpotScannerCore();
 builder.Services.AddBlindSpotScannerLogging(builder);
+builder.Services.AddBlindSpotScannerTelemetry(
+    builder.Configuration, "blindspotscanner-api", t => t.AddAspNetCoreInstrumentation(), m => m.AddAspNetCoreInstrumentation());
 builder.AddBlindSpotScannerAuth();
 builder.Services.AddSingleton<ScanEventRelay>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ScanEventRelay>());
