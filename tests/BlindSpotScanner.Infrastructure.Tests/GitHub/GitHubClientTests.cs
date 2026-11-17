@@ -195,4 +195,71 @@ public sealed class GitHubClientTests : IDisposable
         // Assert
         text.Should().Be("public class BooksController { } // → ok");
     }
+
+    [Fact]
+    public async Task GetBlobText_Utf8Bom_IsStripped()
+    {
+        // Arrange
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes("namespace Api;")).ToArray();
+        Respond("/repos/example-org/bookstore-api/git/blobs/b1", 200, new { sha = "b1", encoding = "base64", content = Convert.ToBase64String(bytes) });
+
+        // Act
+        var text = await CreateClient().GetBlobTextAsync("example-org", "bookstore-api", "b1", CancellationToken.None);
+
+        // Assert
+        text.Should().Be("namespace Api;");
+    }
+
+    [Fact]
+    public async Task GetBlobText_NotUtf8_DecodesAsLatin1()
+    {
+        // Arrange ("// café" saved as Windows-1252: é is the single byte 0xE9)
+        byte[] bytes = [.. Encoding.ASCII.GetBytes("// caf"), 0xE9];
+        Respond("/repos/example-org/bookstore-api/git/blobs/b1", 200, new { sha = "b1", encoding = "base64", content = Convert.ToBase64String(bytes) });
+
+        // Act
+        var text = await CreateClient().GetBlobTextAsync("example-org", "bookstore-api", "b1", CancellationToken.None);
+
+        // Assert
+        text.Should().Be("// café");
+    }
+
+    [Fact]
+    public async Task GetTree_SymlinkMode_ParsesAsSymlink()
+    {
+        // Arrange
+        Respond("/repos/example-org/bookstore-api/git/trees/abc", 200, new
+        {
+            sha = "abc",
+            truncated = false,
+            tree = new object[] { new { path = "src/Link.cs", mode = "120000", type = "blob", sha = "s1", size = 12 } },
+        });
+
+        // Act
+        var tree = await CreateClient().GetTreeAsync("example-org", "bookstore-api", "abc", recursive: false, CancellationToken.None);
+
+        // Assert
+        tree.Entries.Single().Type.Should().Be(GitEntryType.Symlink);
+    }
+
+    [Fact]
+    public async Task AnyRequest_InjectedHttpClient_IsNotMutated()
+    {
+        // Arrange
+        Respond("/repos/example-org/bookstore-api", 200, new
+        {
+            name = "bookstore-api",
+            owner = new { login = "example-org" },
+            default_branch = "main",
+            html_url = "https://github.com/example-org/bookstore-api",
+        });
+        var http = new HttpClient();
+
+        // Act
+        await new GitHubClient(http, Options.Create(new GitHubOptions { ApiBaseUrl = _server.Url!, Token = Token }))
+            .GetRepositoryAsync("example-org", "bookstore-api", CancellationToken.None);
+
+        // Assert
+        new { http.BaseAddress, HeaderCount = http.DefaultRequestHeaders.Count() }.Should().BeEquivalentTo(new { BaseAddress = (Uri?)null, HeaderCount = 0 });
+    }
 }

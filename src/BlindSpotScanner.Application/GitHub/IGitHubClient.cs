@@ -31,4 +31,7 @@ public enum GitEntryType
 
     /// <summary>A submodule pointer.</summary>
     Commit,
+
+    /// <summary>A symbolic link (mode 120000); its "content" is the link target, not code.</summary>
+    Symlink,
 }

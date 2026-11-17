@@ -10,29 +10,19 @@ namespace BlindSpotScanner.Infrastructure.GitHub;
 
 /// <summary>
 /// A small typed client for the four GitHub REST endpoints the scan needs (D16). Its HttpClient's
-/// handler chain should include <see cref="GitHubRateLimitHandler"/>.
+/// handler chain should include <see cref="GitHubRateLimitHandler"/>. Headers and the base URL go
+/// on each request, so the injected HttpClient is never mutated.
 /// </summary>
-public sealed class GitHubClient : IGitHubClient
+public sealed class GitHubClient(HttpClient http, IOptions<GitHubOptions> options) : IGitHubClient
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
     };
 
-    private readonly HttpClient _http;
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
-    public GitHubClient(HttpClient http, IOptions<GitHubOptions> options)
-    {
-        _http = http;
-        _http.BaseAddress = new Uri(options.Value.ApiBaseUrl.TrimEnd('/') + "/");
-        _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        _http.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
-        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BlindSpotScanner", null));
-        if (!string.IsNullOrEmpty(options.Value.Token))
-        {
-            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.Value.Token);
-        }
-    }
+    private readonly Uri _baseAddress = new(options.Value.ApiBaseUrl.TrimEnd('/') + "/");
 
     public async Task<GitHubRepository> GetRepositoryAsync(string owner, string name, CancellationToken ct)
     {
@@ -53,7 +43,7 @@ public sealed class GitHubClient : IGitHubClient
         var path = $"{Repo(owner, name)}/git/trees/{Uri.EscapeDataString(treeSha)}{(recursive ? "?recursive=1" : string.Empty)}";
         var tree = await GetAsync<TreeDto>(owner, name, path, ct);
         return new GitTree(
-            tree.Tree.Select(e => new GitTreeEntry(e.Path, ParseType(e.Type), e.Sha, e.Size)).ToList(),
+            tree.Tree.Select(e => new GitTreeEntry(e.Path, ParseType(e.Type, e.Mode), e.Sha, e.Size)).ToList(),
             tree.Truncated);
     }
 
@@ -61,7 +51,27 @@ public sealed class GitHubClient : IGitHubClient
     {
         var blob = await GetAsync<BlobDto>(owner, name, $"{Repo(owner, name)}/git/blobs/{Uri.EscapeDataString(blobSha)}", ct);
         // GitHub wraps base64 content in newlines.
-        return Encoding.UTF8.GetString(Convert.FromBase64String(blob.Content.Replace("\n", string.Empty, StringComparison.Ordinal)));
+        return Decode(Convert.FromBase64String(blob.Content.Replace("\n", string.Empty, StringComparison.Ordinal)));
+    }
+
+    /// <summary>UTF-8 without its BOM; bytes that aren't valid UTF-8 (legacy Windows-1252 files) decode as Latin-1.</summary>
+    private static string Decode(byte[] bytes)
+    {
+        var preamble = Encoding.UTF8.Preamble;
+        var span = bytes.AsSpan();
+        if (span.StartsWith(preamble))
+        {
+            span = span[preamble.Length..];
+        }
+
+        try
+        {
+            return StrictUtf8.GetString(span);
+        }
+        catch (DecoderFallbackException)
+        {
+            return Encoding.Latin1.GetString(span);
+        }
     }
 
     private static string Repo(string owner, string name) => $"repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}";
@@ -69,7 +79,16 @@ public sealed class GitHubClient : IGitHubClient
     /// <param name="notFound">The 404 message for this call; defaults to the repository message.</param>
     private async Task<T> GetAsync<T>(string owner, string name, string path, CancellationToken ct, string? notFound = null)
     {
-        using var response = await _http.GetAsync(path, ct);
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_baseAddress, path));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("BlindSpotScanner", null));
+        if (!string.IsNullOrEmpty(options.Value.Token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Value.Token);
+        }
+
+        using var response = await http.SendAsync(request, ct);
         switch (response.StatusCode)
         {
             case HttpStatusCode.NotFound:
@@ -88,8 +107,9 @@ public sealed class GitHubClient : IGitHubClient
             ?? throw new InvalidOperationException($"GitHub returned an empty body for {path}.");
     }
 
-    private static GitEntryType ParseType(string type) => type switch
+    private static GitEntryType ParseType(string type, string mode) => type switch
     {
+        "blob" when mode == "120000" => GitEntryType.Symlink,
         "blob" => GitEntryType.Blob,
         "tree" => GitEntryType.Tree,
         "commit" => GitEntryType.Commit,
@@ -106,7 +126,7 @@ public sealed class GitHubClient : IGitHubClient
 
     private sealed record TreeDto(string Sha, bool Truncated, IReadOnlyList<TreeEntryDto> Tree);
 
-    private sealed record TreeEntryDto(string Path, string Type, string Sha, long? Size);
+    private sealed record TreeEntryDto(string Path, string Mode, string Type, string Sha, long? Size);
 
     private sealed record BlobDto(string Sha, string Content);
 }
