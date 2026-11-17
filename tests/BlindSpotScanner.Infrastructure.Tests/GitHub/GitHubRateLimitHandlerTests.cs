@@ -116,6 +116,80 @@ public class GitHubRateLimitHandlerTests
         new { response.StatusCode, stub.Calls }.Should().BeEquivalentTo(new { StatusCode = HttpStatusCode.Forbidden, Calls = 1 });
     }
 
+    [Fact]
+    public async Task Send_TooManyRequestsWithoutHeaders_WaitsOneMinute()
+    {
+        // Arrange
+        var (invoker, _) = Create(() => new HttpResponseMessage(HttpStatusCode.TooManyRequests), () => new HttpResponseMessage(HttpStatusCode.OK));
+
+        // Act
+        var send = invoker.SendAsync(Get(), CancellationToken.None);
+        _time.Advance(TimeSpan.FromSeconds(59));
+        var completedEarly = send.IsCompleted;
+        _time.Advance(TimeSpan.FromSeconds(1));
+        var response = await send;
+
+        // Assert
+        new { completedEarly, response.StatusCode }.Should().BeEquivalentTo(new { completedEarly = false, StatusCode = HttpStatusCode.OK });
+    }
+
+    [Fact]
+    public async Task Send_SecondaryLimitForbiddenBody_WaitsOneMinute()
+    {
+        // Arrange
+        var (invoker, _) = Create(
+            () => new HttpResponseMessage(HttpStatusCode.Forbidden)
+            {
+                Content = new StringContent("{\"message\":\"You have exceeded a secondary rate limit. Please wait a few minutes before you try again.\"}"),
+            },
+            () => new HttpResponseMessage(HttpStatusCode.OK));
+
+        // Act
+        var send = invoker.SendAsync(Get(), CancellationToken.None);
+        _time.Advance(TimeSpan.FromSeconds(59));
+        var completedEarly = send.IsCompleted;
+        _time.Advance(TimeSpan.FromSeconds(1));
+        var response = await send;
+
+        // Assert
+        new { completedEarly, response.StatusCode }.Should().BeEquivalentTo(new { completedEarly = false, StatusCode = HttpStatusCode.OK });
+    }
+
+    [Fact]
+    public async Task Send_ServerClockAhead_WaitsRelativeToServerDate()
+    {
+        // Arrange (server clock is 100s ahead; reset is 30s after server time, so the wait is 31s, not 131s)
+        var (invoker, _) = Create(
+            () =>
+            {
+                var limited = PrimaryLimit(Now.AddSeconds(130));
+                limited.Headers.Date = Now.AddSeconds(100);
+                return limited;
+            },
+            () => new HttpResponseMessage(HttpStatusCode.OK));
+
+        // Act
+        var send = invoker.SendAsync(Get(), CancellationToken.None);
+        _time.Advance(TimeSpan.FromSeconds(31));
+        var response = await send;
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Send_ForbiddenWithoutRateLimit_BodyStaysReadable()
+    {
+        // Arrange
+        var (invoker, _) = Create(() => new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = new StringContent("{\"message\":\"Must have admin rights\"}") });
+
+        // Act
+        var response = await invoker.SendAsync(Get(), CancellationToken.None);
+
+        // Assert
+        (await response.Content.ReadAsStringAsync()).Should().Be("{\"message\":\"Must have admin rights\"}");
+    }
+
     /// <summary>Returns the n-th response factory on the n-th call (the last one repeats).</summary>
     private sealed class StubHandler(Func<HttpResponseMessage>[] responses) : HttpMessageHandler
     {
