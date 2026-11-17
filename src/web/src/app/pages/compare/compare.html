@@ -52,8 +52,8 @@
       <thead>
         <tr>
           <th>Metric</th>
-          <th>{{ c.base.generatedAt | date: 'd MMM' }}</th>
-          <th>{{ c.target.generatedAt | date: 'd MMM' }}</th>
+          <th>{{ c.base.generatedAt | date: 'd MMM' }} · {{ c.base.commitSha.slice(0, 7) }}</th>
+          <th>{{ c.target.generatedAt | date: 'd MMM' }} · {{ c.target.commitSha.slice(0, 7) }}</th>
           <th>Change</th>
         </tr>
       </thead>

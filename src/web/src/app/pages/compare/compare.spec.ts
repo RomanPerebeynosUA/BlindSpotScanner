@@ -115,6 +115,15 @@ describe('Compare', () => {
     expect(first.querySelector('td.up')).not.toBeNull();
   });
 
+  it('metrics headers name each run by date and short commit', async () => {
+    // Act
+    const el = await render(of(comparison()));
+
+    // Assert
+    const headers = [...el.querySelectorAll('.metrics thead th')].map((th) => th.textContent?.trim());
+    expect(headers).toEqual(['Metric', '1 Nov · 0f1e2d3', '15 Nov · a1b2c3d', 'Change']);
+  });
+
   it('ad-hoc label shown when adHoc', async () => {
     // Act
     const el = await render(of(comparison((c) => (c.adHoc = true))));
