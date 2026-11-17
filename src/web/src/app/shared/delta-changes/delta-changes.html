@@ -1,0 +1,85 @@
+@let d = delta();
+<div class="cols3 changes">
+  <div class="panel">
+    <h3>Newly covered</h3>
+    @if (d.endpoints.newlyCovered.length) {
+      <ul>
+        @for (e of d.endpoints.newlyCovered; track $index) {
+          <li class="mono">{{ e }}</li>
+        }
+      </ul>
+    } @else {
+      <p class="muted">None.</p>
+    }
+  </div>
+  <div class="panel">
+    <h3>Regressed</h3>
+    @if (d.endpoints.regressed.length) {
+      <ul>
+        @for (e of d.endpoints.regressed; track $index) {
+          <li class="mono">{{ e }}</li>
+        }
+      </ul>
+    } @else {
+      <p class="muted">None.</p>
+    }
+  </div>
+  <div class="panel">
+    <h3>Endpoints added / removed</h3>
+    @if (d.endpoints.added.length || d.endpoints.removed.length) {
+      <ul>
+        @for (e of d.endpoints.added; track $index) {
+          <li><span class="muted">Added:</span> <span class="mono">{{ e }}</span></li>
+        }
+        @for (e of d.endpoints.removed; track $index) {
+          <li><span class="muted">Removed:</span> <span class="mono">{{ e }}</span></li>
+        }
+      </ul>
+    } @else {
+      <p class="muted">None.</p>
+    }
+  </div>
+  <div class="panel">
+    <h3>Confidence changed</h3>
+    @if (d.endpoints.confidenceChanged?.length) {
+      <ul>
+        @for (e of d.endpoints.confidenceChanged; track $index) {
+          <li class="mono">{{ e }}</li>
+        }
+      </ul>
+    } @else {
+      <p class="muted">None.</p>
+    }
+  </div>
+  <div class="panel">
+    <h3>Findings</h3>
+    @if (d.findings.fixed.length || d.findings.new.length) {
+      <ul>
+        @for (f of d.findings.fixed; track $index) {
+          <li><span class="muted">Fixed:</span> {{ f }}</li>
+        }
+        @for (f of d.findings.new; track $index) {
+          <li><span class="muted">New:</span> {{ f }}</li>
+        }
+      </ul>
+    } @else {
+      <p class="muted">None.</p>
+    }
+  </div>
+  <div class="panel">
+    <h3>Risks</h3>
+    @if (d.risks.dropped.length || d.risks.new.length) {
+      <ul>
+        @for (r of d.risks.dropped; track $index) {
+          <li><span class="muted">Dropped:</span> {{ r }}</li>
+        }
+        @for (r of d.risks.new; track $index) {
+          <li><span class="muted">New:</span> {{ r }}</li>
+        }
+      </ul>
+    } @else {
+      <p class="muted">None.</p>
+    }
+  </div>
+</div>
+<div class="note">Risks match on exact wording. A reworded risk appears as dropped plus new, never as resolved.</div>
