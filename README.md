@@ -140,7 +140,7 @@ sent). This is asked once per repository.
 
 ### Sign-in and roles
 
-By default (`Auth__Mode=Local`) everyone is the built-in **local admin**, which suits a laptop.
+By default (`Auth__Mode=Local`) everyone is the built-in **local admin**, which suits a laptop. Compose publishes the ports on `127.0.0.1` only, and the API logs a warning when Local mode runs outside Development. **Never expose Local mode to a network:** anyone who reaches it is Admin and can spend your Claude budget, create Jira tickets and open PRs with your GitHub token.
 To make people sign in, use any OpenID Connect provider (Entra ID, Okta, Auth0, Keycloak, Google…):
 
 | Variable | Value |

@@ -90,6 +90,12 @@ public static class AuthSetup
         return builder;
     }
 
+    /// <summary>The startup warning for Local mode outside Development (everyone who reaches the port is Admin), or null.</summary>
+    public static string? LocalModeWarning(AuthOptions options, bool isDevelopment) =>
+        options.IsOidc || isDevelopment
+            ? null
+            : "Auth:Mode is Local: every request is the local admin. Keep the ports on localhost, or set Auth:Mode=Oidc before others can reach this host.";
+
     /// <summary>API and hub calls get a status code; only other paths are redirected.</summary>
     private static Task Status(RedirectContext<CookieAuthenticationOptions> context, int status)
     {

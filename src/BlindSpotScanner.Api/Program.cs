@@ -26,6 +26,11 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ScanEventRelay>())
 
 var app = builder.Build();
 
+if (AuthSetup.LocalModeWarning(builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions(), app.Environment.IsDevelopment()) is { } localMode)
+{
+    app.Logger.LogWarning("{Warning}", localMode);
+}
+
 // v1 applies migrations at startup (D21); the worker retries until the tables exist.
 await using (var scope = app.Services.CreateAsyncScope())
 {

@@ -34,7 +34,7 @@ services:
       Auth__RoleClaim: ${AUTH_ROLE_CLAIM:-roles}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     ports:
-      - "5080:8080"
+      - "127.0.0.1:5080:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -56,7 +56,7 @@ services:
     build:
       context: src/web
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on:
       - api
 

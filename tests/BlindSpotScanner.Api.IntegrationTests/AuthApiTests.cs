@@ -160,6 +160,30 @@ public class AuthApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnly
 public class RoleClaimsTests
 {
     [Fact]
+    public void LocalModeWarning_OutsideDevelopment_WarnsThatEveryoneIsAdmin()
+    {
+        // Act (Local mode makes every visitor an Admin; fine on a laptop, not on a shared host)
+        var warning = AuthSetup.LocalModeWarning(new AuthOptions { Mode = AuthOptions.LocalMode }, isDevelopment: false);
+
+        // Assert
+        warning.Should().Contain("every request is the local admin");
+    }
+
+    [Fact]
+    public void LocalModeWarning_DevelopmentOrOidc_IsNull()
+    {
+        // Act
+        var warnings = new[]
+        {
+            AuthSetup.LocalModeWarning(new AuthOptions { Mode = AuthOptions.LocalMode }, isDevelopment: true),
+            AuthSetup.LocalModeWarning(new AuthOptions { Mode = AuthOptions.OidcMode }, isDevelopment: false),
+        };
+
+        // Assert
+        warnings.Should().AllBeEquivalentTo((string?)null);
+    }
+
+    [Fact]
     public void Roles_UnknownClaimValue_FallsBackToDefault()
     {
         // Act
