@@ -9,6 +9,10 @@ internal sealed class StubGitHubClient : IGitHubClient
 
     public Exception? RepositoryError { get; set; }
 
+    public Exception? BranchError { get; set; }
+
+    public Exception? BlobError { get; set; }
+
     public HashSet<string> Branches { get; } = ["main", "dev", "feat/x"];
 
     public string? RequestedBranch { get; private set; }
@@ -24,6 +28,11 @@ internal sealed class StubGitHubClient : IGitHubClient
     public Task<string> GetBranchHeadShaAsync(string owner, string name, string branch, CancellationToken ct)
     {
         RequestedBranch = branch;
+        if (BranchError is { } error)
+        {
+            return Task.FromException<string>(error);
+        }
+
         return Branches.Contains(branch)
             ? Task.FromResult("a1b2c3d4e5f60718293a4b5c6d7e8f9012345678")
             : Task.FromException<string>(new GitHubNotFoundException($"Branch '{branch}' not found."));
@@ -37,5 +46,6 @@ internal sealed class StubGitHubClient : IGitHubClient
     public Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) =>
         throw new NotSupportedException();
 
-    public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) => Task.FromResult(Files[blobSha]);
+    public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) =>
+        BlobError is { } error ? Task.FromException<string>(error) : Task.FromResult(Files[blobSha]);
 }

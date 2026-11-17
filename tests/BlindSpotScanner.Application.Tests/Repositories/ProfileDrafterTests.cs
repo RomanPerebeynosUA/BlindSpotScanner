@@ -33,7 +33,7 @@ public class ProfileDrafterTests
     private JsonElement SentInput() => JsonDocument.Parse(_llm.Requests.Single().InputJson).RootElement;
 
     [Fact]
-    public async Task DraftAsync_SendsFilteredTreeBuildFilesAndSamples()
+    public async Task DraftAsync_RepositoryWithNoiseFiles_SendsFilteredTreeBuildFilesAndSamples()
     {
         // Act
         await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
@@ -62,7 +62,7 @@ public class ProfileDrafterTests
     }
 
     [Fact]
-    public async Task DraftAsync_SkipsFilesOverMaxBytes()
+    public async Task DraftAsync_FileOverMaxBytes_IsNotSent()
     {
         // Act
         await Drafter(maxFileBytes: 20).DraftAsync(_repositoryId, CancellationToken.None);
@@ -128,6 +128,19 @@ public class ProfileDrafterTests
         // Assert
         SentInput().GetProperty("rootTree").GetArrayLength().Should().Be(3000);
         result.Draft!.OpenQuestions[0].Should().Be(ProfileDrafter.CappedQuestion);
+    }
+
+    [Fact]
+    public async Task DraftAsync_GitHubServerError_ReturnsGitHubFailed()
+    {
+        // Arrange
+        _github.BlobError = new HttpRequestException("500 Internal Server Error");
+
+        // Act
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        result.Status.Should().Be(DraftProfileStatus.GitHubFailed);
     }
 
     [Fact]

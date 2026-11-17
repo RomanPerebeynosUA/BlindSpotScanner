@@ -1,5 +1,6 @@
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Domain.Entities;
+using BlindSpotScanner.Domain.Enums;
 using BlindSpotScanner.Infrastructure.Repositories;
 using BlindSpotScanner.Infrastructure.Scanning;
 using BlindSpotScanner.Infrastructure.Tests.Persistence;
@@ -97,6 +98,73 @@ public class EfRepositoryStoreTests(PostgresFixture db)
             LastScanAt = (DateTimeOffset?)null,
             ActiveRunId = (Guid?)null,
         });
+    }
+
+    [Fact]
+    public async Task TryAddAsync_OtherUniqueViolation_Throws()
+    {
+        // Arrange (the profile key clashes with an existing repository's profile; only a duplicate name means "already registered")
+        var existing = await AddAsync(UniqueName());
+        var repository = NewRepository(UniqueName());
+        await using var context = db.CreateContext();
+
+        // Act
+        var act = () => new EfRepositoryStore(context).TryAddAsync(repository, ProfileTemplate.Default(existing.Id, "x"), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<Microsoft.EntityFrameworkCore.DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task ListAsync_SucceededRunsAtSameTime_PicksTheHigherId()
+    {
+        // Arrange (same GeneratedAt; the lower id is saved first)
+        var repository = await AddAsync(UniqueName());
+        var low = Guid.Parse($"10000000-0000-4000-8000-{Guid.NewGuid():N}"[..36]);
+        var high = Guid.Parse($"f0000000-0000-4000-8000-{Guid.NewGuid():N}"[..36]);
+        await AddSucceededRunAsync(repository.Id, low);
+        await AddSucceededRunAsync(repository.Id, high);
+        await using var context = db.CreateContext();
+
+        // Act
+        var list = await new EfRepositoryStore(context).ListAsync(CancellationToken.None);
+
+        // Assert
+        list.Single(r => r.Id == repository.Id).LastRunId.Should().Be(high);
+    }
+
+    [Fact]
+    public async Task ListAsync_OnlyFailedRun_ReportsLatestRunStatus()
+    {
+        // Arrange
+        var repository = await AddAsync(UniqueName());
+        var run = ScanRun.Enqueue(Guid.NewGuid(), repository.Id, null, 5m, 1, "claude-sonnet-5-5", "1.0.0", DateTimeOffset.UtcNow);
+        run.Fail(["Unresolved citation"]);
+        await using (var write = db.CreateContext())
+        {
+            write.ScanRuns.Add(run);
+            await write.SaveChangesAsync();
+        }
+
+        await using var context = db.CreateContext();
+
+        // Act
+        var list = await new EfRepositoryStore(context).ListAsync(CancellationToken.None);
+
+        // Assert
+        list.Single(r => r.Id == repository.Id).Should().BeEquivalentTo(new { LastRunId = (Guid?)null, LatestRunStatus = (RunStatus?)RunStatus.Failed });
+    }
+
+    private async Task AddSucceededRunAsync(Guid repositoryId, Guid runId)
+    {
+        var report = PostgresFixture.LoadReport("sample-report.json", runId);
+        var meta = report.Meta;
+        var run = new ScanRun(runId, repositoryId, meta.Branch, meta.CommitSha, meta.ModelId, meta.PromptSetVersion, meta.ProfileVersion);
+        run.RecordReport(report);
+        run.Succeed();
+        await using var context = db.CreateContext();
+        context.ScanRuns.Add(run);
+        await context.SaveChangesAsync();
     }
 
     [Fact]

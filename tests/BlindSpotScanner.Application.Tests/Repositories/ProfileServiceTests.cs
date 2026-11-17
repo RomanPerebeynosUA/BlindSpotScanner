@@ -38,13 +38,46 @@ public class ProfileServiceTests
     }
 
     [Fact]
-    public async Task SaveAsync_TrimsDropsBlankAndDuplicateEntries()
+    public async Task SaveAsync_BlankAndDuplicateEntries_AreTrimmedAndDropped()
     {
         // Act
         var result = await Service.SaveAsync(_repositoryId, 1, Input(testGlobs: [" a ", "", "a", "b"]), CancellationToken.None);
 
         // Assert
         result.Profile!.TestGlobs.Should().Equal("a", "b");
+    }
+
+    [Fact]
+    public async Task SaveAsync_NullEntry_IsDropped()
+    {
+        // Act (JSON like "testGlobs": [null, "a"])
+        var result = await Service.SaveAsync(_repositoryId, 1, Input(testGlobs: [null!, "a"]), CancellationToken.None);
+
+        // Assert
+        result.Profile!.TestGlobs.Should().Equal("a");
+    }
+
+    [Fact]
+    public async Task SaveAsync_NegativeBaseVersion_ReturnsInvalid()
+    {
+        // Act
+        var result = await Service.SaveAsync(_repositoryId, -1, Input(), CancellationToken.None);
+
+        // Assert
+        result.Status.Should().Be(SaveProfileStatus.Invalid);
+    }
+
+    [Fact]
+    public async Task SaveAsync_NoProfileAndBaseNotZero_ReturnsConflict()
+    {
+        // Arrange
+        _profiles.Profiles.Clear();
+
+        // Act
+        var result = await Service.SaveAsync(_repositoryId, 5, Input(), CancellationToken.None);
+
+        // Assert
+        result.Status.Should().Be(SaveProfileStatus.Conflict);
     }
 
     [Fact]

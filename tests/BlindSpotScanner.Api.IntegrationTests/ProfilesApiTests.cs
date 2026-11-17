@@ -68,6 +68,20 @@ public class ProfilesApiTests(QueueOnlyApiFactory factory) : IClassFixture<Queue
     }
 
     [Fact]
+    public async Task Put_MissingBaseVersion_Returns400()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient();
+
+        // Act
+        using var response = await client.PutAsJsonAsync($"/api/repositories/{id}/profile", new { markdown = "# P", integrationMappedTo = "real-seam", testGlobs = new[] { "t" }, controllerGlobs = new[] { "c" } });
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task Put_StaleBase_Returns409()
     {
         // Arrange

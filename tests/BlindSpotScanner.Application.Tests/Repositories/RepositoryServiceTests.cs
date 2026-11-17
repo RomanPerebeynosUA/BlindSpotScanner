@@ -94,6 +94,32 @@ public class RepositoryServiceTests
     }
 
     [Fact]
+    public async Task AddAsync_GitHubServerError_ReturnsGitHubUnavailable()
+    {
+        // Arrange
+        _github.RepositoryError = new HttpRequestException("502 Bad Gateway");
+
+        // Act
+        var result = await Service.AddAsync("https://github.com/example-org/bookstore", null, CancellationToken.None);
+
+        // Assert
+        result.Status.Should().Be(AddRepositoryStatus.GitHubUnavailable);
+    }
+
+    [Fact]
+    public async Task AddAsync_BranchCheckRateLimited_ReturnsGitHubUnavailable()
+    {
+        // Arrange
+        _github.BranchError = new GitHubRateLimitException(DateTimeOffset.UtcNow.AddMinutes(5));
+
+        // Act
+        var result = await Service.AddAsync("https://github.com/example-org/bookstore", null, CancellationToken.None);
+
+        // Assert
+        result.Status.Should().Be(AddRepositoryStatus.GitHubUnavailable);
+    }
+
+    [Fact]
     public async Task AddAsync_UnknownBranch_ReturnsBranchNotFound()
     {
         // Act
