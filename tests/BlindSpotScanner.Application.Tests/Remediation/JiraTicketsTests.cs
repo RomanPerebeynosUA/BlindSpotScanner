@@ -317,8 +317,15 @@ public class JiraTicketsTests
             {
                 row = new Finding
                 {
-                    Id = Guid.NewGuid(), ScanRunId = runId, ReportFindingId = finding.Id, Kind = finding.Kind, Severity = finding.Severity,
-                    StableKey = finding.StableKey, Headline = finding.Headline, Detail = [], Evidence = [],
+                    Id = Guid.NewGuid(),
+                    ScanRunId = runId,
+                    ReportFindingId = finding.Id,
+                    Kind = finding.Kind,
+                    Severity = finding.Severity,
+                    StableKey = finding.StableKey,
+                    Headline = finding.Headline,
+                    Detail = [],
+                    Evidence = [],
                 };
                 Findings.Add(row);
             }

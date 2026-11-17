@@ -71,7 +71,11 @@ node --version        # v26.x
 | `GITHUB_TOKEN` | A GitHub [personal access token](https://github.com/settings/personal-access-tokens) with read access to the repositories you want to scan | Public repositories work, but GitHub's anonymous rate limit (60 requests/hour) is quickly used up by a scan. Private repositories can't be read. |
 | `ANTHROPIC_API_KEY` | A [Claude API key](https://console.anthropic.com/). **Calls are billed** (a Claude Pro plan does not include API use). The cap is $5 per scan by default. | Scans still run, but the AI steps fail, so endpoints are reported as *unverified* and quality can't be scored. "Auto-draft with AI" doesn't work either. |
 
-Secrets go into `.env`, which git ignores. Never commit them.
+| `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` | Your Jira Cloud site (`https://<site>.atlassian.net`), the account's email, an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) and the project key that tickets go into. A [free Jira Cloud site](https://www.atlassian.com/software/jira/free) works. | "Create Jira" on the report shows "Jira not configured". Everything else works. |
+
+Secrets go into `.env`, which git ignores. Never commit them. For local development (section 4),
+set the Jira values as environment variables the same way: `Jira__BaseUrl`, `Jira__Email`,
+`Jira__ApiToken` and `Jira__ProjectKey` for the api.
 
 ## 3. Run the app (Docker Compose)
 

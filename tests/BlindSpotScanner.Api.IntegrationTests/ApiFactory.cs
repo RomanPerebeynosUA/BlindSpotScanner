@@ -24,7 +24,12 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public FakeClaudeServer Claude { get; } = new();
 
+    public FakeJiraServer Jira { get; } = new();
+
     protected virtual bool RunWorker => true;
+
+    /// <summary>False leaves the Jira API token unset, so Jira counts as not configured (D24).</summary>
+    protected virtual bool JiraConfigured => true;
 
     public Task InitializeAsync() => _db.StartAsync();
 
@@ -33,6 +38,7 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await DisposeAsync();
         GitHub.Dispose();
         Claude.Dispose();
+        Jira.Dispose();
         await _db.DisposeAsync();
     }
 
@@ -44,6 +50,10 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Llm:ApiKey", "test-key");
         builder.UseSetting("Scan:PollMilliseconds", "500");
         builder.UseSetting("Scan:HeartbeatSeconds", "1");
+        builder.UseSetting("Jira:BaseUrl", Jira.Url);
+        builder.UseSetting("Jira:Email", "dev@example.com");
+        builder.UseSetting("Jira:ApiToken", JiraConfigured ? "jira-test-token" : string.Empty);
+        builder.UseSetting("Jira:ProjectKey", "BSS");
         builder.ConfigureTestServices(services =>
         {
             if (RunWorker)
@@ -117,4 +127,12 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 public sealed class QueueOnlyApiFactory : ApiFactory
 {
     protected override bool RunWorker => false;
+}
+
+/// <summary>The api without a worker and without a Jira API token.</summary>
+public sealed class NoJiraApiFactory : ApiFactory
+{
+    protected override bool RunWorker => false;
+
+    protected override bool JiraConfigured => false;
 }

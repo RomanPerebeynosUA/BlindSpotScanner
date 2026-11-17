@@ -23,8 +23,13 @@ public sealed record RunHistoryItemResponse(
 
 [ApiController]
 [Route("api/repositories")]
-public sealed class RepositoriesController(RepositoryService repositories) : ControllerBase
+public sealed class RepositoriesController(RepositoryService repositories, Application.Remediation.JiraTickets tickets) : ControllerBase
 {
+    /// <summary>The repository's Jira tickets (and later PRs), statuses refreshed when older than 10 minutes (D24).</summary>
+    [HttpGet("{id:guid}/actions")]
+    public async Task<IActionResult> Actions(Guid id, CancellationToken ct) =>
+        await repositories.GetAsync(id, ct) is null ? NotFound() : Ok((await tickets.ActionsAsync(id, ct)).Select(ActionResponse.From));
+
     [HttpGet]
     public async Task<IReadOnlyList<RepositorySummary>> List(CancellationToken ct) => await repositories.ListAsync(ct);
 

@@ -21,6 +21,11 @@ services:
       ConnectionStrings__Postgres: "Host=db;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       GitHub__Token: ${GITHUB_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      Jira__BaseUrl: ${JIRA_BASE_URL:-}
+      Jira__Email: ${JIRA_EMAIL:-}
+      Jira__ApiToken: ${JIRA_API_TOKEN:-}
+      Jira__ProjectKey: ${JIRA_PROJECT_KEY:-}
+      App__PublicUrl: ${APP_PUBLIC_URL:-http://localhost:8080}
     ports:
       - "5080:8080"
     depends_on:

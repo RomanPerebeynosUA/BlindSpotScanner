@@ -1,0 +1,29 @@
+{
+  "fields": {
+    "project": { "key": "BSS" },
+    "issuetype": { "name": "Task" },
+    "summary": "[Integration coverage] Add test for POST api/orders/{id}/cancel",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Problem" }] },
+        { "type": "paragraph", "content": [{ "type": "text", "text": "Cancelling an order has no integration test" }] },
+        { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Details" }] },
+        { "type": "bulletList", "content": [
+          { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "POST api/orders/{id}/cancel" }] }] }
+        ] },
+        { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Acceptance criteria" }] },
+        { "type": "bulletList", "content": [
+          { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "An integration test exercises POST api/orders/{id}/cancel against a real database and asserts the response values and the persisted state." }] }] }
+        ] },
+        { "type": "paragraph", "content": [
+          { "type": "text", "text": "View the report", "marks": [{ "type": "link", "attrs": { "href": "http://localhost:8080/runs/33333333-3333-4333-8333-333333333333" } }] }
+        ] },
+        { "type": "paragraph", "content": [{ "type": "text", "text": "BlindSpotScanner key: uncovered-endpoint:POST api/orders/{}/cancel" }] }
+      ]
+    },
+    "priority": { "name": "High" },
+    "labels": ["integration-coverage"]
+  }
+}
