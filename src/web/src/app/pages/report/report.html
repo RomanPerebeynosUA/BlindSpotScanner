@@ -1,0 +1,40 @@
+@if (store.report(); as report) {
+  @let meta = report.meta;
+  <div class="head">
+    <div>
+      <h1>{{ meta.repo.owner }}/{{ meta.repo.name }}</h1>
+      <div class="row muted">
+        <span class="mono">{{ meta.branch }}</span> ·
+        <a class="mono sha" [href]="commitUrl(meta)" target="_blank" rel="noopener">{{ meta.commitSha.slice(0, 7) }}</a> ·
+        <span>{{ meta.generatedAt | date: 'd MMM y, HH:mm' }}</span> ·
+        <span>model {{ meta.modelId }}</span> ·
+        <span>prompts v{{ meta.promptSetVersion }}</span> ·
+        <span class="chip s-badge mapping" title="What 'integration' means in this measurement">{{ meta.integrationMappedTo }}</span>
+      </div>
+    </div>
+  </div>
+
+  <app-summary-card [report]="report" />
+  <app-top-risks [risks]="report.topRisks" [meta]="meta" />
+  <app-endpoint-coverage [meta]="meta" />
+  <app-scorecard [rows]="report.scorecard" [meta]="meta" [scoreLabel]="report.summary.scoreLabel" />
+  <app-findings [findings]="report.findings" [meta]="meta" />
+
+  <div class="note">
+    Citations: {{ report.validation.citationsChecked ?? 0 }} checked, {{ report.validation.citationsResolved ?? 0 }} resolved at
+    {{ meta.commitSha.slice(0, 7) }}.
+  </div>
+} @else if (outcome(); as done) {
+  <div class="panel outcome stack" role="status">
+    <h1>Scan {{ done.status === 'Failed' ? 'failed' : 'cancelled' }}</h1>
+    <ul>
+      @for (reason of done.failureReasons; track $index) {
+        <li>{{ reason }}</li>
+      } @empty {
+        <li class="muted">No report was stored for this run.</li>
+      }
+    </ul>
+  </div>
+} @else if (notFound()) {
+  <div class="panel"><h1>Run not found</h1></div>
+}

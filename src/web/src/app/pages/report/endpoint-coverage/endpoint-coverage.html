@@ -1,0 +1,76 @@
+<div class="panel stack coverage">
+  <div class="head">
+    <h2>Endpoint coverage</h2>
+    <div class="filters" role="group" aria-label="Filter by status">
+      @for (f of filters; track f) {
+        <button type="button" [attr.data-status]="f" [attr.aria-pressed]="store.statusFilter() === f" (click)="store.statusFilter.set(f)">
+          {{ labels[f] }} {{ store.statusCounts()[f] }}
+        </button>
+      }
+    </div>
+  </div>
+  <label class="search">
+    Search
+    <input type="search" placeholder="Route, controller or test" [value]="store.search()" (input)="setSearch($event)" />
+  </label>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Method</th><th>Route</th><th>Status</th><th>Evidence</th><th><span class="sr-only">Details</span></th></tr>
+      </thead>
+      <tbody>
+        @for (c of store.visibleControllers(); track c.controller + c.sourcePath) {
+          <tr class="ctrl">
+            <td colspan="2">{{ c.controller }} <span class="muted mono">{{ c.routePrefix }}</span></td>
+            <td colspan="3"><app-status-chip [status]="c.status" /></td>
+          </tr>
+          @for (e of c.endpoints; track $index) {
+            @let k = key(c.controller, e.method, e.route);
+            @let open = expanded().has(k);
+            <tr class="endpoint" [attr.data-key]="e.method + ' ' + e.route">
+              <td class="mono">{{ e.method }}</td>
+              <td class="mono route">{{ e.route }}</td>
+              <td><app-status-chip [status]="e.status" /></td>
+              <td>
+                @if (e.evidence.length > 0) {
+                  <app-evidence-link [meta]="meta()" [citation]="e.evidence[0]" />
+                }
+              </td>
+              <td>
+                <button type="button" class="btn sm expand" [attr.aria-expanded]="open" (click)="toggle(k)">{{ open ? 'Hide' : 'Details' }}</button>
+              </td>
+            </tr>
+            @if (open) {
+              <tr class="detail">
+                <td colspan="5">
+                  <div class="stack">
+                    @for (citation of e.evidence; track citation) {
+                      <app-evidence-link [meta]="meta()" [citation]="citation" />
+                    } @empty {
+                      <span class="muted">No test cites this endpoint.</span>
+                    }
+                    @if (e.notes) {
+                      <div>{{ e.notes }}</div>
+                    }
+                    @if (e.falsePositive) {
+                      <div><span class="chip s-weak">False positive</span> the test passes without checking the result.</div>
+                    }
+                    @if (!e.verified) {
+                      <div class="muted">Not read in full: this grade is unverified.</div>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          }
+        } @empty {
+          <tr>
+            <td colspan="5" class="muted">
+              {{ store.search().trim() ? 'No endpoints matching "' + store.search().trim() + '".' : 'No endpoints with this status.' }}
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

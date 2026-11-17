@@ -1,0 +1,6 @@
+.risk { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; border-left: 4px solid var(--warn); }
+.risk.High, .risk.Critical { border-left-color: var(--bad); }
+.risk summary { cursor: pointer; font-weight: 600; }
+.risk ul { margin: 8px 0; padding-left: 18px; }
+.sev { font-weight: 400; font-size: .75rem; color: var(--muted); margin-left: 6px; }
+.why { margin-top: 4px; }
