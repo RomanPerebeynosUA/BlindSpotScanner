@@ -113,10 +113,14 @@ without brackets, e.g. `Trait("Category","Integration")`; an entry without `(` m
 
 ## D19 — Endpoint extraction scope (2026-11-17)
 `AspNetCoreEndpointExtractor` reads C# syntax with Roslyn (no compilation). Supported: attribute
-routing (class `[Route]`, `[controller]`/`[action]` tokens, `Http*` verbs, method `[Route]`,
-absolute `/` and `~/` templates) and minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapPatch`/
-`MapDelete`, with `MapGroup` prefixes through call chains and local variables). Not supported:
-conventional routing, `[Area]`, `[Route]` inherited from a base class, `MapMethods`. A route that
-isn't a string literal, and a controller with no attribute-routed actions, become unverified
-reasons; nothing is dropped silently. A file's minimal APIs form one controller row named after
-the file. Roslyn is pinned to 5.0.0 to match EF Core Design's exact dependency.
+routing (every class `[Route]` × every verb template or method `[Route]`, `[controller]`/`[action]`
+tokens, absolute `/` and `~/` templates) and minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapPatch`/
+`MapDelete`, with `MapGroup` prefixes through call chains and the nearest in-scope local). Not
+supported: conventional routing, `[Area]`, `MapMethods`. These become unverified reasons, so nothing
+is dropped silently: a non-literal route; a controller with no attribute-routed actions; a partial
+controller or one deriving from a custom base (an inherited or other-file `[Route]` isn't read); an
+action routed without an `Http*` verb; a minimal API whose group prefix comes from a parameter or
+field this file doesn't resolve; any non-`.cs` file. In P4, non-`.cs` test files and files whose
+tests may be inherited from a class base go to Ambiguous (the LLM step), not Other. Derived test
+attributes (`[SkippableFact]`, `[IntegrationTheory]`) count as tests. A file's minimal APIs form one
+controller row named after the file. Roslyn is pinned to 5.0.0 to match EF Core Design's exact dependency.

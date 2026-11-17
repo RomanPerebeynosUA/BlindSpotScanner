@@ -116,4 +116,34 @@ public class ClassifyPhaseTests
         // Assert
         file.TestMethods.Should().Equal("BooksApiTests.A");
     }
+
+    [Fact]
+    public async Task Classify_NoTestMethodsWithCustomBase_IsAmbiguous()
+    {
+        // Act (tests may be inherited from a base class in another file)
+        var file = await ClassifyOne("tests/Api.IntegrationTests/BooksApiTests.cs", baseTypes: ["BooksApiTestsBase", "IDisposable"], tests: []);
+
+        // Assert
+        new { file.Kind, file.Reason }.Should().BeEquivalentTo(new { Kind = TestFileKind.Ambiguous, Reason = "no test methods here; tests may be inherited from BooksApiTestsBase" });
+    }
+
+    [Fact]
+    public async Task Classify_NoTestMethodsWithOnlyInterfaces_IsOther()
+    {
+        // Act
+        var file = await ClassifyOne("tests/Api.IntegrationTests/Seed.cs", baseTypes: ["IAsyncLifetime"], tests: []);
+
+        // Assert
+        new { file.Kind, file.Reason }.Should().BeEquivalentTo(new { Kind = TestFileKind.Other, Reason = "no test methods" });
+    }
+
+    [Fact]
+    public async Task Classify_NonCSharpFile_IsAmbiguous()
+    {
+        // Act
+        var file = await ClassifyOne("tests/e2e/books.spec.ts", tests: []);
+
+        // Assert
+        new { file.Kind, file.Reason }.Should().BeEquivalentTo(new { Kind = TestFileKind.Ambiguous, Reason = "not a C# file; profile rules apply to C# only" });
+    }
 }

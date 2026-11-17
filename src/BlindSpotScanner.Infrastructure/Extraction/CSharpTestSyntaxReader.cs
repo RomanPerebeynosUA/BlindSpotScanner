@@ -13,8 +13,11 @@ public sealed class CSharpTestSyntaxReader : ITestSyntaxReader
 {
     private static readonly HashSet<string> TestAttributes = new(StringComparer.Ordinal)
     {
-        "Fact", "Theory", "Test", "TestCase", "TestMethod", "DataTestMethod",
+        "TestCase", "TestCaseSource", "TestMethod", "DataTestMethod",
     };
+
+    /// <summary>Derived test attributes keep their base name as a suffix ([SkippableFact], [IntegrationTheory], [Test]).</summary>
+    private static readonly string[] TestAttributeSuffixes = ["Fact", "Theory", "Test"];
 
     public TestFileFacts Read(string source)
     {
@@ -31,12 +34,15 @@ public sealed class CSharpTestSyntaxReader : ITestSyntaxReader
             .ToList();
         var baseTypes = classes.SelectMany(c => c.BaseList?.Types ?? default).Select(t => Tokens(t.Type)).ToList();
         var testMethods = methods
-            .Where(m => m.Method.AttributeLists.SelectMany(l => l.Attributes).Any(a => TestAttributes.Contains(SyntaxNames.Of(a))))
+            .Where(m => m.Method.AttributeLists.SelectMany(l => l.Attributes).Any(a => IsTestAttribute(SyntaxNames.Of(a))))
             .Select(m => $"{m.Class.Identifier.ValueText}.{m.Method.Identifier.ValueText}")
             .ToList();
 
         return new TestFileFacts(attributes, baseTypes, testMethods);
     }
+
+    private static bool IsTestAttribute(string name) =>
+        TestAttributes.Contains(name) || TestAttributeSuffixes.Any(suffix => name.EndsWith(suffix, StringComparison.Ordinal));
 
     private static string Normalize(AttributeSyntax attribute) =>
         SyntaxNames.Of(attribute) + (attribute.ArgumentList is { } arguments ? Tokens(arguments) : string.Empty);

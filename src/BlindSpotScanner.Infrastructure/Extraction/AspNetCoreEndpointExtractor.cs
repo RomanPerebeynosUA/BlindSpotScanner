@@ -37,8 +37,16 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
     /// <summary>Bounds group-variable chasing (a variable defined from itself would loop).</summary>
     private const int MaxGroupDepth = 16;
 
+    /// <summary>Receivers that are routing roots: a parameter of these types, or the static WebApplication factory.</summary>
+    private static readonly HashSet<string> RootBuilders = new(StringComparer.Ordinal) { "WebApplication", "IEndpointRouteBuilder" };
+
     public ExtractionResult Extract(string path, string source)
     {
+        if (!path.EndsWith(".cs", StringComparison.Ordinal))
+        {
+            return new ExtractionResult([], [$"{path}: not a C# file; endpoints not extracted"]);
+        }
+
         var root = CSharpSyntaxTree.ParseText(source, path: path).GetRoot();
         var controllers = new List<ExtractedController>();
         var warnings = new List<string>();
@@ -65,50 +73,92 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
     private static void ExtractController(string path, ClassDeclarationSyntax type, List<ExtractedController> controllers, List<string> warnings)
     {
         var name = type.Identifier.ValueText;
-        var routeAttribute = Attributes(type.AttributeLists).FirstOrDefault(a => Name(a) == "Route");
-        string? prefix = null;
-        if (routeAttribute is not null)
+        var prefixes = new List<string?>();
+        foreach (var route in Attributes(type.AttributeLists).Where(a => Name(a) == "Route"))
         {
-            if (!TryTemplate(routeAttribute, out var classTemplate))
+            if (!TryTemplate(route, out var classTemplate))
             {
                 warnings.Add($"{path}: route of {name} is not a string literal; endpoints not extracted");
                 return;
             }
 
-            prefix = Clean(ReplaceTokens(classTemplate, name, action: null));
+            prefixes.Add(Clean(ReplaceTokens(classTemplate, name, action: null)));
+        }
+
+        if (prefixes.Count == 0)
+        {
+            prefixes.Add(null);
+        }
+
+        if (type.Modifiers.Any(SyntaxKind.PartialKeyword))
+        {
+            warnings.Add($"{path}: {name} is partial; a [Route] or actions in its other files are not read");
+        }
+
+        if (type.BaseList?.Types.FirstOrDefault() is { } first
+            && SimpleName(first.Type) is var baseName and not ("Controller" or "ControllerBase")
+            && !IsInterfaceName(baseName))
+        {
+            warnings.Add($"{path}: {name} derives from {baseName}; an inherited [Route] or inherited actions are not read");
         }
 
         var endpoints = new List<ExtractedEndpoint>();
         var warningsBefore = warnings.Count;
         foreach (var method in type.Members.OfType<MethodDeclarationSyntax>().Where(IsAction))
         {
-            var attributes = Attributes(method.AttributeLists).ToList();
-            var methodRoute = attributes.FirstOrDefault(a => Name(a) == "Route");
-            foreach (var verb in attributes.Where(a => Verbs.ContainsKey(Name(a))))
-            {
-                var template = string.Empty;
-                var literal = TemplateArgument(verb) is not null
-                    ? TryTemplate(verb, out template)
-                    : methodRoute is null || TryTemplate(methodRoute, out template);
-                if (!literal)
-                {
-                    warnings.Add($"{path}: route of {name}.{method.Identifier.ValueText} is not a string literal; endpoint not extracted");
-                    continue;
-                }
-
-                endpoints.Add(new ExtractedEndpoint(Verbs[Name(verb)], Combine(prefix, ReplaceTokens(template, name, method.Identifier.ValueText))));
-            }
+            ExtractAction(path, name, method, prefixes, endpoints, warnings);
         }
 
         if (endpoints.Count > 0)
         {
-            controllers.Add(new ExtractedController(name, path, prefix, endpoints));
+            controllers.Add(new ExtractedController(name, path, prefixes[0], endpoints));
         }
         else if (warnings.Count == warningsBefore)
         {
             warnings.Add($"{path}: {name} has no attribute-routed actions");
         }
     }
+
+    /// <summary>One endpoint per class route × verb template (a verb without a template takes each method [Route]).</summary>
+    private static void ExtractAction(string path, string controller, MethodDeclarationSyntax method, List<string?> prefixes, List<ExtractedEndpoint> endpoints, List<string> warnings)
+    {
+        var action = method.Identifier.ValueText;
+        var attributes = Attributes(method.AttributeLists).ToList();
+        var verbs = attributes.Where(a => Verbs.ContainsKey(Name(a))).ToList();
+        var methodRoutes = attributes.Where(a => Name(a) == "Route").ToList();
+        if (verbs.Count == 0)
+        {
+            if (methodRoutes.Count > 0 || attributes.Any(a => Name(a) == "AcceptVerbs"))
+            {
+                warnings.Add($"{path}: {controller}.{action} is routed without an Http* verb attribute; endpoint not extracted");
+            }
+
+            return;
+        }
+
+        foreach (var verb in verbs)
+        {
+            var sources = TemplateArgument(verb) is not null || methodRoutes.Count == 0 ? [verb] : methodRoutes;
+            var templates = new List<string>();
+            foreach (var source in sources)
+            {
+                if (!TryTemplate(source, out var template))
+                {
+                    warnings.Add($"{path}: route of {controller}.{action} is not a string literal; endpoint not extracted");
+                    return;
+                }
+
+                templates.Add(ReplaceTokens(template, controller, action));
+            }
+
+            endpoints.AddRange(
+                from prefix in prefixes
+                from template in templates
+                select new ExtractedEndpoint(Verbs[Name(verb)], Combine(prefix, template)));
+        }
+    }
+
+    private static bool IsInterfaceName(string name) => name.Length > 1 && name[0] == 'I' && char.IsUpper(name[1]);
 
     private static List<ExtractedEndpoint> ExtractMinimalApis(string path, SyntaxNode root, List<string> warnings)
     {
@@ -122,11 +172,16 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
                 continue;
             }
 
-            if (!TryLiteral(call.ArgumentList.Arguments[0].Expression, out var template)
-                || !TryGroupPrefix(access.Expression, root, MaxGroupDepth, out var prefix))
+            var line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (!TryLiteral(call.ArgumentList.Arguments[0].Expression, out var template))
             {
-                var line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
                 warnings.Add($"{path}: route of {access.Name.Identifier.ValueText} call at line {line} is not a string literal; endpoint not extracted");
+                continue;
+            }
+
+            if (!TryGroupPrefix(access.Expression, MaxGroupDepth, out var prefix))
+            {
+                warnings.Add($"{path}: group prefix of {access.Name.Identifier.ValueText} call at line {line} cannot be resolved; endpoint not extracted");
                 continue;
             }
 
@@ -139,9 +194,12 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
 
     /// <summary>
     /// The MapGroup prefix of a route builder expression: MapGroup calls add their prefix, other calls
-    /// (WithTags, RequireAuthorization, …) pass through, and a local variable is followed to its initializer.
+    /// (WithTags, RequireAuthorization, …) pass through, and a local variable is followed to its nearest
+    /// earlier declaration in scope. A routing root (a WebApplication or IEndpointRouteBuilder parameter,
+    /// or the static WebApplication factory) has no prefix. Anything else (a RouteGroupBuilder
+    /// parameter, a field) gets its prefix from code this file doesn't show, so it can't be resolved.
     /// </summary>
-    private static bool TryGroupPrefix(ExpressionSyntax builder, SyntaxNode root, int depth, out string prefix)
+    private static bool TryGroupPrefix(ExpressionSyntax builder, int depth, out string prefix)
     {
         prefix = string.Empty;
         if (depth == 0)
@@ -152,7 +210,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         switch (builder)
         {
             case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } call:
-                if (!TryGroupPrefix(access.Expression, root, depth - 1, out var outer))
+                if (!TryGroupPrefix(access.Expression, depth - 1, out var outer))
                 {
                     return false;
                 }
@@ -171,12 +229,35 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
                 prefix = Clean($"{outer}/{group}");
                 return true;
             case IdentifierNameSyntax identifier:
-                var declaration = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
-                    .FirstOrDefault(v => v.Identifier.ValueText == identifier.Identifier.ValueText && v.Initializer is not null);
-                return declaration is null || TryGroupPrefix(declaration.Initializer!.Value, root, depth - 1, out prefix);
+                if (NearestLocal(identifier) is { Initializer: { } initializer })
+                {
+                    return TryGroupPrefix(initializer.Value, depth - 1, out prefix);
+                }
+
+                var name = identifier.Identifier.ValueText;
+                var parameter = identifier.Ancestors()
+                    .SelectMany(a => a.ChildNodes().OfType<ParameterListSyntax>())
+                    .SelectMany(list => list.Parameters)
+                    .FirstOrDefault(p => p.Identifier.ValueText == name);
+                return parameter is null
+                    ? name == "WebApplication"
+                    : parameter.Type is { } parameterType && RootBuilders.Contains(SimpleName(parameterType));
             default:
-                return true;
+                return false;
         }
+    }
+
+    /// <summary>The latest declaration of this local, before it, in a scope that contains it.</summary>
+    private static VariableDeclaratorSyntax? NearestLocal(IdentifierNameSyntax identifier)
+    {
+        var name = identifier.Identifier.ValueText;
+        var ancestors = identifier.Ancestors().ToHashSet();
+        return identifier.SyntaxTree.GetRoot().DescendantNodes().OfType<VariableDeclaratorSyntax>()
+            .Where(v => v.Identifier.ValueText == name && v.Initializer is not null && v.SpanStart < identifier.SpanStart)
+            .Where(v => v.Parent?.Parent is LocalDeclarationStatementSyntax statement
+                && (statement.Parent is GlobalStatementSyntax global ? global.Parent : statement.Parent) is { } scope
+                && ancestors.Contains(scope))
+            .MaxBy(v => v.SpanStart);
     }
 
     private static bool IsAction(MethodDeclarationSyntax method) =>

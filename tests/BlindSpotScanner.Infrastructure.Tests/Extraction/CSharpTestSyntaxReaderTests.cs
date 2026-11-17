@@ -93,4 +93,25 @@ public class CSharpTestSyntaxReaderTests
         // Assert
         facts.Attributes.Should().Equal("Fact");
     }
+
+    [Fact]
+    public void Read_CustomTestAttributes_AreTestMethods()
+    {
+        // Arrange (derived xUnit attributes and NUnit sources still mark tests)
+        const string source = """
+            public class StockTests
+            {
+                [SkippableFact] public void A() { }
+                [IntegrationTheory] public void B() { }
+                [TestCaseSource(nameof(Cases))] public void C(int x) { }
+                [Helper] public void D() { }
+            }
+            """;
+
+        // Act
+        var facts = new CSharpTestSyntaxReader().Read(source);
+
+        // Assert
+        facts.TestMethods.Should().Equal("StockTests.A", "StockTests.B", "StockTests.C");
+    }
 }

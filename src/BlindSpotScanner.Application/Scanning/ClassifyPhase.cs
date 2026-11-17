@@ -31,9 +31,20 @@ public sealed class ClassifyPhase(IBlobReader blobs, ITestSyntaxReader reader)
             return (TestFileKind.Other, $"matches not-integration glob '{notIntegration}'");
         }
 
+        if (!path.EndsWith(".cs", StringComparison.Ordinal))
+        {
+            return (TestFileKind.Ambiguous, "not a C# file; profile rules apply to C# only");
+        }
+
         if (facts.TestMethods.Count == 0)
         {
-            return (TestFileKind.Other, "no test methods");
+            // A class base (not an interface, not a known integration helper base) may carry the tests.
+            var inheritedFrom = facts.BaseTypes.FirstOrDefault(b =>
+                !IsInterfaceName(NameBefore(b, '<'))
+                && !profile.IntegrationBaseTypes.Select(RemoveWhitespace).Any(entry => BaseTypeMatches(entry, b)));
+            return inheritedFrom is null
+                ? (TestFileKind.Other, "no test methods")
+                : (TestFileKind.Ambiguous, $"no test methods here; tests may be inherited from {inheritedFrom}");
         }
 
         if (FirstGlob(path, profile.IntegrationGlobs) is { } integration)
@@ -76,6 +87,8 @@ public sealed class ClassifyPhase(IBlobReader blobs, ITestSyntaxReader reader)
         entry.Contains('<', StringComparison.Ordinal)
             ? string.Equals(entry, baseType, StringComparison.Ordinal)
             : string.Equals(entry, NameBefore(baseType, '<'), StringComparison.Ordinal);
+
+    private static bool IsInterfaceName(string name) => name.Length > 1 && name[0] == 'I' && char.IsUpper(name[1]);
 
     private static string NameBefore(string text, char separator) =>
         text.IndexOf(separator, StringComparison.Ordinal) is var at and >= 0 ? text[..at] : text;

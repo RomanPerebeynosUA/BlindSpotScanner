@@ -48,6 +48,7 @@ public class MinimalApiExtractionTests
     {
         // Arrange
         const string source = """
+            var app = WebApplication.CreateBuilder(args).Build();
             var orders = app.MapGroup("api/orders").WithTags("Orders");
             orders.MapPost("/{id}/cancel", (int id) => Results.Ok());
             """;
@@ -64,6 +65,7 @@ public class MinimalApiExtractionTests
     {
         // Arrange
         const string source = """
+            var app = WebApplication.Create();
             app.MapGroup("api").MapGroup("v1").MapGet("books", () => Results.Ok());
             """;
 
@@ -80,7 +82,7 @@ public class MinimalApiExtractionTests
         // Arrange
         const string source = """
             const string Version = "v1";
-
+            var app = WebApplication.Create();
             app.MapGet($"api/{Version}/x", () => Results.Ok());
             """;
 
@@ -96,6 +98,7 @@ public class MinimalApiExtractionTests
     {
         // Arrange
         const string source = """
+            var app = WebApplication.Create();
             app.MapGet("/health", () => Results.Ok());
 
             [Route("api/books")]
@@ -110,5 +113,72 @@ public class MinimalApiExtractionTests
 
         // Assert
         result.Controllers.Select(c => c.Controller).Should().Equal("BooksController", "HealthEndpoints");
+    }
+
+    [Fact]
+    public void Extract_ReusedGroupVariableName_UsesNearestDeclaration()
+    {
+        // Arrange
+        const string source = """
+            public static class Endpoints
+            {
+                public static void MapBooks(this WebApplication app)
+                {
+                    var group = app.MapGroup("/books");
+                    group.MapGet("/", () => Results.Ok());
+                }
+
+                public static void MapOrders(this WebApplication app)
+                {
+                    var group = app.MapGroup("/orders");
+                    group.MapGet("/{id}", (int id) => Results.Ok());
+                }
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get books", "Get orders/{id}");
+    }
+
+    [Fact]
+    public void Extract_GroupBuilderParameter_IsWarned()
+    {
+        // Arrange (the group prefix is set by the caller, which this file does not show)
+        const string source = """
+            public static class BookEndpoints
+            {
+                public static void MapBookEndpoints(this RouteGroupBuilder group) =>
+                    group.MapGet("/{id}", (int id) => Results.Ok());
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        result.Warnings.Should().Equal("src/Api/Endpoints/HealthEndpoints.cs: group prefix of MapGet call at line 4 cannot be resolved; endpoint not extracted");
+    }
+
+    [Fact]
+    public void Extract_FieldReceiver_IsWarned()
+    {
+        // Arrange
+        const string source = """
+            public class BookModule
+            {
+                private RouteGroupBuilder _group = null!;
+
+                public void Map() => _group.MapGet("/{id}", (int id) => Results.Ok());
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        result.Warnings.Should().Equal("src/Api/Endpoints/HealthEndpoints.cs: group prefix of MapGet call at line 5 cannot be resolved; endpoint not extracted");
     }
 }

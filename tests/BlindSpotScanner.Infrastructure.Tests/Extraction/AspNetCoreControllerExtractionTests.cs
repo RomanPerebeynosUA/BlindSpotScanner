@@ -234,6 +234,118 @@ public class AspNetCoreControllerExtractionTests
     }
 
     [Fact]
+    public void Extract_CustomBaseController_IsWarned()
+    {
+        // Arrange (the prefix lives on a base class, possibly in another file)
+        const string source = """
+            public class BooksController : ApiControllerBase
+            {
+                [HttpGet("{id}")] public IActionResult Get(int id) => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        result.Warnings.Should().Equal("src/Api/Controllers/X.cs: BooksController derives from ApiControllerBase; an inherited [Route] or inherited actions are not read");
+    }
+
+    [Fact]
+    public void Extract_PartialController_IsWarned()
+    {
+        // Arrange
+        const string source = """
+            public partial class BooksController : ControllerBase
+            {
+                [HttpGet("{id}")] public IActionResult Get(int id) => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        result.Warnings.Should().Equal("src/Api/Controllers/X.cs: BooksController is partial; a [Route] or actions in its other files are not read");
+    }
+
+    [Fact]
+    public void Extract_TwoClassRoutes_YieldEndpointsForEach()
+    {
+        // Arrange
+        const string source = """
+            [Route("api/v1/books")]
+            [Route("api/v2/books")]
+            public class BooksController : ControllerBase
+            {
+                [HttpGet] public IActionResult List() => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get api/v1/books", "Get api/v2/books");
+    }
+
+    [Fact]
+    public void Extract_TwoMethodRoutes_YieldEndpointsForEach()
+    {
+        // Arrange
+        const string source = """
+            [Route("api/books")]
+            public class BooksController : ControllerBase
+            {
+                [HttpGet]
+                [Route("latest")]
+                [Route("newest")]
+                public IActionResult Latest() => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get api/books/latest", "Get api/books/newest");
+    }
+
+    [Fact]
+    public void Extract_RouteWithoutVerb_IsWarned()
+    {
+        // Arrange
+        const string source = """
+            [Route("api/books")]
+            public class BooksController : ControllerBase
+            {
+                [HttpGet] public IActionResult List() => Ok();
+                [Route("search")] public IActionResult Search() => Ok();
+            }
+            """;
+
+        // Act
+        var result = Extract(source);
+
+        // Assert
+        result.Warnings.Should().Equal("src/Api/Controllers/X.cs: BooksController.Search is routed without an Http* verb attribute; endpoint not extracted");
+    }
+
+    [Fact]
+    public void Extract_NonCSharpFile_IsWarned()
+    {
+        // Act
+        var result = new AspNetCoreEndpointExtractor().Extract("src/routes/books.ts", "router.get('/books', list);");
+
+        // Assert
+        new { result.Controllers, result.Warnings }.Should().BeEquivalentTo(new
+        {
+            Controllers = Array.Empty<ExtractedController>(),
+            Warnings = new[] { "src/routes/books.ts: not a C# file; endpoints not extracted" },
+        });
+    }
+
+    [Fact]
     public void Extract_QualifiedAttributeNames_AreRecognized()
     {
         // Arrange
