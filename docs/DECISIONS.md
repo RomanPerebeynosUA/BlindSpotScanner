@@ -84,3 +84,21 @@ The schema's verdict enum has no "unknown" value, so a report with zero endpoint
 endpoint unverified, keeps `verdict: weak`. Its Overall bullet doesn't claim weakness: it says
 "Integration testing could not be assessed: …" (principle 1: never present unverified as a
 finding). Scorecard weights must sum to 1 within 0.0001, so weights like thirds can pass.
+
+## D16 — GitHub access: typed HttpClient + PAT (2026-11-16)
+The user's choice: a small typed `GitHubClient` (four REST endpoints) instead of Octokit, with a
+personal access token (`GitHub:Token`, from user secrets or an env var; never in appsettings).
+GitHub App auth arrives in M11. `GitHubRateLimitHandler` waits on `Retry-After` or
+`x-ratelimit-reset` (when `x-ratelimit-remaining` is 0) up to `GitHub:MaxRateLimitWait` (60s),
+retries at most 3 times, and otherwise fails with the reset time; any other 403 fails at once.
+`tests/BlindSpotScanner.Infrastructure.Tests` suppresses NU1608 because WireMock.Net's Handlebars
+helpers pin Humanizer 2.14.1 while JsonSchema.Net needs Humanizer.Core 3.x (test project only).
+Waits are measured against the response's `Date` header (not the local clock). A 429 without
+headers, or a 403 whose body names a "secondary rate limit", waits one minute (GitHub's advice).
+
+## D17 — Enumeration excludes are fixed, not per profile (2026-11-17)
+The user's choice: profiles don't carry exclude globs, so the `Exclude` line was dropped from
+`profiles/_template.md`. `EnumeratePhase` always excludes `bin`, `obj`, `node_modules`, `vendor`,
+`third_party`, `dist`, `wwwroot/lib`, `Generated`/`generated`, `*.Designer.cs` and `*.g.cs`.
+Symlinks (mode 120000) are not counted. Blob text is UTF-8 without its BOM; content that isn't
+valid UTF-8 decodes as Latin-1.
