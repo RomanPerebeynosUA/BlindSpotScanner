@@ -27,7 +27,11 @@ public interface IScanRequestStore
 
     Task<IReadOnlyList<ScanStep>> StepsAsync(Guid runId, CancellationToken ct);
 
-    Task SaveChangesAsync(CancellationToken ct);
+    /// <summary>False when the run changed meanwhile (for example a worker took it); nothing was saved.</summary>
+    Task<bool> SaveChangesAsync(CancellationToken ct);
+
+    /// <summary>Re-reads the run after a failed save.</summary>
+    Task ReloadAsync(ScanRun run, CancellationToken ct);
 }
 
 /// <summary>The application side of the scan/run endpoints (OpenAPI): start, read, steps, cancel.</summary>
@@ -69,12 +73,23 @@ public sealed class ScanRequests(IScanRequestStore store, IScanQueue queue, ISca
             return false;
         }
 
-        var wasQueued = run.Status == Domain.Enums.RunStatus.Queued;
-        run.RequestCancel();
-        await store.SaveChangesAsync(ct);
-        if (wasQueued)
+        // A worker may take the run between the read and the save; then the save fails, the run is
+        // re-read (now Running) and the cancel becomes a request the worker honours at its next phase.
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            await events.CompletedAsync(run.Id, run.Status, ct);
+            var wasQueued = run.Status == Domain.Enums.RunStatus.Queued;
+            run.RequestCancel();
+            if (await store.SaveChangesAsync(ct))
+            {
+                if (wasQueued)
+                {
+                    await events.CompletedAsync(run.Id, run.Status, ct);
+                }
+
+                return true;
+            }
+
+            await store.ReloadAsync(run, ct);
         }
 
         return true;

@@ -41,6 +41,16 @@ public class ScanFlowTests(ApiFactory factory) : IClassFixture<ApiFactory>
         }
     }
 
+    /// <summary>Polls the steps until <paramref name="phase"/> has been recorded.</summary>
+    private static async Task WaitForStepAsync(HttpClient client, Guid runId, string phase)
+    {
+        using var deadline = new CancellationTokenSource(Timeout);
+        while (!(await client.GetFromJsonAsync<JsonElement>($"/api/runs/{runId}/steps", deadline.Token)).EnumerateArray().Any(s => s.GetProperty("phase").GetString() == phase))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100), deadline.Token);
+        }
+    }
+
     [Fact]
     public async Task PostScan_WorkerRuns_GetReturnsReport()
     {
@@ -129,6 +139,29 @@ public class ScanFlowTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         // Assert
         new { status, HasProgress = progress.Count > 0 }.Should().BeEquivalentTo(new { status = "Succeeded", HasProgress = true });
+    }
+
+    [Fact]
+    public async Task CancelRunningScan_StopsAtNextPhase_EndsCancelled()
+    {
+        // Arrange (P4b's LLM answer is slow; cancel once P4 is done, so it lands inside P4b)
+        using var client = factory.CreateClient();
+        var runId = await StartScanAsync(client, await factory.SeedRepositoryAsync(marker: FakeClaudeServer.SlowMarker));
+        await WaitForStepAsync(client, runId, "P4");
+
+        // Act
+        using var cancel = await client.PostAsync($"/api/runs/{runId}/cancel", null);
+        var body = await WaitForOutcomeAsync(client, runId);
+
+        // Assert
+        var steps = await client.GetFromJsonAsync<JsonElement>($"/api/runs/{runId}/steps");
+        new
+        {
+            cancel.StatusCode,
+            Status = body.GetProperty("status").GetString(),
+            HasReport = body.TryGetProperty("meta", out _),
+            LastPhase = steps.EnumerateArray().Last().GetProperty("phase").GetString(),
+        }.Should().BeEquivalentTo(new { StatusCode = HttpStatusCode.Accepted, Status = "Cancelled", HasReport = false, LastPhase = "P4b" });
     }
 
     [Fact]

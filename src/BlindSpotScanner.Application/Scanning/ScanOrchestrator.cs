@@ -12,6 +12,8 @@ namespace BlindSpotScanner.Application.Scanning;
 /// records a ScanStep per phase, publishes progress, verifies every citation at the pinned commit,
 /// and stores exactly one outcome: Succeeded with an immutable report, Failed with reasons, or
 /// Cancelled. A cost cap leaves later items unverified but the run still succeeds (doc 10).
+/// If the run changed hands meanwhile (lease taken over, failed by the reaper, cancelled while
+/// queued), its outcome is dropped and nothing is published: the other party's state stands.
 /// </summary>
 public sealed class ScanOrchestrator(
     IScanStore store,
@@ -21,7 +23,8 @@ public sealed class ScanOrchestrator(
     CitationVerifier verifier,
     TimeProvider time)
 {
-    public async Task<RunStatus> RunAsync(Guid runId, CancellationToken ct)
+    /// <returns>The stored outcome, or null when the run was no longer this worker's to finish.</returns>
+    public async Task<RunStatus?> RunAsync(Guid runId, CancellationToken ct)
     {
         var job = await store.LoadAsync(runId, ct);
         if (job is null)
@@ -55,7 +58,11 @@ public sealed class ScanOrchestrator(
             run.Fail([$"scan failed: {ex.GetType().Name}"]);
         }
 
-        await store.SaveAsync(run, CancellationToken.None);
+        if (!await store.SaveAsync(run, CancellationToken.None))
+        {
+            return null;
+        }
+
         await events.CompletedAsync(run.Id, run.Status, CancellationToken.None);
         return run.Status;
     }
@@ -63,9 +70,17 @@ public sealed class ScanOrchestrator(
     private async Task ScanAsync(ScanJob job, CancellationToken ct)
     {
         var run = job.Run;
+        var worker = pipelines.Options;
+        if (run.ModelId != worker.ModelId || run.PromptSetVersion != worker.PromptSetVersion)
+        {
+            // The report must state the model and prompts that produced it (principle 6); fail before spending anything.
+            run.Fail([$"This worker runs {worker.ModelId} with prompts {worker.PromptSetVersion}, but the scan was queued for {run.ModelId} with prompts {run.PromptSetVersion}."]);
+            return;
+        }
+
         if (job.Profile is null)
         {
-            run.Fail(["The repository has no profile yet."]);
+            run.Fail([$"Profile version {run.ProfileVersion} of the repository no longer exists."]);
             return;
         }
 

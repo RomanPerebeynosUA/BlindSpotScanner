@@ -160,8 +160,13 @@ The user's choice: repository and profile endpoints arrive in M7 with the pages 
 builds the scan/run endpoints only (tests seed repositories in the database). The OpenAPI contract
 wins over doc 03: cancel is `POST /api/runs/{runId}/cancel` (202), plus `GET /api/runs/{runId}/steps`.
 The queue lives on `scan_runs` (`queued_at`, `attempts`, `leased_until`, `cancel_requested`,
-`failure_reasons`): `FOR UPDATE SKIP LOCKED` dequeue, a heartbeat extends the lease, an expired
-lease is retried once, then the run is Failed. A cancelled queued run ends at once; a running one
+`failure_reasons`, `lease_owner`): `FOR UPDATE SKIP LOCKED` dequeue with a fresh lease token, a
+heartbeat (which survives transient errors) extends the lease only for its owner, an expired lease
+is retried once, then the run is Failed. `status` and `lease_owner` are EF concurrency tokens: a
+save by a worker that lost its lease, or that the reaper or a cancel overtook, is dropped and
+nothing is published; a cancel that races a dequeue re-reads the run and becomes a cancel request.
+A run measures exactly what it was queued with: its profile version, and a worker whose model or
+prompt set differs fails it up front. A cancelled queued run ends at once; a running one
 stops at its next phase and ends Cancelled with no report; a host shutdown leaves it Running so the
 lease retry picks it up. Progress travels by `pg_notify('scan_events')` and is relayed to SignalR
 groups `run:{id}` on `/hubs/scans`. Citations: every `path::Name` in the report (evidence arrays and

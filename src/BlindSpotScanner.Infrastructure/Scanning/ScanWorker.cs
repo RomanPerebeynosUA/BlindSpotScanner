@@ -8,8 +8,9 @@ using Microsoft.Extensions.Options;
 namespace BlindSpotScanner.Infrastructure.Scanning;
 
 /// <summary>
-/// Runs scans from the queue (doc 02), <c>Scan:MaxConcurrentScans</c> at a time. Each scan keeps its
-/// lease alive with a heartbeat; a cancel request or a lost lease cancels it at the next phase.
+/// Runs scans from the queue (doc 02), <c>Scan:MaxConcurrentScans</c> at a time. Each dequeue gets
+/// its own lease token, kept alive by a <see cref="LeaseKeeper"/>; a lost lease cancels the scan.
+/// A cancel request is honoured by the orchestrator at the next phase boundary (D21).
 /// Failures are logged by type and run id only: messages may name repositories, never secrets.
 /// It lives here, not in the Worker project, so the end-to-end tests can host it next to the api.
 /// </summary>
@@ -26,14 +27,14 @@ public sealed partial class ScanWorker(IServiceScopeFactory scopes, IOptions<Sca
         {
             try
             {
-                var runId = await TakeNextAsync(stoppingToken);
-                if (runId is null)
+                var job = await TakeNextAsync(stoppingToken);
+                if (job is null)
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(Options.PollMilliseconds), time, stoppingToken);
                     continue;
                 }
 
-                await RunAsync(runId.Value, stoppingToken);
+                await RunAsync(job.Value.RunId, job.Value.Owner, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -47,7 +48,7 @@ public sealed partial class ScanWorker(IServiceScopeFactory scopes, IOptions<Sca
         }
     }
 
-    private async Task<Guid?> TakeNextAsync(CancellationToken ct)
+    private async Task<(Guid RunId, Guid Owner)?> TakeNextAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var queue = scope.ServiceProvider.GetRequiredService<IScanQueue>();
@@ -57,21 +58,28 @@ public sealed partial class ScanWorker(IServiceScopeFactory scopes, IOptions<Sca
             await events.CompletedAsync(abandoned, RunStatus.Failed, ct);
         }
 
-        return await queue.TryDequeueAsync(TimeSpan.FromSeconds(Options.LeaseSeconds), ct);
+        var owner = Guid.NewGuid();
+        return await queue.TryDequeueAsync(owner, TimeSpan.FromSeconds(Options.LeaseSeconds), ct) is { } runId ? (runId, owner) : null;
     }
 
-    private async Task RunAsync(Guid runId, CancellationToken stoppingToken)
+    private async Task RunAsync(Guid runId, Guid owner, CancellationToken stoppingToken)
     {
         using var scan = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        var heartbeat = HeartbeatAsync(runId, scan);
+        var heartbeat = new LeaseKeeper(time, TimeSpan.FromSeconds(Options.HeartbeatSeconds), logger).KeepAsync(
+            async ct =>
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                return await scope.ServiceProvider.GetRequiredService<IScanQueue>().HeartbeatAsync(runId, owner, TimeSpan.FromSeconds(Options.LeaseSeconds), ct);
+            },
+            scan);
         try
         {
             await using var scope = scopes.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ScanOrchestrator>().RunAsync(runId, scan.Token);
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            // Shutting down: the run stays Running and its lease expires into a retry (doc 10).
+            // Shutting down, or the lease was lost: the run is left to its lease (a retry, or the worker that took it over).
         }
         catch (Exception ex)
         {
@@ -81,29 +89,6 @@ public sealed partial class ScanWorker(IServiceScopeFactory scopes, IOptions<Sca
         {
             await scan.CancelAsync();
             await heartbeat;
-        }
-    }
-
-    /// <summary>Extends the lease until the scan ends; cancels the scan when the lease is lost or a cancel is requested.</summary>
-    private async Task HeartbeatAsync(Guid runId, CancellationTokenSource scan)
-    {
-        try
-        {
-            while (!scan.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(Options.HeartbeatSeconds), time, scan.Token);
-                await using var scope = scopes.CreateAsyncScope();
-                var alive = await scope.ServiceProvider.GetRequiredService<IScanQueue>().HeartbeatAsync(runId, TimeSpan.FromSeconds(Options.LeaseSeconds), scan.Token);
-                var cancel = await scope.ServiceProvider.GetRequiredService<IScanStore>().IsCancelRequestedAsync(runId, scan.Token);
-                if (!alive || cancel)
-                {
-                    await scan.CancelAsync();
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // The scan ended.
         }
     }
 

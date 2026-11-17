@@ -21,12 +21,12 @@ public sealed class PostgresScanQueue(BlindSpotScannerDbContext db, TimeProvider
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<Guid?> TryDequeueAsync(TimeSpan lease, CancellationToken ct)
+    public async Task<Guid?> TryDequeueAsync(Guid owner, TimeSpan lease, CancellationToken ct)
     {
         var now = time.GetUtcNow();
         var leasedUntil = now + lease;
         var taken = await db.Database.SqlQuery<Guid>($"""
-            UPDATE scan_runs SET status = 'Running', attempts = attempts + 1, leased_until = {leasedUntil}
+            UPDATE scan_runs SET status = 'Running', attempts = attempts + 1, leased_until = {leasedUntil}, lease_owner = {owner}
             WHERE id = (
                 SELECT id FROM scan_runs
                 WHERE queued_at IS NOT NULL
@@ -39,11 +39,11 @@ public sealed class PostgresScanQueue(BlindSpotScannerDbContext db, TimeProvider
         return taken.Count == 0 ? null : taken[0];
     }
 
-    public async Task<bool> HeartbeatAsync(Guid runId, TimeSpan lease, CancellationToken ct)
+    public async Task<bool> HeartbeatAsync(Guid runId, Guid owner, TimeSpan lease, CancellationToken ct)
     {
         var leasedUntil = time.GetUtcNow() + lease;
         var updated = await db.Database.ExecuteSqlAsync(
-            $"UPDATE scan_runs SET leased_until = {leasedUntil} WHERE id = {runId} AND status = 'Running'", ct);
+            $"UPDATE scan_runs SET leased_until = {leasedUntil} WHERE id = {runId} AND status = 'Running' AND lease_owner = {owner}", ct);
         return updated == 1;
     }
 

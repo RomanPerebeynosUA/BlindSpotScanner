@@ -17,5 +17,18 @@ public sealed class EfScanRequestStore(BlindSpotScannerDbContext db) : IScanRequ
     public async Task<IReadOnlyList<ScanStep>> StepsAsync(Guid runId, CancellationToken ct) =>
         await db.ScanSteps.AsNoTracking().Where(s => s.ScanRunId == runId).OrderBy(s => s.StartedAt).ToListAsync(ct);
 
-    public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
+    public async Task<bool> SaveChangesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
+    public Task ReloadAsync(ScanRun run, CancellationToken ct) => db.Entry(run).ReloadAsync(ct);
 }

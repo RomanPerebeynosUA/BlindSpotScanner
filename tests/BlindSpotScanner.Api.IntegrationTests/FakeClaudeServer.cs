@@ -15,6 +15,11 @@ public sealed class FakeClaudeServer : IDisposable
 {
     public const string ForgeMarker = "FORGE-CITATION";
 
+    /// <summary>A profile marker that delays P4b's answer, so a test can cancel the scan while it runs.</summary>
+    public const string SlowMarker = "SLOW-SCAN";
+
+    public static readonly TimeSpan SlowDelay = TimeSpan.FromSeconds(4);
+
     private const string Books = "tests/Bookstore.IntegrationTests/BooksApiTests.cs";
     private const string Orders = "tests/Bookstore.IntegrationTests/OrdersApiTests.cs";
 
@@ -28,17 +33,21 @@ public sealed class FakeClaudeServer : IDisposable
         Answer(3, ["map integration tests", "BooksController"], BooksMap);
         Answer(4, ["map integration tests"], OrdersMap);
         Answer(5, ["classify ambiguous test files"], Classify);
+        Answer(0, ["classify ambiguous test files", SlowMarker], Classify, SlowDelay);
     }
 
     public string Url => _server.Url!;
 
     public void Dispose() => _server.Stop();
 
-    private void Answer(int priority, string[] bodyContains, string answerJson) =>
+    /// <summary>WireMock rejects a zero delay, so a delay is added only when one is asked for.</summary>
+    private static IResponseBuilder Delayed(IResponseBuilder response, TimeSpan? delay) => delay is { } d ? response.WithDelay(d) : response;
+
+    private void Answer(int priority, string[] bodyContains, string answerJson, TimeSpan? delay = null) =>
         _server.Given(Request.Create().WithPath("/v1/messages").UsingPost()
                 .WithBody(new RegexMatcher("(?s)^" + string.Concat(bodyContains.Select(t => $"(?=.*{System.Text.RegularExpressions.Regex.Escape(t)})")))))
             .AtPriority(priority)
-            .RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new
+            .RespondWith(Delayed(Response.Create().WithStatusCode(200), delay).WithBodyAsJson(new
             {
                 id = "msg_test",
                 type = "message",

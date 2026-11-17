@@ -59,6 +59,9 @@ public class ScanRun
     public decimal MaxCostUsd { get; private set; }
     public int Attempts { get; private set; }
     public DateTimeOffset? LeasedUntil { get; private set; }
+
+    /// <summary>Which worker holds the lease (a token per dequeue); only its heartbeat and saves count.</summary>
+    public Guid? LeaseOwner { get; private set; }
     public bool CancelRequested { get; private set; }
     public string[] FailureReasons { get; private set; } = [];
 

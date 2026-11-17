@@ -27,10 +27,16 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
         return run;
     }
 
-    private async Task<Guid?> DequeueAsync()
+    private async Task<Guid?> DequeueAsync(Guid? owner = null)
     {
         await using var context = db.CreateContext();
-        return await new PostgresScanQueue(context, _time).TryDequeueAsync(Lease, CancellationToken.None);
+        return await new PostgresScanQueue(context, _time).TryDequeueAsync(owner ?? Guid.NewGuid(), Lease, CancellationToken.None);
+    }
+
+    private async Task<bool> HeartbeatAsync(Guid runId, Guid owner)
+    {
+        await using var context = db.CreateContext();
+        return await new PostgresScanQueue(context, _time).HeartbeatAsync(runId, owner, Lease, CancellationToken.None);
     }
 
     private async Task<ScanRun> LoadAsync(Guid id)
@@ -117,12 +123,12 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
     {
         // Arrange
         var run = await EnqueueAsync();
-        await DequeueAsync();
+        var owner = Guid.NewGuid();
+        await DequeueAsync(owner);
         _time.Advance(TimeSpan.FromSeconds(30));
 
         // Act
-        await using var context = db.CreateContext();
-        var alive = await new PostgresScanQueue(context, _time).HeartbeatAsync(run.Id, Lease, CancellationToken.None);
+        var alive = await HeartbeatAsync(run.Id, owner);
 
         // Assert
         new { Alive = alive, (await LoadAsync(run.Id)).LeasedUntil }.Should().BeEquivalentTo(new { Alive = true, LeasedUntil = (DateTimeOffset?)_time.GetUtcNow().Add(Lease) });
@@ -141,11 +147,49 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
         }
 
         // Act
-        await using var context = db.CreateContext();
-        var alive = await new PostgresScanQueue(context, _time).HeartbeatAsync(run.Id, Lease, CancellationToken.None);
+        var alive = await HeartbeatAsync(run.Id, Guid.NewGuid());
 
         // Assert
         alive.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Heartbeat_LeaseTakenByAnotherWorker_ReturnsFalse()
+    {
+        // Arrange (worker A stalls past its lease; worker B retries the run)
+        var run = await EnqueueAsync();
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        await DequeueAsync(a);
+        _time.Advance(Lease + TimeSpan.FromSeconds(1));
+        await DequeueAsync(b);
+
+        // Act
+        var alive = new { A = await HeartbeatAsync(run.Id, a), B = await HeartbeatAsync(run.Id, b) };
+
+        // Assert
+        alive.Should().BeEquivalentTo(new { A = false, B = true });
+    }
+
+    [Fact]
+    public async Task Save_StatusChangedByOthers_IsRejected()
+    {
+        // Arrange (a worker holds the run while the reaper fails it)
+        var run = await EnqueueAsync();
+        await DequeueAsync();
+        await using var worker = db.CreateContext();
+        var held = await worker.ScanRuns.SingleAsync(r => r.Id == run.Id);
+        await using (var other = db.CreateContext())
+        {
+            await other.Database.ExecuteSqlAsync($"UPDATE scan_runs SET status = 'Failed' WHERE id = {run.Id}");
+        }
+
+        // Act
+        held.Cancel();
+        var act = () => worker.SaveChangesAsync();
+
+        // Assert
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
     }
 
     [Fact]

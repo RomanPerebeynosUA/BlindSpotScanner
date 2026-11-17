@@ -28,16 +28,26 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     /// <summary>A bookstore repository with its profile, and a queued run of it that a worker has taken.</summary>
-    private async Task<Guid> RunningScanAsync(decimal maxCostUsd = 5m, Guid? repositoryId = null)
+    private async Task<Guid> RunningScanAsync(decimal maxCostUsd = 5m, Guid? repositoryId = null, string modelId = "claude-sonnet-5-5")
     {
         await using var context = db.CreateContext();
         var repoId = repositoryId ?? await SeedRepositoryAsync(context);
-        var run = ScanRun.Enqueue(Guid.NewGuid(), repoId, null, maxCostUsd, 1, "claude-sonnet-5-5", "1.0.0", _time.GetUtcNow());
+        var run = ScanRun.Enqueue(Guid.NewGuid(), repoId, null, maxCostUsd, 1, modelId, "1.0.0", _time.GetUtcNow());
         var queue = new PostgresScanQueue(context, _time);
         await queue.EnqueueAsync(run, CancellationToken.None);
-        (await queue.TryDequeueAsync(TimeSpan.FromMinutes(2), CancellationToken.None)).Should().Be(run.Id);
+        (await queue.TryDequeueAsync(Guid.NewGuid(), TimeSpan.FromMinutes(2), CancellationToken.None)).Should().Be(run.Id);
         return run.Id;
     }
+
+    /// <summary>Runs SQL against the run while the scan is in P3, as another worker or the reaper would.</summary>
+    private RecordingEvents DuringExtract(Guid runId, Func<Guid, FormattableString> sql) => new(onProgress: async phase =>
+    {
+        if (phase == ScanPhases.Extract)
+        {
+            await using var context = db.CreateContext();
+            await context.Database.ExecuteSqlAsync(sql(runId));
+        }
+    });
 
     private static async Task<Guid> SeedRepositoryAsync(Infrastructure.Persistence.BlindSpotScannerDbContext context)
     {
@@ -61,7 +71,7 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         return repository.Id;
     }
 
-    private async Task<RunStatus> OrchestrateAsync(Guid runId, ILlmClient? llm = null, IScanEvents? events = null, IGitHubClient? github = null)
+    private async Task<RunStatus?> OrchestrateAsync(Guid runId, ILlmClient? llm = null, IScanEvents? events = null, IGitHubClient? github = null)
     {
         await using var context = db.CreateContext();
         var repo = FixtureRepository.Bookstore();
@@ -196,6 +206,88 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
 
         // Assert
         (await LoadAsync(runId)).Run.FailureReasons.Should().Equal("Repository example-org/bookstore was not found or the token has no access to it.");
+    }
+
+    [Fact]
+    public async Task Run_LeaseTakenOverMidScan_DiscardsResult()
+    {
+        // Arrange (this worker's lease expired and another worker took the run)
+        var runId = await RunningScanAsync();
+        var events = DuringExtract(runId, id => $"UPDATE scan_runs SET lease_owner = gen_random_uuid() WHERE id = {id}");
+
+        // Act
+        var status = await OrchestrateAsync(runId, events: events);
+
+        // Assert
+        var (run, _) = await LoadAsync(runId);
+        new { status, run.Status, run.ReportJson, events.Completed }.Should().BeEquivalentTo(new
+        {
+            status = (RunStatus?)null,
+            Status = RunStatus.Running,
+            ReportJson = (string?)null,
+            Completed = Array.Empty<RunStatus>(),
+        });
+    }
+
+    [Fact]
+    public async Task Run_FailedByReaperMidScan_StaysFailed()
+    {
+        // Arrange
+        var runId = await RunningScanAsync();
+        var events = DuringExtract(runId, id => $"UPDATE scan_runs SET status = 'Failed' WHERE id = {id}");
+
+        // Act
+        var status = await OrchestrateAsync(runId, events: events);
+
+        // Assert
+        new { status, (await LoadAsync(runId)).Run.Status }.Should().BeEquivalentTo(new { status = (RunStatus?)null, Status = RunStatus.Failed });
+    }
+
+    [Fact]
+    public async Task Run_ProfileEditedWhileQueued_UsesQueuedVersion()
+    {
+        // Arrange (version 2 would find no controllers at all)
+        var runId = await RunningScanAsync();
+        await using (var context = db.CreateContext())
+        {
+            var repositoryId = (await context.ScanRuns.SingleAsync(r => r.Id == runId)).RepositoryId;
+            context.RepoProfiles.Add(new RepoProfile
+            {
+                RepositoryId = repositoryId,
+                Version = 2,
+                Markdown = "# Profile v2",
+                IntegrationMappedTo = IntegrationMappedTo.RealSeam,
+                ControllerGlobs = ["nothing/**"],
+                TestGlobs = ["tests/**/*.cs"],
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Act
+        await OrchestrateAsync(runId);
+
+        // Assert
+        var report = ReportJsonSerializer.Deserialize((await LoadAsync(runId)).Run.ReportJson!);
+        new { report.Meta.ProfileVersion, report.Summary.Endpoints.Total }.Should().BeEquivalentTo(new { ProfileVersion = 1, Total = 6 });
+    }
+
+    [Fact]
+    public async Task Run_QueuedForAnotherModel_FailsBeforeScanning()
+    {
+        // Arrange
+        var runId = await RunningScanAsync(modelId: "claude-opus-5-5");
+
+        // Act
+        await OrchestrateAsync(runId);
+
+        // Assert
+        var (run, steps) = await LoadAsync(runId);
+        new { run.Status, run.FailureReasons, Steps = steps.Count }.Should().BeEquivalentTo(new
+        {
+            Status = RunStatus.Failed,
+            FailureReasons = new[] { "This worker runs claude-sonnet-5-5 with prompts 1.0.0, but the scan was queued for claude-opus-5-5 with prompts 1.0.0." },
+            Steps = 0,
+        });
     }
 
     [Fact]

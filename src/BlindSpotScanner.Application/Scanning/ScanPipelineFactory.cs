@@ -14,5 +14,8 @@ public sealed class ScanPipelineFactory(
     TimeProvider time,
     ScanPipelineOptions options)
 {
+    /// <summary>The model and prompt set this worker's pipelines use.</summary>
+    public ScanPipelineOptions Options => options;
+
     public ScanPipeline Create(ILlmClient llm) => new(github, blobs, extractor, reader, llm, validator, time, options);
 }

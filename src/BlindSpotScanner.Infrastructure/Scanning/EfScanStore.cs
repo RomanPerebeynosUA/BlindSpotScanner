@@ -22,10 +22,9 @@ public sealed class EfScanStore(BlindSpotScannerDbContext db) : IScanStore
             return null;
         }
 
+        // The version the run was queued with: an edit while it waits must not change what it measures.
         var profile = await db.RepoProfiles.AsNoTracking()
-            .Where(p => p.RepositoryId == repository.Id)
-            .OrderByDescending(p => p.Version)
-            .FirstOrDefaultAsync(ct);
+            .SingleOrDefaultAsync(p => p.RepositoryId == repository.Id && p.Version == run.ProfileVersion, ct);
         var branch = run.RequestedBranch ?? repository.DefaultBranch;
         var previousJson = await db.ScanRuns.AsNoTracking()
             .Where(r => r.RepositoryId == repository.Id && r.Status == RunStatus.Succeeded && r.Branch == branch && r.Id != runId)
@@ -44,5 +43,16 @@ public sealed class EfScanStore(BlindSpotScannerDbContext db) : IScanStore
     public Task<bool> IsCancelRequestedAsync(Guid runId, CancellationToken ct) =>
         db.ScanRuns.AsNoTracking().Where(r => r.Id == runId).Select(r => r.CancelRequested).SingleAsync(ct);
 
-    public Task SaveAsync(ScanRun run, CancellationToken ct) => db.SaveChangesAsync(ct);
+    public async Task<bool> SaveAsync(ScanRun run, CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
 }

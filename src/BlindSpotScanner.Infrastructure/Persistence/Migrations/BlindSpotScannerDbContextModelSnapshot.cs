@@ -328,6 +328,11 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("generated_at");
 
+                    b.Property<Guid?>("LeaseOwner")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_owner");
+
                     b.Property<DateTimeOffset?>("LeasedUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("leased_until");
@@ -375,6 +380,7 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnName("score");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("status");
