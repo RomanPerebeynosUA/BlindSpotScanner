@@ -20,6 +20,8 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
+    public string ConnectionString => _container.GetConnectionString();
+
     public BlindSpotScannerDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<BlindSpotScannerDbContext>()
             .UseBlindSpotScannerNpgsql(_container.GetConnectionString())
