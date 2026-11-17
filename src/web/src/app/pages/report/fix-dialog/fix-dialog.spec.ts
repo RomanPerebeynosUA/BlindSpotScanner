@@ -81,6 +81,27 @@ describe('FixDialog', () => {
     expect([added, el.querySelector('.cost')?.textContent?.trim()]).toEqual([['+ public class CancelOrderTests', '+ {', '+ }'], 'Cost: $0.04']);
   });
 
+  it('the diff is a region named after its file', async () => {
+    // Act
+    const { el } = await render(() => of(draft()));
+
+    // Assert
+    expect(el.querySelector('[role=region][aria-label="Changes to tests/Bookstore.IntegrationTests/CancelOrderTests.cs"]')).not.toBeNull();
+  });
+
+  it('a failed open without reasons shows the API detail inline', async () => {
+    // Arrange
+    const exists = problem(409, 'Branch exists', { detail: 'Branch coverage/fix-x already exists; rename it.' });
+    const { el, settle } = await render(() => of(draft()), () => throwError(() => exists));
+
+    // Act
+    submit(el);
+    await settle();
+
+    // Assert
+    expect(el.querySelector('.error')?.textContent?.trim()).toBe('Branch coverage/fix-x already exists; rename it.');
+  });
+
   it('submit sends edited branch, title and files', async () => {
     // Arrange
     const { el, settle } = await render(() => of(draft()));

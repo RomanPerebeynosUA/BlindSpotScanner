@@ -33,7 +33,7 @@
         @if (file.editing) {
           <textarea [attr.name]="'file-' + i" rows="16" [attr.aria-label]="'Content of ' + file.path" [value]="file.content" (input)="edit(i, $event)"></textarea>
         } @else {
-          <pre class="diff" [attr.aria-label]="'Changes to ' + file.path">@for (line of diff(file); track $index) {<span [class]="line.kind">{{ line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' ' }} {{ line.text }}</span>
+          <pre class="diff" role="region" [attr.aria-label]="'Changes to ' + file.path">@for (line of diff(file); track $index) {<span [class]="line.kind">{{ line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' ' }} {{ line.text }}</span>
 }</pre>
         }
       </div>
@@ -54,6 +54,9 @@
     <label>Title <input name="title" [value]="title()" (input)="title.set(read($event))" /></label>
     <label>Body (Markdown) <textarea name="body" rows="8" [value]="body()" (input)="body.set(read($event))"></textarea></label>
 
+    @if (error(); as message) {
+      <div class="error" role="alert">{{ message }}</div>
+    }
     <div class="row actions">
       <button type="button" class="btn" (click)="cancel()">Cancel</button>
       <button type="submit" class="btn primary" [disabled]="busy() || !branch().trim() || !title().trim()">

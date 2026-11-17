@@ -49,6 +49,8 @@ export class FixDialog {
   protected readonly reasons = signal<string[]>([]);
   protected readonly changed = signal<string[]>([]);
   protected readonly busy = signal(false);
+  /** Why opening failed when the API gave no list (branch exists, GitHub error). */
+  protected readonly error = signal<string | null>(null);
 
   constructor() {
     this.generate();
@@ -56,9 +58,14 @@ export class FixDialog {
 
   /** `regenerate` builds against the default branch head, after "files changed" (D25). */
   protected generate(regenerate = false): void {
+    // Nothing from the previous draft may linger while the new one is generated.
     this.draft.set(null);
     this.changed.set([]);
     this.reasons.set([]);
+    this.declined.set(null);
+    this.existing.set(null);
+    this.error.set(null);
+    this.busy.set(false);
     this.api.fixPreview(this.data.runId, this.data.findingId, regenerate).subscribe({
       next: (draft) => {
         this.draft.set(draft);
@@ -103,6 +110,7 @@ export class FixDialog {
 
     this.busy.set(true);
     this.reasons.set([]);
+    this.error.set(null);
     const body = {
       files: this.files().map((f) => ({ path: f.path, action: f.action, content: f.content })),
       branch: this.branch().trim(),
@@ -122,6 +130,8 @@ export class FixDialog {
           this.existing.set(problem.existing);
         } else if (problem?.reasons) {
           this.reasons.set(problem.reasons);
+        } else if (problem?.detail) {
+          this.error.set(problem.detail);
         }
       },
     });
@@ -136,6 +146,6 @@ export class FixDialog {
   }
 
   private problem(error: unknown): Problem | null {
-    return error instanceof HttpErrorResponse && (error.status === 409 || error.status === 422) ? ((error.error as Problem | null) ?? null) : null;
+    return error instanceof HttpErrorResponse && (error.status === 409 || error.status === 422 || error.status === 502) ? ((error.error as Problem | null) ?? null) : null;
   }
 }
