@@ -7,6 +7,9 @@ COPY src/BlindSpotScanner.Application/BlindSpotScanner.Application.csproj src/Bl
 COPY src/BlindSpotScanner.Infrastructure/BlindSpotScanner.Infrastructure.csproj src/BlindSpotScanner.Infrastructure/
 COPY src/BlindSpotScanner.Api/BlindSpotScanner.Api.csproj src/BlindSpotScanner.Api/
 RUN dotnet restore src/BlindSpotScanner.Api/BlindSpotScanner.Api.csproj
+# Prompts and the scoring rubric are embedded into Infrastructure at build time (D20).
+COPY BlindSpotScanner-Blueprint/prompts/ BlindSpotScanner-Blueprint/prompts/
+COPY BlindSpotScanner-Blueprint/docs/06-scoring-rubric.md BlindSpotScanner-Blueprint/docs/
 COPY src/ src/
 RUN dotnet publish src/BlindSpotScanner.Api/BlindSpotScanner.Api.csproj -c Release --no-restore -o /app
 

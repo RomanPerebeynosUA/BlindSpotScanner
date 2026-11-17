@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["files"],
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "kind", "confidence", "reason", "evidenceKind"],
+        "properties": {
+          "path": { "type": "string" },
+          "kind": { "type": "string", "enum": ["integration", "unit", "component", "e2e", "other"] },
+          "confidence": { "type": "string", "enum": ["High", "Med", "Low"] },
+          "reason": { "type": "string" },
+          "evidenceKind": { "type": "string", "enum": ["observed", "inferred"] }
+        }
+      }
+    }
+  }
+}
