@@ -267,6 +267,10 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_repositories");
 
+                    b.HasIndex("Owner", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_repositories_owner_name");
+
                     b.ToTable("repositories", (string)null);
                 });
 

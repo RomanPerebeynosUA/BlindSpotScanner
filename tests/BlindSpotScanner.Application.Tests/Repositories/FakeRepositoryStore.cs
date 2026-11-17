@@ -29,4 +29,8 @@ internal sealed class FakeRepositoryStore : IRepositoryStore
         Profiles.Add(profile);
         return Task.FromResult(true);
     }
+
+    public Task<IReadOnlyList<RepositorySummary>> ListAsync(CancellationToken ct) => throw new NotSupportedException();
+
+    public Task<IReadOnlyList<ScanRun>> RunsAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
 }

@@ -61,7 +61,9 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>();
-        var repository = new Repository { Id = Guid.NewGuid(), Owner = FakeGitHubServer.Owner, Name = FakeGitHubServer.Name, DefaultBranch = "main", HtmlUrl = FakeGitHubServer.HtmlUrl };
+        // Names are unique (D22); the fake GitHub serves the bookstore under any name of its owner.
+        var name = $"{FakeGitHubServer.Name}-{Guid.NewGuid():N}";
+        var repository = new Repository { Id = Guid.NewGuid(), Owner = FakeGitHubServer.Owner, Name = name, DefaultBranch = "main", HtmlUrl = $"https://github.com/{FakeGitHubServer.Owner}/{name}" };
         db.Repositories.Add(repository);
         if (withProfile)
         {

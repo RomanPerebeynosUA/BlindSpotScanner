@@ -24,7 +24,7 @@ public class ScanFlowTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     /// <summary>Polls GET /api/runs/{id} until it returns a report or a terminal status.</summary>
-    private static async Task<JsonElement> WaitForOutcomeAsync(HttpClient client, Guid runId)
+    internal static async Task<JsonElement> WaitForOutcomeAsync(HttpClient client, Guid runId)
     {
         using var deadline = new CancellationTokenSource(Timeout);
         while (true)

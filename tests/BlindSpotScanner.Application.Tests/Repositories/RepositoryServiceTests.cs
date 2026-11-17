@@ -15,7 +15,11 @@ public class RepositoryServiceTests
 
     private static Repository Existing() => new()
     {
-        Id = Guid.NewGuid(), Owner = "Example-Org", Name = "Bookstore", DefaultBranch = "main", HtmlUrl = "https://github.com/Example-Org/Bookstore",
+        Id = Guid.NewGuid(),
+        Owner = "Example-Org",
+        Name = "Bookstore",
+        DefaultBranch = "main",
+        HtmlUrl = "https://github.com/Example-Org/Bookstore",
     };
 
     [Fact]

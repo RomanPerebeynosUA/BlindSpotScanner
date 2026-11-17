@@ -26,11 +26,30 @@ public interface IRepositoryStore
 
     /// <summary>Saves both in one transaction; false when (Owner, Name) is already registered.</summary>
     Task<bool> TryAddAsync(Repository repository, RepoProfile profile, CancellationToken ct);
+
+    /// <summary>Every repository with its latest succeeded run's headline and its active run, by full name.</summary>
+    Task<IReadOnlyList<RepositorySummary>> ListAsync(CancellationToken ct);
+
+    /// <summary>The repository's runs, newest first (by generation, else queue time).</summary>
+    Task<IReadOnlyList<ScanRun>> RunsAsync(Guid repositoryId, CancellationToken ct);
 }
+
+/// <summary>A row of the repositories page (OpenAPI <c>RepositorySummary</c>, plus D22's additions).</summary>
+/// <param name="LastCoveredShare">Covered endpoints / total of the latest succeeded run; null when it had none.</param>
+/// <param name="ActiveRunId">The newest queued or running run.</param>
+public sealed record RepositorySummary(Guid Id, string FullName, string DefaultBranch, Guid? LastRunId, decimal? LastScore, decimal? LastCoveredShare, DateTimeOffset? LastScanAt, Guid? ActiveRunId);
 
 /// <summary>Registers GitHub repositories (D22): GitHub's canonical names, a branch that exists, and profile v1.</summary>
 public sealed class RepositoryService(IRepositoryStore store, IGitHubClient github)
 {
+    public Task<IReadOnlyList<RepositorySummary>> ListAsync(CancellationToken ct) => store.ListAsync(ct);
+
+    public Task<Repository?> GetAsync(Guid id, CancellationToken ct) => store.FindAsync(id, ct);
+
+    /// <summary>Null when the repository doesn't exist.</summary>
+    public async Task<IReadOnlyList<ScanRun>?> RunsAsync(Guid id, CancellationToken ct) =>
+        await store.FindAsync(id, ct) is null ? null : await store.RunsAsync(id, ct);
+
     public async Task<AddRepositoryResult> AddAsync(string url, string? defaultBranch, CancellationToken ct)
     {
         if (!GitHubRepoUrl.TryParse(url, out var parsed))
