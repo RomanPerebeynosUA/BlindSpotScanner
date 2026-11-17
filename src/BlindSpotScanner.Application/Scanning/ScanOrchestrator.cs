@@ -1,5 +1,4 @@
 using System.Globalization;
-using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Llm;
 using BlindSpotScanner.Application.Reports;
 using BlindSpotScanner.Domain.Entities;
@@ -29,13 +28,21 @@ public sealed class ScanOrchestrator(
         var job = await store.LoadAsync(runId, ct);
         if (job is null)
         {
-            return RunStatus.Failed;
+            // The run row is gone; there is nothing to record. (A run's repository can't vanish: a foreign key holds it.)
+            return null;
         }
 
         var run = job.Run;
+        var budget = new BudgetedLlmClient(llm(), run.MaxCostUsd);
         try
         {
-            await ScanAsync(job, ct);
+            // A retry starts over, so its steps replace those of the attempt that died.
+            await store.ClearStepsAsync(run.Id, ct);
+            await ScanAsync(job, budget, ct);
+        }
+        catch (RunTakenOverException)
+        {
+            return null;
         }
         catch (OperationCanceledException)
         {
@@ -48,14 +55,14 @@ public sealed class ScanOrchestrator(
 
             run.Cancel();
         }
-        catch (Exception ex) when (ex is GitHubNotFoundException or GitHubAuthenticationException or GitHubRateLimitException or FormatException)
+        catch (Exception ex)
         {
-            // These messages name the repository or URL only; they never carry a token.
-            run.Fail([ex.Message]);
+            run.Fail([ScanFailure.Describe(ex)]);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+
+        if (run.Status != RunStatus.Succeeded)
         {
-            run.Fail([$"scan failed: {ex.GetType().Name}"]);
+            run.RecordSpend(budget.SpentUsd);
         }
 
         if (!await store.SaveAsync(run, CancellationToken.None))
@@ -67,7 +74,7 @@ public sealed class ScanOrchestrator(
         return run.Status;
     }
 
-    private async Task ScanAsync(ScanJob job, CancellationToken ct)
+    private async Task ScanAsync(ScanJob job, BudgetedLlmClient budget, CancellationToken ct)
     {
         var run = job.Run;
         var worker = pipelines.Options;
@@ -84,11 +91,9 @@ public sealed class ScanOrchestrator(
             return;
         }
 
-        var budget = new BudgetedLlmClient(llm(), run.MaxCostUsd);
         var pipeline = pipelines.Create(budget);
         var url = job.Repository.HtmlUrl.TrimEnd('/') + (run.RequestedBranch is { Length: > 0 } branch ? $"/tree/{branch}" : string.Empty);
-        var outcome = await pipeline.RunAsync(run.Id, url, job.Profile, job.Previous, new StepRecorder(run.Id, store, events, time), ct);
-        run.Pin(outcome.Run.Branch, outcome.Run.CommitSha);
+        var outcome = await pipeline.RunAsync(run.Id, url, job.Profile, job.Previous, new StepRecorder(run, store, events, time), ct);
 
         var (report, violations) = (outcome.Report, outcome.Violations);
         if (budget.Exhausted)
@@ -115,39 +120,63 @@ public sealed class ScanOrchestrator(
         }
     }
 
-    /// <summary>Saves a step per phase, publishes progress, and stops the scan at a phase boundary once cancel is requested.</summary>
-    private sealed class StepRecorder(Guid runId, IScanStore store, IScanEvents events, TimeProvider time) : IScanObserver
+    /// <summary>The run's state was changed by someone else mid-scan; this worker's work is dropped.</summary>
+    private sealed class RunTakenOverException : Exception;
+
+    /// <summary>
+    /// Saves a step per phase (Failed when it throws), pins the run right after P1, publishes progress
+    /// as each phase starts and ends (reaching 100), and stops the scan at a phase boundary once a
+    /// cancel is requested. Phases run one after another, so one start time field is enough.
+    /// </summary>
+    private sealed class StepRecorder(ScanRun run, IScanStore store, IScanEvents events, TimeProvider time) : IScanObserver
     {
         private DateTimeOffset _started;
 
         public async Task PhaseStartedAsync(string phase, CancellationToken ct)
         {
-            if (await store.IsCancelRequestedAsync(runId, ct))
+            if (await store.IsCancelRequestedAsync(run.Id, ct))
             {
-                throw new OperationCanceledException($"Scan {runId} was cancelled.");
+                throw new OperationCanceledException($"Scan {run.Id} was cancelled.");
             }
 
             _started = time.GetUtcNow();
-            var index = ScanPhases.All.ToList().IndexOf(phase);
-            await events.ProgressAsync(runId, phase, index * 100 / ScanPhases.All.Count, $"{phase} started", ct);
+            await events.ProgressAsync(run.Id, phase, Index(phase) * 100 / ScanPhases.All.Count, $"{phase} started", ct);
         }
 
-        public Task PhaseCompletedAsync(PhaseReport report, CancellationToken ct) =>
-            store.SaveStepAsync(
-                new ScanStep
+        public async Task PhaseCompletedAsync(PhaseReport report, CancellationToken ct)
+        {
+            if (report.Resolved is { } resolved)
+            {
+                // Pinned as soon as it is known, so even a run that fails later records the commit it read.
+                run.Pin(resolved.Branch, resolved.CommitSha);
+                if (!await store.SaveAsync(run, ct))
                 {
-                    Id = Guid.NewGuid(),
-                    ScanRunId = runId,
-                    Phase = report.Phase,
-                    Status = RunStatus.Succeeded,
-                    StartedAt = _started,
-                    CompletedAt = time.GetUtcNow(),
-                    InputTokens = report.Usage.InputTokens,
-                    OutputTokens = report.Usage.OutputTokens,
-                    CostUsd = report.Usage.CostUsd,
-                    ReadInFull = report.ReadInFull,
-                    Notes = report.Notes.Count == 0 ? null : string.Join("\n", report.Notes),
-                },
-                ct);
+                    throw new RunTakenOverException();
+                }
+            }
+
+            await store.SaveStepAsync(Step(report.Phase, RunStatus.Succeeded, report.Usage, report.ReadInFull, report.Notes.Count == 0 ? null : string.Join("\n", report.Notes)), ct);
+            await events.ProgressAsync(run.Id, report.Phase, (Index(report.Phase) + 1) * 100 / ScanPhases.All.Count, $"{report.Phase} done", ct);
+        }
+
+        public Task PhaseFailedAsync(string phase, string reason, CancellationToken ct) =>
+            store.SaveStepAsync(Step(phase, RunStatus.Failed, LlmUsage.None, 0, reason), ct);
+
+        private static int Index(string phase) => ScanPhases.All.ToList().IndexOf(phase);
+
+        private ScanStep Step(string phase, RunStatus status, LlmUsage usage, int readInFull, string? notes) => new()
+        {
+            Id = Guid.NewGuid(),
+            ScanRunId = run.Id,
+            Phase = phase,
+            Status = status,
+            StartedAt = _started,
+            CompletedAt = time.GetUtcNow(),
+            InputTokens = usage.InputTokens,
+            OutputTokens = usage.OutputTokens,
+            CostUsd = usage.CostUsd,
+            ReadInFull = readInFull,
+            Notes = notes,
+        };
     }
 }

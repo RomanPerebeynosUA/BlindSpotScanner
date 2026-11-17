@@ -34,14 +34,24 @@ public sealed class ScanPipeline(
         async Task<T> Phase<T>(string phase, Func<Task<T>> work, Func<T, PhaseReport> report)
         {
             await observer.PhaseStartedAsync(phase, ct);
-            var value = await work();
+            T value;
+            try
+            {
+                value = await work();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                await observer.PhaseFailedAsync(phase, ScanFailure.Describe(ex), CancellationToken.None);
+                throw;
+            }
+
             await observer.PhaseCompletedAsync(report(value), ct);
             return value;
         }
 
         static PhaseReport Plain(string phase, int readInFull = 0) => new(phase, LlmUsage.None, [], readInFull);
 
-        var run = await Phase(ScanPhases.Resolve, () => new ResolvePhase(github).ResolveAsync(repoUrl, ct), _ => Plain(ScanPhases.Resolve));
+        var run = await Phase(ScanPhases.Resolve, () => new ResolvePhase(github).ResolveAsync(repoUrl, ct), r => new PhaseReport(ScanPhases.Resolve, LlmUsage.None, [], 0, r));
         var inventory = await Phase(ScanPhases.Enumerate, () => new EnumeratePhase(github).EnumerateAsync(run, profile, ct), i => new PhaseReport(ScanPhases.Enumerate, LlmUsage.None, i.UnverifiedReasons, 0));
         var endpoints = await Phase(ScanPhases.Extract, () => new ExtractPhase(blobs, extractor).ExtractAsync(run, inventory, ct), _ => Plain(ScanPhases.Extract, inventory.ControllerFileCount));
         var rules = await Phase(ScanPhases.Classify, () => new ClassifyPhase(blobs, reader).ClassifyAsync(run, inventory, profile, ct), _ => Plain(ScanPhases.Classify, inventory.TestFileCount));

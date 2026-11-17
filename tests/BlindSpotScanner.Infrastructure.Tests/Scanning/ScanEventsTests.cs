@@ -48,4 +48,34 @@ public class ScanEventsTests(PostgresFixture db)
         // Assert
         scanEvent.Status.Should().Be("Cancelled");
     }
+
+    [Fact]
+    public async Task Listen_CallbackThrows_KeepsListening()
+    {
+        // Arrange (relaying the first event fails, e.g. a SignalR send error)
+        var runId = Guid.NewGuid();
+        var second = new TaskCompletionSource<ScanEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listening = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var listener = new ScanEventListener(db.ConnectionString).ListenAsync(
+            e => ++calls == 1 ? throw new InvalidOperationException("send failed") : Task.FromResult(second.TrySetResult(e)),
+            onListening: () => listening.TrySetResult(),
+            stop.Token);
+        await listening.Task.WaitAsync(stop.Token);
+
+        // Act
+        await using (var context = db.CreateContext())
+        {
+            var events = new PostgresScanEvents(context);
+            await events.ProgressAsync(runId, "P1", 0, "P1 started", CancellationToken.None);
+            await events.ProgressAsync(runId, "P2", 12, "P2 started", CancellationToken.None);
+        }
+
+        // Assert
+        var received = await second.Task.WaitAsync(stop.Token);
+        await stop.CancelAsync();
+        await listener.ContinueWith(_ => { }, TaskScheduler.Default);
+        received.Phase.Should().Be("P2");
+    }
 }

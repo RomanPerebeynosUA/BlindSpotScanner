@@ -40,6 +40,9 @@ public sealed class EfScanStore(BlindSpotScannerDbContext db) : IScanStore
         await db.SaveChangesAsync(ct);
     }
 
+    public Task ClearStepsAsync(Guid runId, CancellationToken ct) =>
+        db.ScanSteps.Where(s => s.ScanRunId == runId).ExecuteDeleteAsync(ct);
+
     public Task<bool> IsCancelRequestedAsync(Guid runId, CancellationToken ct) =>
         db.ScanRuns.AsNoTracking().Where(r => r.Id == runId).Select(r => r.CancelRequested).SingleAsync(ct);
 

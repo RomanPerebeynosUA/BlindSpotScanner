@@ -53,9 +53,9 @@ public sealed partial class ScanWorker(IServiceScopeFactory scopes, IOptions<Sca
         await using var scope = scopes.CreateAsyncScope();
         var queue = scope.ServiceProvider.GetRequiredService<IScanQueue>();
         var events = scope.ServiceProvider.GetRequiredService<IScanEvents>();
-        foreach (var abandoned in await queue.FailAbandonedAsync(ct))
+        foreach (var (abandoned, status) in await queue.FailAbandonedAsync(ct))
         {
-            await events.CompletedAsync(abandoned, RunStatus.Failed, ct);
+            await events.CompletedAsync(abandoned, status, ct);
         }
 
         var owner = Guid.NewGuid();

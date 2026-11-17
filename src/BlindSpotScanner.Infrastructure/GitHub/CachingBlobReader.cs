@@ -40,6 +40,10 @@ public sealed class CachingBlobReader(BlindSpotScannerDbContext db, IGitHubClien
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             // Another scan cached the same blob first; its content is identical by definition.
+        }
+        finally
+        {
+            // A scan reads many blobs through one context; keeping each entry tracked would grow memory with repo size.
             db.Entry(entry).State = EntityState.Detached;
         }
 

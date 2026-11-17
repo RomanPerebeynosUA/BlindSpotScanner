@@ -123,6 +123,12 @@ public class ScanPipelineTests
             Events.Add($"end {report.Phase}");
             return Task.CompletedTask;
         }
+
+        public Task PhaseFailedAsync(string phase, string reason, CancellationToken ct)
+        {
+            Events.Add($"failed {phase}");
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FailingLlmClient : ILlmClient

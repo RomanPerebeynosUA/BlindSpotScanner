@@ -29,7 +29,7 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
         var citations = mustBeTest.Concat(other).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 
         var files = new Dictionary<string, TestFileFacts?>(StringComparer.Ordinal);
-        foreach (var path in citations.Select(c => Split(c).Path).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        foreach (var path in citations.Select(c => Split(c).Path).Where(IsRepositoryRelative).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
             var text = await github.GetFileTextAsync(report.Meta.Repo.Owner, report.Meta.Repo.Name, path, report.Meta.CommitSha, ct);
             files[path] = text is null ? null : reader.Read(text);
@@ -40,7 +40,11 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
         {
             var (path, name) = Split(citation);
             var test = mustBeTest.Contains(citation);
-            if (files[path] is not { } facts)
+            if (!IsRepositoryRelative(path))
+            {
+                failures.Add($"{citation}: not a repository-relative path");
+            }
+            else if (files[path] is not { } facts)
             {
                 failures.Add($"{citation}: file not found at {report.Meta.CommitSha[..Math.Min(7, report.Meta.CommitSha.Length)]}");
             }
@@ -52,6 +56,11 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
 
         return new CitationCheck(citations.Count, citations.Count - failures.Count, failures);
     }
+
+    /// <summary>LLM-written paths are never trusted to stay inside the repository: no root, no "." or ".." segments.</summary>
+    private static bool IsRepositoryRelative(string path) =>
+        path.Length > 0 && !path.StartsWith('/') && !path.Contains('\\', StringComparison.Ordinal)
+        && path.Split('/').All(segment => segment.Length > 0 && segment is not ("." or ".."));
 
     private static (string Path, string Name) Split(string citation)
     {

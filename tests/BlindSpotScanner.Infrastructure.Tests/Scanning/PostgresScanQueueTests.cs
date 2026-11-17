@@ -4,15 +4,17 @@ using BlindSpotScanner.Infrastructure.Scanning;
 using BlindSpotScanner.Infrastructure.Tests.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Time.Testing;
 
 namespace BlindSpotScanner.Infrastructure.Tests.Scanning;
 
+/// <summary>Lease times come from the database clock, so expiry tests use short real leases.</summary>
 [Collection("scan-queue")]
 public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
 {
     private static readonly TimeSpan Lease = TimeSpan.FromMinutes(2);
-    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 17, 9, 0, 0, TimeSpan.Zero));
+    private static readonly TimeSpan ShortLease = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PastShortLease = TimeSpan.FromMilliseconds(1500);
+    private static readonly DateTimeOffset QueuedAt = new(2026, 11, 17, 9, 0, 0, TimeSpan.Zero);
 
     public Task InitializeAsync() => db.ResetAsync();
 
@@ -21,28 +23,34 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
     private async Task<ScanRun> EnqueueAsync(int minutesAgo = 0)
     {
         var repository = await db.AddRepositoryAsync();
-        var run = ScanRun.Enqueue(Guid.NewGuid(), repository.Id, null, 5m, 1, "claude-sonnet-5-5", "1.0.0", _time.GetUtcNow().AddMinutes(-minutesAgo));
+        var run = ScanRun.Enqueue(Guid.NewGuid(), repository.Id, null, 5m, 1, "claude-sonnet-5-5", "1.0.0", QueuedAt.AddMinutes(-minutesAgo));
         await using var context = db.CreateContext();
-        await new PostgresScanQueue(context, _time).EnqueueAsync(run, CancellationToken.None);
+        await new PostgresScanQueue(context).EnqueueAsync(run, CancellationToken.None);
         return run;
     }
 
-    private async Task<Guid?> DequeueAsync(Guid? owner = null)
+    private async Task<Guid?> DequeueAsync(Guid? owner = null, TimeSpan? lease = null)
     {
         await using var context = db.CreateContext();
-        return await new PostgresScanQueue(context, _time).TryDequeueAsync(owner ?? Guid.NewGuid(), Lease, CancellationToken.None);
+        return await new PostgresScanQueue(context).TryDequeueAsync(owner ?? Guid.NewGuid(), lease ?? Lease, CancellationToken.None);
     }
 
-    private async Task<bool> HeartbeatAsync(Guid runId, Guid owner)
+    private async Task<bool> HeartbeatAsync(Guid runId, Guid owner, TimeSpan? lease = null)
     {
         await using var context = db.CreateContext();
-        return await new PostgresScanQueue(context, _time).HeartbeatAsync(runId, owner, Lease, CancellationToken.None);
+        return await new PostgresScanQueue(context).HeartbeatAsync(runId, owner, lease ?? Lease, CancellationToken.None);
     }
 
     private async Task<ScanRun> LoadAsync(Guid id)
     {
         await using var context = db.CreateContext();
         return await context.ScanRuns.AsNoTracking().SingleAsync(r => r.Id == id);
+    }
+
+    private async Task<IReadOnlyList<(Guid RunId, RunStatus Status)>> FailAbandonedAsync()
+    {
+        await using var context = db.CreateContext();
+        return await new PostgresScanQueue(context).FailAbandonedAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -57,14 +65,14 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
 
         // Assert
         var run = await LoadAsync(older.Id);
-        new { Taken = taken, run.Status, run.Attempts, run.LeasedUntil, NewerStatus = (await LoadAsync(newer.Id)).Status }.Should().BeEquivalentTo(new
+        new { Taken = taken, run.Status, run.Attempts, NewerStatus = (await LoadAsync(newer.Id)).Status }.Should().BeEquivalentTo(new
         {
             Taken = (Guid?)older.Id,
             Status = RunStatus.Running,
             Attempts = 1,
-            LeasedUntil = (DateTimeOffset?)_time.GetUtcNow().Add(Lease),
             NewerStatus = RunStatus.Queued,
         });
+        run.LeasedUntil.Should().BeCloseTo(DateTimeOffset.UtcNow + Lease, TimeSpan.FromSeconds(30));
     }
 
     [Fact]
@@ -96,15 +104,14 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
     {
         // Arrange (the worker dies twice: each lease runs out without a heartbeat)
         var run = await EnqueueAsync();
-        await DequeueAsync();
-        _time.Advance(Lease + TimeSpan.FromSeconds(1));
-        var retried = await DequeueAsync();
-        _time.Advance(Lease + TimeSpan.FromSeconds(1));
-        var third = await DequeueAsync();
+        await DequeueAsync(lease: ShortLease);
+        await Task.Delay(PastShortLease);
+        var retried = await DequeueAsync(lease: ShortLease);
+        await Task.Delay(PastShortLease);
+        var third = await DequeueAsync(lease: ShortLease);
 
         // Act
-        await using var context = db.CreateContext();
-        var abandoned = await new PostgresScanQueue(context, _time).FailAbandonedAsync(CancellationToken.None);
+        var abandoned = await FailAbandonedAsync();
 
         // Assert
         var failed = await LoadAsync(run.Id);
@@ -112,9 +119,37 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
         {
             Retried = (Guid?)run.Id,
             Third = (Guid?)null,
-            Abandoned = new[] { run.Id },
+            Abandoned = new[] { (run.Id, RunStatus.Failed) },
             Status = RunStatus.Failed,
             FailureReasons = new[] { "worker lease expired twice; the scan was abandoned" },
+        });
+    }
+
+    [Fact]
+    public async Task FailAbandoned_CancelRequested_EndsCancelled()
+    {
+        // Arrange (cancel was requested, then both attempts' workers died)
+        var run = await EnqueueAsync();
+        await DequeueAsync(lease: ShortLease);
+        await using (var context = db.CreateContext())
+        {
+            var running = await context.ScanRuns.SingleAsync(r => r.Id == run.Id);
+            running.RequestCancel();
+            await context.SaveChangesAsync();
+        }
+
+        await Task.Delay(PastShortLease);
+        await DequeueAsync(lease: ShortLease);
+        await Task.Delay(PastShortLease);
+
+        // Act
+        var abandoned = await FailAbandonedAsync();
+
+        // Assert
+        new { Abandoned = abandoned, (await LoadAsync(run.Id)).Status }.Should().BeEquivalentTo(new
+        {
+            Abandoned = new[] { (run.Id, RunStatus.Cancelled) },
+            Status = RunStatus.Cancelled,
         });
     }
 
@@ -124,14 +159,14 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
         // Arrange
         var run = await EnqueueAsync();
         var owner = Guid.NewGuid();
-        await DequeueAsync(owner);
-        _time.Advance(TimeSpan.FromSeconds(30));
+        await DequeueAsync(owner, lease: TimeSpan.FromMinutes(1));
+        var before = (await LoadAsync(run.Id)).LeasedUntil;
 
         // Act
-        var alive = await HeartbeatAsync(run.Id, owner);
+        var alive = await HeartbeatAsync(run.Id, owner, TimeSpan.FromMinutes(10));
 
         // Assert
-        new { Alive = alive, (await LoadAsync(run.Id)).LeasedUntil }.Should().BeEquivalentTo(new { Alive = true, LeasedUntil = (DateTimeOffset?)_time.GetUtcNow().Add(Lease) });
+        new { Alive = alive, Extended = (await LoadAsync(run.Id)).LeasedUntil > before + TimeSpan.FromMinutes(5) }.Should().BeEquivalentTo(new { Alive = true, Extended = true });
     }
 
     [Fact]
@@ -160,8 +195,8 @@ public sealed class PostgresScanQueueTests(PostgresFixture db) : IAsyncLifetime
         var run = await EnqueueAsync();
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
-        await DequeueAsync(a);
-        _time.Advance(Lease + TimeSpan.FromSeconds(1));
+        await DequeueAsync(a, ShortLease);
+        await Task.Delay(PastShortLease);
         await DequeueAsync(b);
 
         // Act

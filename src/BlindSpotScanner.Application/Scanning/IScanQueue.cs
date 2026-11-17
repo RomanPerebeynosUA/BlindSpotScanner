@@ -16,6 +16,9 @@ public interface IScanQueue
     /// <summary>Extends the lease; false when the run is no longer Running or another worker now owns it.</summary>
     Task<bool> HeartbeatAsync(Guid runId, Guid owner, TimeSpan lease, CancellationToken ct);
 
-    /// <summary>Fails running runs whose lease expired after their retry; returns their ids.</summary>
-    Task<IReadOnlyList<Guid>> FailAbandonedAsync(CancellationToken ct);
+    /// <summary>
+    /// Ends running runs whose lease expired after their retry: Cancelled when a cancel was requested,
+    /// otherwise Failed. Returns each run with its final status.
+    /// </summary>
+    Task<IReadOnlyList<(Guid RunId, Domain.Enums.RunStatus Status)>> FailAbandonedAsync(CancellationToken ct);
 }

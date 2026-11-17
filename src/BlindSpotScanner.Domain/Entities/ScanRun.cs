@@ -103,6 +103,17 @@ public class ScanRun
         }
     }
 
+    /// <summary>What the scan spent on the LLM, whatever its outcome (a succeeded run takes it from its report).</summary>
+    public void RecordSpend(decimal costUsd)
+    {
+        if (Status == RunStatus.Succeeded)
+        {
+            throw new InvalidOperationException($"Scan run {Id} has succeeded; its cost comes from its report.");
+        }
+
+        CostUsd = costUsd;
+    }
+
     public void Cancel()
     {
         if (Status != RunStatus.Running)

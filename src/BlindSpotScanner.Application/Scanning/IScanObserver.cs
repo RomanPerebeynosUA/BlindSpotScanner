@@ -3,7 +3,8 @@ using BlindSpotScanner.Application.Llm;
 namespace BlindSpotScanner.Application.Scanning;
 
 /// <param name="ReadInFull">Files read in full by the phase (doc 05: every ScanStep records it).</param>
-public sealed record PhaseReport(string Phase, LlmUsage Usage, IReadOnlyList<string> Notes, int ReadInFull);
+/// <param name="Resolved">Set by P1: the branch and commit the scan is pinned to.</param>
+public sealed record PhaseReport(string Phase, LlmUsage Usage, IReadOnlyList<string> Notes, int ReadInFull, RunContext? Resolved = null);
 
 /// <summary>Watches a scan phase by phase: the orchestrator records steps and progress, and stops a cancelled scan.</summary>
 public interface IScanObserver
@@ -12,6 +13,9 @@ public interface IScanObserver
     Task PhaseStartedAsync(string phase, CancellationToken ct);
 
     Task PhaseCompletedAsync(PhaseReport report, CancellationToken ct);
+
+    /// <summary>The phase threw (not a cancel); <paramref name="reason"/> is safe to store.</summary>
+    Task PhaseFailedAsync(string phase, string reason, CancellationToken ct);
 }
 
 public static class ScanPhases
@@ -36,4 +40,15 @@ public sealed class NoScanObserver : IScanObserver
     public Task PhaseStartedAsync(string phase, CancellationToken ct) => Task.CompletedTask;
 
     public Task PhaseCompletedAsync(PhaseReport report, CancellationToken ct) => Task.CompletedTask;
+
+    public Task PhaseFailedAsync(string phase, string reason, CancellationToken ct) => Task.CompletedTask;
+}
+
+/// <summary>How a scan failure is described: GitHub and URL errors name only the repository; anything else only its type.</summary>
+public static class ScanFailure
+{
+    public static string Describe(Exception ex) =>
+        ex is GitHub.GitHubNotFoundException or GitHub.GitHubAuthenticationException or GitHub.GitHubRateLimitException or FormatException
+            ? ex.Message
+            : $"scan failed: {ex.GetType().Name}";
 }

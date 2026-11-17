@@ -126,4 +126,21 @@ public class CitationVerifierTests
 
         public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) => throw new NotSupportedException();
     }
+
+    [Fact]
+    public async Task Verify_PathWithDotDot_RejectedWithoutFetching()
+    {
+        // Arrange
+        var github = new CountingGitHub(FixtureRepository.Bookstore());
+
+        // Act
+        var check = await Verify(WithFirstDimensionEvidence("tests/../../../user/keys.cs::X"), github);
+
+        // Assert
+        new { check.Failures, Fetched = github.Fetches.Contains("tests/../../../user/keys.cs") }.Should().BeEquivalentTo(new
+        {
+            Failures = new[] { "tests/../../../user/keys.cs::X: not a repository-relative path" },
+            Fetched = false,
+        });
+    }
 }

@@ -113,6 +113,21 @@ public sealed class CachingBlobReaderTests(PostgresFixture db) : IDisposable
     /// Simulates a concurrent scan: between the reader's cache miss and its insert, another context
     /// stores the same blob, so the reader's insert hits the primary key.
     /// </summary>
+    [Fact]
+    public async Task Read_Miss_DoesNotKeepEntryTracked()
+    {
+        // Arrange (a scan reads hundreds of blobs through one context)
+        var sha = NewSha();
+        ServeBlob(sha, "public class A { }");
+        await using var context = db.CreateContext();
+
+        // Act
+        await new CachingBlobReader(context, GitHub()).ReadAsync(Owner, Name, sha, CancellationToken.None);
+
+        // Assert
+        context.ChangeTracker.Entries<FileCacheEntry>().Should().BeEmpty();
+    }
+
     private sealed class RacingGitHubClient(PostgresFixture db, string sha, string content) : IGitHubClient
     {
         public Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) =>

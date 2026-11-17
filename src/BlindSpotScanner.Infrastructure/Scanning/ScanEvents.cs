@@ -60,7 +60,14 @@ public sealed class ScanEventListener(string connectionString)
             {
                 if (JsonSerializer.Deserialize<ScanEvent>(payload, ScanEvent.Json) is { } scanEvent)
                 {
-                    await onEvent(scanEvent);
+                    try
+                    {
+                        await onEvent(scanEvent);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // One failed delivery must not drop the connection, or every later event is lost while it reconnects.
+                    }
                 }
             }
         }

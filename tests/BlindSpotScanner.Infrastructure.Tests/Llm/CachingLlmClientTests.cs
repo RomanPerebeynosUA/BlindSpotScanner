@@ -89,6 +89,23 @@ public class CachingLlmClientTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task Complete_MissAndHit_DoNotKeepEntriesTracked()
+    {
+        // Arrange
+        var inner = new CountingLlmClient(Answer("""{"kind":"integration"}"""));
+        var request = NewRequest();
+        await using var context = db.CreateContext();
+        var client = new CachingLlmClient(context, inner, Prompts, Options.Create(new LlmOptions()));
+
+        // Act
+        await client.CompleteAsync(request, CancellationToken.None);
+        await client.CompleteAsync(request, CancellationToken.None);
+
+        // Assert
+        context.ChangeTracker.Entries<Domain.Entities.LlmCacheEntry>().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Complete_FailedOutput_IsNotCached()
     {
         // Arrange

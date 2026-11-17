@@ -33,7 +33,7 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         await using var context = db.CreateContext();
         var repoId = repositoryId ?? await SeedRepositoryAsync(context);
         var run = ScanRun.Enqueue(Guid.NewGuid(), repoId, null, maxCostUsd, 1, modelId, "1.0.0", _time.GetUtcNow());
-        var queue = new PostgresScanQueue(context, _time);
+        var queue = new PostgresScanQueue(context);
         await queue.EnqueueAsync(run, CancellationToken.None);
         (await queue.TryDequeueAsync(Guid.NewGuid(), TimeSpan.FromMinutes(2), CancellationToken.None)).Should().Be(run.Id);
         return run.Id;
@@ -301,18 +301,95 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         await OrchestrateAsync(runId, events: events);
 
         // Assert
-        new { events.Completed, Progress = events.Progress.Count }.Should().BeEquivalentTo(new { Completed = new[] { RunStatus.Succeeded }, Progress = 8 });
+        new { events.Completed, Progress = events.Progress.Count }.Should().BeEquivalentTo(new { Completed = new[] { RunStatus.Succeeded }, Progress = 16 });
+    }
+
+    [Fact]
+    public async Task Run_Completes_ProgressReachesHundred()
+    {
+        // Arrange
+        var runId = await RunningScanAsync();
+        var events = new RecordingEvents();
+
+        // Act
+        await OrchestrateAsync(runId, events: events);
+
+        // Assert
+        new { First = events.Percents[0], Last = events.Percents[^1] }.Should().BeEquivalentTo(new { First = 0, Last = 100 });
+    }
+
+    [Fact]
+    public async Task Run_FailedRun_StoresSpend()
+    {
+        // Arrange (four canned LLM calls at $0.004, then the forged citation fails the run)
+        var runId = await RunningScanAsync();
+
+        // Act
+        await OrchestrateAsync(runId, llm: new CannedLlmClient(forgeCitation: true));
+
+        // Assert
+        var (run, _) = await LoadAsync(runId);
+        new { run.Status, run.CostUsd }.Should().BeEquivalentTo(new { Status = RunStatus.Failed, CostUsd = 0.016m });
+    }
+
+    [Fact]
+    public async Task Run_Retry_ReplacesFirstAttemptSteps()
+    {
+        // Arrange (attempt 1 died after recording a step)
+        var runId = await RunningScanAsync();
+        await using (var context = db.CreateContext())
+        {
+            context.ScanSteps.Add(new ScanStep { Id = Guid.NewGuid(), ScanRunId = runId, Phase = "P1", Status = RunStatus.Succeeded, StartedAt = _time.GetUtcNow() });
+            await context.SaveChangesAsync();
+        }
+
+        // Act
+        await OrchestrateAsync(runId);
+
+        // Assert
+        (await LoadAsync(runId)).Steps.Select(s => s.Phase).Should().Equal("P1", "P2", "P3", "P4", "P4b", "P5", "P6", "P7");
+    }
+
+    [Fact]
+    public async Task Run_PhaseThrows_RecordsFailedStep()
+    {
+        // Arrange (the tree read in P2 fails)
+        var runId = await RunningScanAsync();
+
+        // Act
+        await OrchestrateAsync(runId, github: new TreeGone());
+
+        // Assert
+        var steps = (await LoadAsync(runId)).Steps;
+        steps.Select(s => (s.Phase, s.Status, s.Notes)).Should().Equal(("P1", RunStatus.Succeeded, (string?)null), ("P2", RunStatus.Failed, "The tree is gone."));
+    }
+
+    [Fact]
+    public async Task Run_FailsAfterResolve_KeepsPinnedSha()
+    {
+        // Arrange
+        var runId = await RunningScanAsync();
+
+        // Act
+        await OrchestrateAsync(runId, github: new TreeGone());
+
+        // Assert
+        var (run, _) = await LoadAsync(runId);
+        new { run.Status, run.CommitSha }.Should().BeEquivalentTo(new { Status = RunStatus.Failed, CommitSha = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678" });
     }
 
     private sealed class RecordingEvents(Func<string, Task>? onProgress = null) : IScanEvents
     {
         public List<string> Progress { get; } = [];
 
+        public List<int> Percents { get; } = [];
+
         public List<RunStatus> Completed { get; } = [];
 
         public async Task ProgressAsync(Guid runId, string phase, int pct, string message, CancellationToken ct)
         {
             Progress.Add(phase);
+            Percents.Add(pct);
             if (onProgress is not null)
             {
                 await onProgress(phase);
@@ -324,6 +401,22 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
             Completed.Add(status);
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>The bookstore fixture, except that every tree read fails (P2).</summary>
+    private sealed class TreeGone : IGitHubClient
+    {
+        private readonly FixtureRepository _repo = FixtureRepository.Bookstore();
+
+        public Task<GitHubRepository> GetRepositoryAsync(string owner, string name, CancellationToken ct) => _repo.GetRepositoryAsync(owner, name, ct);
+
+        public Task<string> GetBranchHeadShaAsync(string owner, string name, string branch, CancellationToken ct) => _repo.GetBranchHeadShaAsync(owner, name, branch, ct);
+
+        public Task<GitTree> GetTreeAsync(string owner, string name, string treeSha, bool recursive, CancellationToken ct) => throw new GitHubNotFoundException("The tree is gone.");
+
+        public Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) => _repo.GetFileTextAsync(owner, name, path, commitSha, ct);
+
+        public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) => _repo.GetBlobTextAsync(owner, name, blobSha, ct);
     }
 
     private sealed class GoneGitHub : IGitHubClient

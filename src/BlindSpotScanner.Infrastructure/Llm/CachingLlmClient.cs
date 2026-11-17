@@ -20,7 +20,7 @@ public sealed class CachingLlmClient(BlindSpotScannerDbContext db, ILlmClient in
     public async Task<LlmResult> CompleteAsync(LlmRequest request, CancellationToken ct)
     {
         var key = Key(request);
-        var cached = await db.LlmCache.SingleOrDefaultAsync(e => e.Key == key, ct);
+        var cached = await db.LlmCache.AsNoTracking().SingleOrDefaultAsync(e => e.Key == key, ct);
         if (cached is not null)
         {
             using var document = JsonDocument.Parse(cached.ResponseJson);
@@ -30,13 +30,12 @@ public sealed class CachingLlmClient(BlindSpotScannerDbContext db, ILlmClient in
                 return new LlmResult(output, [], LlmUsage.None, FromCache: true);
             }
 
-            db.LlmCache.Remove(cached);
+            await db.LlmCache.Where(e => e.Key == key).ExecuteDeleteAsync(ct);
         }
 
         var result = await inner.CompleteAsync(request, ct);
         if (result.Output is not { } accepted)
         {
-            await db.SaveChangesAsync(ct);
             return result;
         }
 
@@ -49,6 +48,9 @@ public sealed class CachingLlmClient(BlindSpotScannerDbContext db, ILlmClient in
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             // Another scan cached the same request first; either answer is acceptable.
+        }
+        finally
+        {
             db.Entry(entry).State = EntityState.Detached;
         }
 

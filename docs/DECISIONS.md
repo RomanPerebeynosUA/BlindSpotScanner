@@ -173,7 +173,14 @@ groups `run:{id}` on `/hubs/scans`. Citations: every `path::Name` in the report 
 scorecard evidence bullets) is re-read at the pinned commit; coverage evidence must name a test
 method, other citations any method (fixtures are evidence). The cost cap (`Llm:MaxCostUsdPerScan`,
 or the request's `maxCostUsd`) stops further LLM calls, records the reason, and the run still
-succeeds. The api applies migrations at startup. New options: `Scan:LeaseSeconds` 120,
+succeeds; a call is not made when one more call as costly as the costliest so far would cross the
+cap, and a run's spend is stored whatever its outcome. Lease times use the database clock. A retry
+replaces the earlier attempt's steps; a phase that throws records a Failed step; the run is pinned
+to its commit right after P1. An abandoned run whose cancel was requested ends Cancelled.
+Progress is reported as each phase starts and ends (0…100). Events are best effort: a lost
+`ScanCompleted` is possible, so clients also poll `GET /api/runs/{id}`. Citation paths must be
+repository-relative (no root, `.` or `..`). Cache entries are detached once written, so one scan's
+context doesn't grow with the repository. The api applies migrations at startup. New options: `Scan:LeaseSeconds` 120,
 `Scan:HeartbeatSeconds` 30, `Scan:PollMilliseconds` 2000. `ScanWorker` lives in Infrastructure so
 the end-to-end tests host it next to the api; the Worker project only hosts it. Configuration is
 read when services resolve, so hosts and test factories can add sources after registration.

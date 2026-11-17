@@ -26,13 +26,13 @@ public sealed class ScanRequestsTests(PostgresFixture db) : IAsyncLifetime
         var run = ScanRun.Enqueue(Guid.NewGuid(), repository.Id, null, 5m, 1, "claude-sonnet-5-5", "1.0.0", _time.GetUtcNow());
         await using (var setup = db.CreateContext())
         {
-            await new PostgresScanQueue(setup, _time).EnqueueAsync(run, CancellationToken.None);
+            await new PostgresScanQueue(setup).EnqueueAsync(run, CancellationToken.None);
         }
 
         await using var context = db.CreateContext();
-        var store = new DequeueAfterFirstFind(new EfScanRequestStore(context), db, _time);
+        var store = new DequeueAfterFirstFind(new EfScanRequestStore(context), db);
         var events = new CountingEvents();
-        var requests = new ScanRequests(store, new PostgresScanQueue(context, _time), events, _time, new ScanRequestOptions("claude-sonnet-5-5", "1.0.0", 5m));
+        var requests = new ScanRequests(store, new PostgresScanQueue(context), events, _time, new ScanRequestOptions("claude-sonnet-5-5", "1.0.0", 5m));
 
         // Act
         var found = await requests.CancelAsync(run.Id, CancellationToken.None);
@@ -49,7 +49,7 @@ public sealed class ScanRequestsTests(PostgresFixture db) : IAsyncLifetime
         });
     }
 
-    private sealed class DequeueAfterFirstFind(IScanRequestStore inner, PostgresFixture db, TimeProvider time) : IScanRequestStore
+    private sealed class DequeueAfterFirstFind(IScanRequestStore inner, PostgresFixture db) : IScanRequestStore
     {
         private bool _dequeued;
 
@@ -60,7 +60,7 @@ public sealed class ScanRequestsTests(PostgresFixture db) : IAsyncLifetime
             {
                 _dequeued = true;
                 await using var worker = db.CreateContext();
-                await new PostgresScanQueue(worker, time).TryDequeueAsync(Guid.NewGuid(), TimeSpan.FromMinutes(2), ct);
+                await new PostgresScanQueue(worker).TryDequeueAsync(Guid.NewGuid(), TimeSpan.FromMinutes(2), ct);
             }
 
             return run;

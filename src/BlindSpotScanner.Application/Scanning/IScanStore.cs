@@ -15,6 +15,9 @@ public interface IScanStore
 
     Task SaveStepAsync(ScanStep step, CancellationToken ct);
 
+    /// <summary>Removes steps an earlier attempt recorded, so a retry's steps describe one attempt.</summary>
+    Task ClearStepsAsync(Guid runId, CancellationToken ct);
+
     Task<bool> IsCancelRequestedAsync(Guid runId, CancellationToken ct);
 
     /// <summary>
