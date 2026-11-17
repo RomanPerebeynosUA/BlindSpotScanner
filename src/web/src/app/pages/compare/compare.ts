@@ -114,5 +114,4 @@ export class Compare {
     const queryParams = { base: this.base(), target: this.target(), [which]: value };
     void this.router.navigate(['/compare'], { queryParams });
   }
-
 }
