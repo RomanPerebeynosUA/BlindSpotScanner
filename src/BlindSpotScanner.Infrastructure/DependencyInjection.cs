@@ -1,12 +1,15 @@
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Llm;
+using BlindSpotScanner.Application.Remediation;
 using BlindSpotScanner.Application.Reports;
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Infrastructure.Extraction;
 using BlindSpotScanner.Infrastructure.GitHub;
+using BlindSpotScanner.Infrastructure.Jira;
 using BlindSpotScanner.Infrastructure.Llm;
 using BlindSpotScanner.Infrastructure.Persistence;
+using BlindSpotScanner.Infrastructure.Remediation;
 using BlindSpotScanner.Infrastructure.Reports;
 using BlindSpotScanner.Infrastructure.Repositories;
 using BlindSpotScanner.Infrastructure.Scanning;
@@ -29,12 +32,15 @@ public static class DependencyInjection
         services.AddOptions<GitHubOptions>().BindConfiguration("GitHub");
         services.AddOptions<LlmOptions>().BindConfiguration("Llm");
         services.AddOptions<ScanOptions>().BindConfiguration("Scan");
+        services.AddOptions<JiraOptions>().BindConfiguration("Jira");
         services.TryAddSingleton(TimeProvider.System);
 
         // The typed client owns its HttpClient; the rate-limit handler sits in its handler chain (D16).
         services.AddTransient<GitHubRateLimitHandler>();
         services.AddHttpClient<IGitHubClient, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
         services.AddScoped<IBlobReader, CachingBlobReader>();
+        // A short timeout: a hung Jira must not hold the report's actions list (D24).
+        services.AddHttpClient<IJiraClient, JiraClient>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<IEndpointExtractor, AspNetCoreEndpointExtractor>();
         services.AddSingleton<ITestSyntaxReader, CSharpTestSyntaxReader>();
 
@@ -70,6 +76,15 @@ public static class DependencyInjection
         services.AddScoped<IRepositoryStore, EfRepositoryStore>();
         services.AddScoped<RepositoryService>();
         services.AddScoped<RunComparison>();
+        services.AddScoped<IRemediationStore, EfRemediationStore>();
+        services.AddScoped(sp =>
+        {
+            var jira = sp.GetRequiredService<IOptions<JiraOptions>>().Value;
+            var publicUrl = sp.GetRequiredService<IConfiguration>()["App:PublicUrl"] is { Length: > 0 } url ? url : "http://localhost:8080";
+            return new JiraTickets(
+                sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IJiraClient>(), sp.GetRequiredService<TimeProvider>(),
+                new JiraDefaults(jira.ProjectKey, jira.IssueType, jira.Labels, publicUrl));
+        });
         services.AddScoped<IProfileStore, EfProfileStore>();
         services.AddScoped<ProfileService>();
         services.AddScoped(sp => new ProfileDrafter(

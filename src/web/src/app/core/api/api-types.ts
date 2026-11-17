@@ -112,3 +112,37 @@ export interface ScanStep {
 export type RunBody = IntegrationReport | RunStatusBody;
 
 export const isReport = (body: RunBody): body is IntegrationReport => 'meta' in body;
+
+/** A Jira ticket (or, from M10, a PR) created from a finding (doc 09, D24). */
+export interface RemediationAction {
+  id: string;
+  type: 'JiraTicket' | 'PullRequest';
+  stableKey: string;
+  externalKey: string;
+  url: string;
+  status: string;
+  createdAt: string;
+}
+
+/** POST …/jira-preview: the editable draft; `existing` is a ticket already made for this stable key. */
+export interface JiraDraft {
+  summary: string;
+  description: string;
+  projectKey: string;
+  issueType: string;
+  priority: string;
+  labels: string[];
+  stableKey: string;
+  existing: RemediationAction | null;
+}
+
+/** POST …/jira body; `force` is "Create anyway". */
+export interface JiraCreate {
+  summary: string;
+  description: string;
+  projectKey: string;
+  issueType: string;
+  priority: string;
+  labels: string[];
+  force: boolean;
+}

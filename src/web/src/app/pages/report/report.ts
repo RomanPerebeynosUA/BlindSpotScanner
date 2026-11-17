@@ -1,12 +1,13 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { catchError, map, Observable, of, switchMap, tap } from 'rxjs';
+import { catchError, forkJoin, map, Observable, of, switchMap, tap } from 'rxjs';
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router, RouterLink } from '@angular/router';
 import { RunsApi } from '../../core/api/runs-api';
 import { RepositoriesApi } from '../../core/api/repositories-api';
-import { isReport, RunBody, RunHistoryItem, RunStatusBody } from '../../core/api/api-types';
+import { RemediationApi } from '../../core/api/remediation-api';
+import { isReport, RemediationAction, RunBody, RunHistoryItem, RunStatusBody } from '../../core/api/api-types';
 import { DeltaChanges } from '../../shared/delta-changes/delta-changes';
 import { commitUrl, ReportStore } from './report-store';
 import { SummaryCard } from './summary-card/summary-card';
@@ -14,6 +15,7 @@ import { TopRisks } from './top-risks/top-risks';
 import { EndpointCoverage } from './endpoint-coverage/endpoint-coverage';
 import { Scorecard } from './scorecard/scorecard';
 import { Findings } from './findings/findings';
+import { ActionsLog } from './actions-log/actions-log';
 
 /**
  * `/runs/:runId`: the report (doc 04 sections 1–6) with the delta against the previous scan, the
@@ -21,7 +23,7 @@ import { Findings } from './findings/findings';
  */
 @Component({
   selector: 'app-report',
-  imports: [DatePipe, RouterLink, SummaryCard, TopRisks, EndpointCoverage, Scorecard, Findings, DeltaChanges],
+  imports: [DatePipe, RouterLink, SummaryCard, TopRisks, EndpointCoverage, Scorecard, Findings, DeltaChanges, ActionsLog],
   providers: [ReportStore],
   templateUrl: './report.html',
   styleUrl: './report.scss',
@@ -29,6 +31,7 @@ import { Findings } from './findings/findings';
 export class Report {
   private readonly runs = inject(RunsApi);
   private readonly repositories = inject(RepositoriesApi);
+  private readonly remediation = inject(RemediationApi);
   private readonly router = inject(Router);
   protected readonly store = inject(ReportStore);
 
@@ -65,13 +68,23 @@ export class Report {
       .pipe(
         switchMap((runId) =>
           this.runs.repository(runId).pipe(
-            switchMap((repository) => this.repositories.runs(repository.id)),
-            catchError(() => of<RunHistoryItem[]>([])),
+            // The run picker's history and the repository's tickets (D24); a failed list just stays empty.
+            switchMap((repository) =>
+              forkJoin({
+                history: this.repositories.runs(repository.id).pipe(catchError(() => of<RunHistoryItem[]>([]))),
+                actions: this.remediation.actions(repository.id).pipe(catchError(() => of<RemediationAction[]>([]))),
+              }),
+            ),
+            catchError(() => of({ history: [] as RunHistoryItem[], actions: [] as RemediationAction[] })),
           ),
         ),
         takeUntilDestroyed(),
       )
-      .subscribe((history) => this.siblings.set(history.filter((r) => r.status === 'Succeeded')));
+      .subscribe(({ history, actions }) => {
+        this.siblings.set(history.filter((r) => r.status === 'Succeeded'));
+        // Merged, not replaced: a ticket created while this (status-refreshing) load was slow stays.
+        this.store.actions.update((local) => [...local.filter((a) => !actions.some((l) => l.id === a.id)), ...actions]);
+      });
   }
 
   protected go(runId: string): void {
@@ -86,6 +99,7 @@ export class Report {
     this.store.report.set(null);
     this.store.statusFilter.set('all');
     this.store.search.set('');
+    this.store.actions.set([]);
     this.outcome.set(null);
     this.notFound.set(false);
   }

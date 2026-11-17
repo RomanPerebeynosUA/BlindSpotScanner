@@ -55,6 +55,8 @@ internal sealed class FindingConfiguration : IEntityTypeConfiguration<Finding>
     {
         builder.HasKey(f => f.Id);
         builder.HasOne<ScanRun>().WithMany().HasForeignKey(f => f.ScanRunId);
+        // One row per report finding: rows are created lazily when the first action needs one (D24).
+        builder.HasIndex(f => new { f.ScanRunId, f.ReportFindingId }).IsUnique();
     }
 }
 

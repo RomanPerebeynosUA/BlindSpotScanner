@@ -1,3 +1,4 @@
+using BlindSpotScanner.Application.Remediation;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Infrastructure.Persistence;
 using FluentAssertions;
@@ -36,6 +37,19 @@ public class DependencyInjectionTests
 
         // Assert
         resolved.Should().BeEquivalentTo(new { Orchestrator = true, Queue = true, Events = true, Requests = true });
+    }
+
+    [Fact]
+    public void AddCore_JiraClient_TimesOutAfterTenSeconds()
+    {
+        // Arrange (a hung Jira must not hold a report page for HttpClient's default 100 s)
+        using var provider = Provider([]);
+
+        // Act
+        var http = provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(IJiraClient));
+
+        // Assert
+        http.Timeout.Should().Be(TimeSpan.FromSeconds(10));
     }
 
     [Fact]

@@ -92,8 +92,9 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_findings");
 
-                    b.HasIndex("ScanRunId")
-                        .HasDatabaseName("ix_findings_scan_run_id");
+                    b.HasIndex("ScanRunId", "ReportFindingId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_findings_scan_run_id_report_finding_id");
 
                     b.ToTable("findings", (string)null);
                 });
@@ -153,6 +154,10 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("StatusCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_checked_at");
 
                     b.Property<string>("Type")
                         .IsRequired()

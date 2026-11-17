@@ -17,6 +17,7 @@
             @for (citation of f.evidence; track citation) {
               <app-evidence-link [meta]="meta()" [citation]="citation" />
             }
+            <div><app-jira-action [finding]="f" /></div>
           </div>
         } @empty {
           <p class="muted">None.</p>

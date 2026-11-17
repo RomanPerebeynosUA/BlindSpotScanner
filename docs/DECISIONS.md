@@ -224,3 +224,30 @@ the repositories table and on the repository overview; ad-hoc compare always run
   `generatedAt`, `score`, `coveredShare`; an unscorable run keeps a null score).
 - Non-comparable deltas (`comparable: false`) show a warning banner with the reasons and neutral,
   uncoloured chips (principle 6).
+
+## D24 — Jira tickets (2026-11-17)
+The user's choices for M9: the Jira connection comes from configuration only (`Jira:BaseUrl`,
+`Jira:Email`, `Jira:ApiToken` from user secrets or env vars, `Jira:ProjectKey`, `Jira:IssueType`
+default `Task`, `Jira:Labels` default `["integration-coverage"]`); the settings page moves to M11
+with auth. "Create Jira" is offered on the Findings section and on untested endpoint rows only
+(top risks, scorecard rows and bulk epics wait). Jira is tested with WireMock only; no live test.
+- `findingId` in the API is the report's finding id (`f2`). Its `findings` row is created lazily
+  when the first action needs it (unique on run + report finding id), so older runs work too.
+- Dedup: a stored JiraTicket action for the same repository and `StableKey`, then JQL
+  `labels = integration-coverage AND text ~ "\"<key with non-alphanumerics as spaces>\""` (a
+  phrase search, first 50 hits). A search hit counts only when its description holds the footer
+  `BlindSpotScanner key: <stableKey>` as one plain text node, which the server always appends
+  outside the Markdown conversion (and `integration-coverage` is always among the labels), so a
+  user's edits can't break dedup. A ticket found only in Jira is stored as an action (adopted).
+  "Create anyway" (`force`) skips both checks.
+- `CreatedBy` is `anonymous` until M11 auth. Jira not configured → 503 ProblemDetails naming the
+  missing settings; a Jira error on create → 502 with Jira's message (never the token).
+- Status refresh: `GET /api/repositories/{id}/actions` (a contract addition) re-reads statuses
+  checked 10 or more minutes ago; a Jira failure keeps the last known status.
+- `App:PublicUrl` (default `http://localhost:8080`) builds the report link in ticket descriptions.
+- Concurrency: the finding row is written before Jira is called, and a concurrent insert of the
+  same row reuses the winner's row, so a database failure never follows an outward create. Two
+  creates for one finding at the same moment (two tabs or users) can still both reach Jira before
+  either is stored; that race is accepted until M11 auth (no lock without a present need). Jira
+  calls time out after 10 s, and every Jira failure surfaces as a Jira error (502 on create; the
+  actions list keeps the cached status).

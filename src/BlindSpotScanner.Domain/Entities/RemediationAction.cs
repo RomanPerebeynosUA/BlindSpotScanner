@@ -15,7 +15,13 @@ public class RemediationAction
     public required ActionType Type { get; init; }
     public required string ExternalKey { get; init; }
     public required string Url { get; init; }
-    public required string Status { get; init; }
+
+    /// <summary>The external status (for example Jira's "In Progress"), refreshed lazily (doc 09).</summary>
+    public required string Status { get; set; }
+
+    /// <summary>When <see cref="Status"/> was last read from the external system.</summary>
+    public DateTimeOffset StatusCheckedAt { get; set; }
+
     public required DateTimeOffset CreatedAt { get; init; }
     public required string CreatedBy { get; init; }
 }
