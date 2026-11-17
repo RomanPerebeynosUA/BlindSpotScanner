@@ -225,6 +225,21 @@ public class JiraTicketsTests
     }
 
     [Fact]
+    public async Task CreateAsync_FindingRowFails_DoesNotCallJira()
+    {
+        // Arrange (the database fails before the outward action, never after it)
+        var draft = await DraftAsync();
+        _store.EnsureFailure = new InvalidOperationException("db down");
+
+        // Act
+        var act = () => Tickets.CreateAsync(_runId, "f2", Create(draft), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _jira.Created.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ActionsAsync_StaleStatus_Refreshes()
     {
         // Arrange
@@ -310,8 +325,15 @@ public class JiraTicketsTests
 
         public int Saves { get; private set; }
 
+        public Exception? EnsureFailure { get; set; }
+
         public Task<Finding> EnsureFindingAsync(Guid runId, ReportFinding finding, CancellationToken ct)
         {
+            if (EnsureFailure is not null)
+            {
+                return Task.FromException<Finding>(EnsureFailure);
+            }
+
             var row = Findings.SingleOrDefault(f => f.ScanRunId == runId && f.ReportFindingId == finding.Id);
             if (row is null)
             {

@@ -71,16 +71,19 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
             // A ticket made elsewhere (or whose action was lost) is adopted, not duplicated.
             if (await jira.FindByStableKeyAsync(finding.StableKey, ct) is { } found)
             {
-                var adopted = await StoreAsync(runId, run.RepositoryId, finding, found, ct);
+                var adopted = await StoreAsync(await store.EnsureFindingAsync(runId, finding, ct), run.RepositoryId, found, ct);
                 return new TicketResult<RemediationAction>(TicketStatus.Exists, Existing: adopted);
             }
         }
+
+        // The finding's row first, so a database failure happens before the outward action, not after it.
+        var row = await store.EnsureFindingAsync(runId, finding!, ct);
 
         // The label and the footer (added by the client from StableKey) keep the ticket findable whatever the user edited.
         var issue = await jira.CreateIssueAsync(
             new JiraIssueRequest(request.ProjectKey, request.IssueType, request.Summary, request.Description, request.Priority, Labels(request.Labels), finding!.StableKey),
             ct);
-        return new TicketResult<RemediationAction>(TicketStatus.Ok, await StoreAsync(runId, run!.RepositoryId, finding, issue, ct));
+        return new TicketResult<RemediationAction>(TicketStatus.Ok, await StoreAsync(row, run!.RepositoryId, issue, ct));
     }
 
     /// <summary>The repository's actions, with Jira statuses older than 10 minutes re-read; a Jira failure keeps the last known status.</summary>
@@ -132,15 +135,14 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
         return jira.IsConfigured ? (TicketStatus.Ok, run, report, finding) : (TicketStatus.NotConfigured, null, null, null);
     }
 
-    private async Task<RemediationAction> StoreAsync(Guid runId, Guid repositoryId, ReportFinding finding, JiraIssueRef issue, CancellationToken ct)
+    private async Task<RemediationAction> StoreAsync(Finding row, Guid repositoryId, JiraIssueRef issue, CancellationToken ct)
     {
-        var row = await store.EnsureFindingAsync(runId, finding, ct);
         var now = time.GetUtcNow();
         var action = new RemediationAction
         {
             Id = Guid.NewGuid(),
             RepositoryId = repositoryId,
-            StableKey = finding.StableKey,
+            StableKey = row.StableKey,
             CreatedFromFindingId = row.Id,
             Type = ActionType.JiraTicket,
             ExternalKey = issue.Key,

@@ -74,6 +74,23 @@ public class EfRemediationStoreTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task EnsureFindingAsync_ConcurrentCalls_AllReturnTheOneRow()
+    {
+        // Arrange (two tabs creating a ticket for the same finding at once race on the unique index)
+        var (run, finding) = await SeedRunAsync();
+
+        // Act
+        var rows = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
+        {
+            await using var context = db.CreateContext();
+            return await new EfRemediationStore(context).EnsureFindingAsync(run.Id, finding, CancellationToken.None);
+        }));
+
+        // Assert
+        rows.Select(r => r.Id).Distinct().Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task FindActionAsync_TwoActions_ReturnsNewest()
     {
         // Arrange

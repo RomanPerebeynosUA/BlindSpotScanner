@@ -244,3 +244,9 @@ with auth. "Create Jira" is offered on the Findings section and on untested endp
 - Status refresh: `GET /api/repositories/{id}/actions` (a contract addition) re-reads statuses
   checked 10 or more minutes ago; a Jira failure keeps the last known status.
 - `App:PublicUrl` (default `http://localhost:8080`) builds the report link in ticket descriptions.
+- Concurrency: the finding row is written before Jira is called, and a concurrent insert of the
+  same row reuses the winner's row, so a database failure never follows an outward create. Two
+  creates for one finding at the same moment (two tabs or users) can still both reach Jira before
+  either is stored; that race is accepted until M11 auth (no lock without a present need). Jira
+  calls time out after 10 s, and every Jira failure surfaces as a Jira error (502 on create; the
+  actions list keeps the cached status).

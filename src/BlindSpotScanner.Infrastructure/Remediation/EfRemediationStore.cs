@@ -4,6 +4,7 @@ using BlindSpotScanner.Domain.Enums;
 using BlindSpotScanner.Domain.Reports;
 using BlindSpotScanner.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace BlindSpotScanner.Infrastructure.Remediation;
 
@@ -30,8 +31,17 @@ public sealed class EfRemediationStore(BlindSpotScannerDbContext db) : IRemediat
             Evidence = [.. finding.Evidence],
         };
         db.Findings.Add(row);
-        await db.SaveChangesAsync(ct);
-        return row;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return row;
+        }
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Another request inserted the same finding first; use its row.
+            db.Entry(row).State = EntityState.Detached;
+            return await db.Findings.SingleAsync(f => f.ScanRunId == runId && f.ReportFindingId == finding.Id, ct);
+        }
     }
 
     public Task<RemediationAction?> FindActionAsync(Guid repositoryId, string stableKey, ActionType type, CancellationToken ct) =>

@@ -169,7 +169,10 @@ public sealed class JiraClientTests : IDisposable
             .RespondWith(Response.Create().WithStatusCode(200).WithDelay(TimeSpan.FromSeconds(5)).WithBodyAsJson(new { }));
         var client = new JiraClient(new HttpClient { Timeout = TimeSpan.FromMilliseconds(200) }, Options.Create(new JiraOptions
         {
-            BaseUrl = _server.Url!, Email = Email, ApiToken = Token, ProjectKey = "BSS",
+            BaseUrl = _server.Url!,
+            Email = Email,
+            ApiToken = Token,
+            ProjectKey = "BSS",
         }));
 
         // Act
