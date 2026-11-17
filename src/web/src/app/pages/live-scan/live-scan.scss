@@ -1,0 +1,13 @@
+:host { display: contents; }
+.progress { height: 8px; background: var(--sunk); border-radius: 99px; overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.steps { display: flex; flex-direction: column; }
+.step { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: .7rem; }
+.dot.done { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.dot.fail { background: var(--bad); border-color: var(--bad); color: var(--surface); }
+.dot.run { border-color: var(--accent); border-top-color: transparent; animation: spin 1s linear infinite; }
+.note-text { font-size: .78rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.outcome ul { margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dot.run { animation: none; } }
