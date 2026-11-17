@@ -7,7 +7,8 @@ import { DeltaMetric } from '../../core/api/report';
  */
 @Component({
   selector: 'app-delta-chip',
-  template: `@if (text(); as t) {<span [class]="cssClass()" [attr.title]="title()">{{ t }}</span>}`,
+  // The direction also goes in hidden text, because screen readers often skip a title.
+  template: `@if (text(); as t) {<span [class]="cssClass()" [attr.title]="title()">{{ t }}</span><span class="sr-only">{{ title() }}</span>}`,
 })
 export class DeltaChip {
   readonly metric = input<DeltaMetric | undefined>();

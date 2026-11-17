@@ -30,6 +30,14 @@ describe('DeltaChip', () => {
     expect([chip.textContent?.trim(), chip.classList.contains('up')]).toEqual(['▼ 1', true]);
   });
 
+  it('chip direction is in text for screen readers', () => {
+    // Act
+    const el = render(metric('qualityScore', 0.4, 'improved'), true, 1);
+
+    // Assert
+    expect(el.querySelector('.sr-only')?.textContent?.trim()).toBe('improved since the previous scan');
+  });
+
   it('chip regression is down', () => {
     // Act
     const chip = render(metric('endpoints.weak', 2, 'regressed')).querySelector('.delta') as HTMLElement;
