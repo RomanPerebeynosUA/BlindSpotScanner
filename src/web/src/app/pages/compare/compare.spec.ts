@@ -152,6 +152,14 @@ describe('Compare', () => {
     expect(el.textContent).toContain("These runs can't be compared.");
   });
 
+  it('compare error shows the API reason', async () => {
+    // Act
+    const el = await render(throwError(() => new HttpErrorResponse({ status: 400, error: { detail: "Runs from different repositories can't be compared." } })));
+
+    // Assert
+    expect(el.textContent).toContain("These runs can't be compared: Runs from different repositories can't be compared.");
+  });
+
   it('missing params asks to pick two runs', async () => {
     // Act
     const el = await render(of(comparison()), {});

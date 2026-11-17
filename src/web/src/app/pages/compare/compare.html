@@ -27,8 +27,8 @@
 
 @if (!base() || !target()) {
   <div class="panel muted">Pick two runs to compare.</div>
-} @else if (failed()) {
-  <div class="panel muted">These runs can't be compared.</div>
+} @else if (failure(); as message) {
+  <div class="panel muted">{{ message }}</div>
 } @else if (comparison(); as c) {
   @let d = c.delta;
   @if (!d.comparable) {

@@ -2,6 +2,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { catchError, EMPTY, map, of, switchMap, tap } from 'rxjs';
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { RunsApi } from '../../core/api/runs-api';
 import { RepositoriesApi } from '../../core/api/repositories-api';
@@ -17,6 +18,12 @@ const METRIC_LABELS: Record<string, string> = {
   'endpoints.unverified': 'Unverified',
   falsePositiveCount: 'False positives',
 };
+
+/** "These runs can't be compared: <the API's ProblemDetails detail>", or the bare sentence. */
+function reason(error: unknown): string {
+  const detail = error instanceof HttpErrorResponse ? (error.error as { detail?: string } | null)?.detail : undefined;
+  return detail ? `These runs can't be compared: ${detail}` : "These runs can't be compared.";
+}
 
 /**
  * `/compare?base=&target=`: any two runs of one repository (doc 08). The delta comes from the API
@@ -37,7 +44,8 @@ export class Compare {
   readonly target = input<string | undefined>();
 
   protected readonly comparison = signal<Comparison | null>(null);
-  protected readonly failed = signal(false);
+  /** Why the API refused the pair, kept on the page (the snackbar disappears). */
+  protected readonly failure = signal<string | null>(null);
   protected readonly repositoryName = signal('');
   protected readonly choices = signal<RunHistoryItem[]>([]);
 
@@ -51,21 +59,21 @@ export class Compare {
       .pipe(
         tap(() => {
           this.comparison.set(null);
-          this.failed.set(false);
+          this.failure.set(null);
         }),
         switchMap(({ base, target }) =>
           !base || !target
             ? EMPTY
             : this.runs.compare(base, target).pipe(
-                map((c) => ({ c, failed: false })),
-                catchError(() => of({ c: null, failed: true })),
+                map((c) => ({ c, failure: null })),
+                catchError((error: unknown) => of({ c: null, failure: reason(error) })),
               ),
         ),
         takeUntilDestroyed(),
       )
-      .subscribe(({ c, failed }) => {
+      .subscribe(({ c, failure }) => {
         this.comparison.set(c);
-        this.failed.set(failed);
+        this.failure.set(failure);
       });
     pair$
       .pipe(
