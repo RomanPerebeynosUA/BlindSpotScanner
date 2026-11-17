@@ -1,0 +1,65 @@
+using System.Text.RegularExpressions;
+using BlindSpotScanner.Application.GitHub;
+using BlindSpotScanner.Application.Scanning;
+using BlindSpotScanner.Domain.Enums;
+using BlindSpotScanner.Domain.Reports;
+
+namespace BlindSpotScanner.Application.Reports;
+
+/// <param name="Failures">One line per citation that didn't resolve; any failure fails the run (doc 05).</param>
+public sealed record CitationCheck(int Checked, int Resolved, IReadOnlyList<string> Failures);
+
+/// <summary>
+/// Principle 1: re-reads every cited file at the report's pinned commit and confirms the cited name
+/// is declared there. Coverage evidence must name a test method; other citations (scorecard,
+/// findings, risks, evidence bullets) may name any method, since fixtures are evidence too (D21).
+/// </summary>
+public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxReader reader)
+{
+    public async Task<CitationCheck> VerifyAsync(IntegrationReport report, CancellationToken ct)
+    {
+        var mustBeTest = report.EndpointCoverage
+            .SelectMany(c => c.Endpoints)
+            .Where(e => e.Status is CoverageStatus.Covered or CoverageStatus.Weak or CoverageStatus.Skipped)
+            .SelectMany(e => e.Evidence)
+            .ToHashSet(StringComparer.Ordinal);
+        var other = report.Scorecard.SelectMany(d => (d.Evidence ?? []).Concat(d.JustificationBullets.SelectMany(b => CitationInText().Matches(b).Select(m => m.Value))))
+            .Concat(report.Findings.SelectMany(f => f.Evidence))
+            .Concat(report.TopRisks.SelectMany(r => r.Evidence ?? []));
+        var citations = mustBeTest.Concat(other).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+
+        var files = new Dictionary<string, TestFileFacts?>(StringComparer.Ordinal);
+        foreach (var path in citations.Select(c => Split(c).Path).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            var text = await github.GetFileTextAsync(report.Meta.Repo.Owner, report.Meta.Repo.Name, path, report.Meta.CommitSha, ct);
+            files[path] = text is null ? null : reader.Read(text);
+        }
+
+        var failures = new List<string>();
+        foreach (var citation in citations)
+        {
+            var (path, name) = Split(citation);
+            var test = mustBeTest.Contains(citation);
+            if (files[path] is not { } facts)
+            {
+                failures.Add($"{citation}: file not found at {report.Meta.CommitSha[..Math.Min(7, report.Meta.CommitSha.Length)]}");
+            }
+            else if (!(test ? facts.TestMethods : facts.Methods).Any(m => m == name || m.EndsWith("." + name, StringComparison.Ordinal)))
+            {
+                failures.Add($"{citation}: no {(test ? "test" : "method")} named {name}");
+            }
+        }
+
+        return new CitationCheck(citations.Count, citations.Count - failures.Count, failures);
+    }
+
+    private static (string Path, string Name) Split(string citation)
+    {
+        var at = citation.IndexOf("::", StringComparison.Ordinal);
+        return at < 0 ? (citation, string.Empty) : (citation[..at], citation[(at + 2)..]);
+    }
+
+    /// <summary>A citation inside free text, such as "Evidence: tests/A.cs::Test, tests/B.cs::Other".</summary>
+    [GeneratedRegex(@"[^\s:,;()]+\.[A-Za-z0-9]+::[A-Za-z_][\w.]*")]
+    private static partial Regex CitationInText();
+}
