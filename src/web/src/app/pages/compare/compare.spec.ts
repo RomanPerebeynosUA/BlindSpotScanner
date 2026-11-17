@@ -1,7 +1,7 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
 import { RunsApi } from '../../core/api/runs-api';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { Comparison, RunHistoryItem } from '../../core/api/api-types';
@@ -31,18 +31,23 @@ const history = (runId: string, generatedAt: string): RunHistoryItem => ({
 
 describe('Compare', () => {
   let navigate: ReturnType<typeof vi.spyOn>;
+  let fixture: ComponentFixture<Compare>;
 
-  async function render(result: Observable<Comparison>, params: { base?: string; target?: string } = { base: PREVIOUS, target: CURRENT }) {
+  async function render(
+    result: Observable<Comparison>,
+    params: { base?: string; target?: string } = { base: PREVIOUS, target: CURRENT },
+    compareFor?: (base: string, target: string) => Observable<Comparison>,
+  ) {
     TestBed.configureTestingModule({
       imports: [Compare],
       providers: [
         provideRouter([]),
-        { provide: RunsApi, useValue: { compare: () => result, repository: () => of({ id: 'repo1', fullName: 'example-org/bookstore-api' }) } },
+        { provide: RunsApi, useValue: { compare: (b: string, t: string) => compareFor?.(b, t) ?? result, repository: () => of({ id: 'repo1', fullName: 'example-org/bookstore-api' }) } },
         { provide: RepositoriesApi, useValue: { runs: () => of([history(CURRENT, '2026-11-15T09:00:00Z'), history(PREVIOUS, '2026-11-01T09:00:00Z')]) } },
       ],
     });
     navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    const fixture = TestBed.createComponent(Compare);
+    fixture = TestBed.createComponent(Compare);
     fixture.componentRef.setInput('base', params.base);
     fixture.componentRef.setInput('target', params.target);
     fixture.detectChanges();
@@ -50,6 +55,23 @@ describe('Compare', () => {
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
+
+  it('a slow answer for an earlier pair is ignored', async () => {
+    // Arrange (the first pair answers late, after the user picked a new target)
+    const slow = new Subject<Comparison>();
+    const newer = comparison((c) => (c.delta.endpoints.newlyCovered = ['GET api/latest']));
+    const el = await render(of(), { base: PREVIOUS, target: CURRENT }, (_b, t) => (t === CURRENT ? slow : of(newer)));
+    fixture.componentRef.setInput('target', 'other');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Act
+    slow.next(comparison());
+    fixture.detectChanges();
+
+    // Assert
+    expect(panel(el, 'Newly covered').textContent).toContain('GET api/latest');
+  });
 
   const panel = (el: HTMLElement, title: string) =>
     [...el.querySelectorAll('.panel')].find((p) => p.querySelector('h3')?.textContent?.trim() === title) as HTMLElement;

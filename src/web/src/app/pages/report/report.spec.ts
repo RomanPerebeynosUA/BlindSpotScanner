@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
 import { RunsApi } from '../../core/api/runs-api';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { RunBody, RunHistoryItem } from '../../core/api/api-types';
@@ -27,8 +27,8 @@ describe('Report', () => {
   let navigate: ReturnType<typeof vi.fn>;
   let get: ReturnType<typeof vi.fn>;
 
-  async function render(body: Observable<RunBody>, history: RunHistoryItem[] = defaultHistory) {
-    get = vi.fn(() => body);
+  async function render(body: Observable<RunBody>, history: RunHistoryItem[] = defaultHistory, getFor?: (runId: string) => Observable<RunBody>) {
+    get = vi.fn((runId: string) => getFor?.(runId) ?? body);
     TestBed.configureTestingModule({
       imports: [Report],
       providers: [
@@ -302,6 +302,24 @@ describe('Report', () => {
 
     // Assert
     expect(get).toHaveBeenLastCalledWith(PREVIOUS);
+  });
+
+  it('a slow answer for the run the user left is ignored', async () => {
+    // Arrange (run1 answers late, after the user moved on to the previous run)
+    const slow = new Subject<RunBody>();
+    const previous = sampleReport();
+    previous.meta.repo.name = 'previous-run';
+    const { fixture, el, settle } = await render(of(), defaultHistory, (id) => (id === 'run1' ? slow : of(previous as RunBody)));
+    fixture.componentRef.setInput('runId', PREVIOUS);
+    await settle();
+
+    // Act
+    slow.next({ runId: 'run1', status: 'Running', failureReasons: [] });
+    await settle();
+
+    // Assert
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe('example-org/previous-run');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('unknown run shows Run not found', async () => {

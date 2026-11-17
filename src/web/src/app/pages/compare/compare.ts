@@ -1,4 +1,6 @@
-import { Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { catchError, EMPTY, map, of, switchMap, tap } from 'rxjs';
 import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { RunsApi } from '../../core/api/runs-api';
@@ -39,11 +41,50 @@ export class Compare {
   protected readonly repositoryName = signal('');
   protected readonly choices = signal<RunHistoryItem[]>([]);
 
+  private readonly pair = computed(() => ({ base: this.base(), target: this.target() }));
+
   constructor() {
-    effect(() => {
-      const [base, target] = [this.base(), this.target()];
-      untracked(() => this.load(base, target));
-    });
+    // switchMap drops the answer for a pair the user already changed, so a late reply can't show a
+    // comparison that doesn't match the pickers and the URL.
+    const pair$ = toObservable(this.pair);
+    pair$
+      .pipe(
+        tap(() => {
+          this.comparison.set(null);
+          this.failed.set(false);
+        }),
+        switchMap(({ base, target }) =>
+          !base || !target
+            ? EMPTY
+            : this.runs.compare(base, target).pipe(
+                map((c) => ({ c, failed: false })),
+                catchError(() => of({ c: null, failed: true })),
+              ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe(({ c, failed }) => {
+        this.comparison.set(c);
+        this.failed.set(failed);
+      });
+    pair$
+      .pipe(
+        tap(() => {
+          this.repositoryName.set('');
+          this.choices.set([]);
+        }),
+        switchMap(({ target }) =>
+          !target
+            ? EMPTY
+            : this.runs.repository(target).pipe(
+                tap((repository) => this.repositoryName.set(repository.fullName)),
+                switchMap((repository) => this.repositories.runs(repository.id)),
+                catchError(() => of<RunHistoryItem[]>([])),
+              ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((history) => this.choices.set(history.filter((r) => r.status === 'Succeeded')));
   }
 
   protected label(name: string): string {
@@ -74,23 +115,4 @@ export class Compare {
     void this.router.navigate(['/compare'], { queryParams });
   }
 
-  private load(base: string | undefined, target: string | undefined): void {
-    this.comparison.set(null);
-    this.failed.set(false);
-    if (!base || !target) {
-      return;
-    }
-
-    this.runs.compare(base, target).subscribe({
-      next: (c) => this.comparison.set(c),
-      error: () => this.failed.set(true),
-    });
-    this.runs.repository(target).subscribe({
-      next: (repository) => {
-        this.repositoryName.set(repository.fullName);
-        this.repositories.runs(repository.id).subscribe((history) => this.choices.set(history.filter((r) => r.status === 'Succeeded')));
-      },
-      error: () => this.choices.set([]),
-    });
-  }
 }

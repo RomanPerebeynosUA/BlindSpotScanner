@@ -1,10 +1,12 @@
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { catchError, map, Observable, of, switchMap, tap } from 'rxjs';
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router, RouterLink } from '@angular/router';
 import { RunsApi } from '../../core/api/runs-api';
 import { RepositoriesApi } from '../../core/api/repositories-api';
-import { isReport, RunHistoryItem, RunStatusBody } from '../../core/api/api-types';
+import { isReport, RunBody, RunHistoryItem, RunStatusBody } from '../../core/api/api-types';
 import { DeltaChanges } from '../../shared/delta-changes/delta-changes';
 import { commitUrl, ReportStore } from './report-store';
 import { SummaryCard } from './summary-card/summary-card';
@@ -49,11 +51,27 @@ export class Report {
   protected readonly compareBase = computed(() => this.store.report()?.delta?.baseRunId ?? this.older()?.runId ?? null);
 
   constructor() {
-    // The run picker navigates between runs on this same route, so react to every runId.
-    effect(() => {
-      const runId = this.runId();
-      untracked(() => this.load(runId));
-    });
+    // The run picker navigates between runs on this same route. switchMap drops the answer for a run
+    // the user already left, so a late reply can't show the wrong report or redirect to its live page.
+    const runId$ = toObservable(this.runId);
+    runId$
+      .pipe(
+        tap(() => this.reset()),
+        switchMap((runId) => this.read(runId)),
+        takeUntilDestroyed(),
+      )
+      .subscribe(({ runId, body, error }) => this.show(runId, body, error));
+    runId$
+      .pipe(
+        switchMap((runId) =>
+          this.runs.repository(runId).pipe(
+            switchMap((repository) => this.repositories.runs(repository.id)),
+            catchError(() => of<RunHistoryItem[]>([])),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((history) => this.siblings.set(history.filter((r) => r.status === 'Succeeded')));
   }
 
   protected go(runId: string): void {
@@ -64,26 +82,30 @@ export class Report {
     this.go((event.target as HTMLSelectElement).value);
   }
 
-  private load(runId: string): void {
+  private reset(): void {
     this.store.report.set(null);
+    this.store.statusFilter.set('all');
+    this.store.search.set('');
     this.outcome.set(null);
     this.notFound.set(false);
-    this.runs.get(runId).subscribe({
-      next: (body) => {
-        if (isReport(body)) {
-          this.store.report.set(body);
-        } else if (body.status === 'Queued' || body.status === 'Running') {
-          void this.router.navigate(['/runs', runId, 'live'], { replaceUrl: true });
-        } else {
-          this.outcome.set(body);
-        }
-      },
-      error: (error: unknown) => this.notFound.set(error instanceof HttpErrorResponse && error.status === 404),
-    });
-    this.runs.repository(runId).subscribe({
-      next: (repository) =>
-        this.repositories.runs(repository.id).subscribe((history) => this.siblings.set(history.filter((r) => r.status === 'Succeeded'))),
-      error: () => this.siblings.set([]),
-    });
+  }
+
+  private read(runId: string): Observable<{ runId: string; body?: RunBody; error?: unknown }> {
+    return this.runs.get(runId).pipe(
+      map((body) => ({ runId, body })),
+      catchError((error: unknown) => of({ runId, error })),
+    );
+  }
+
+  private show(runId: string, body: RunBody | undefined, error: unknown): void {
+    if (body === undefined) {
+      this.notFound.set(error instanceof HttpErrorResponse && error.status === 404);
+    } else if (isReport(body)) {
+      this.store.report.set(body);
+    } else if (body.status === 'Queued' || body.status === 'Running') {
+      void this.router.navigate(['/runs', runId, 'live'], { replaceUrl: true });
+    } else {
+      this.outcome.set(body);
+    }
   }
 }
