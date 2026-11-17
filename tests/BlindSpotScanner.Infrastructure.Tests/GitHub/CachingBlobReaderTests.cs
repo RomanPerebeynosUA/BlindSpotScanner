@@ -115,6 +115,9 @@ public sealed class CachingBlobReaderTests(PostgresFixture db) : IDisposable
     /// </summary>
     private sealed class RacingGitHubClient(PostgresFixture db, string sha, string content) : IGitHubClient
     {
+        public Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public async Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct)
         {
             await using var other = db.CreateContext();

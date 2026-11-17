@@ -73,6 +73,9 @@ internal sealed class FakeGitHubClient(string defaultBranch, IReadOnlyDictionary
         }
     }
 
+    public Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) =>
+        throw new NotSupportedException("Enumeration never reads files by path.");
+
     public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) =>
         throw new NotSupportedException("Enumeration never reads blobs.");
 }

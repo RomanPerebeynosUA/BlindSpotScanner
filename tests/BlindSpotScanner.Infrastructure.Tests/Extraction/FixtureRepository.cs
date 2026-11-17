@@ -26,6 +26,9 @@ internal sealed class FixtureRepository(string root) : IGitHubClient, IBlobReade
                 .ToList(),
             Truncated: false));
 
+    public async Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) =>
+        File.Exists(Path.Combine(root, path)) ? await File.ReadAllTextAsync(Path.Combine(root, path), ct) : null;
+
     public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) =>
         File.ReadAllTextAsync(Path.Combine(root, blobSha[BlobPrefix.Length..]), ct);
 
