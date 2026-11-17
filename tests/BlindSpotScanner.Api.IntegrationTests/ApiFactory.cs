@@ -36,6 +36,14 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>False is read-only mode: no fix PRs (D25).</summary>
     protected virtual bool PullRequests => true;
 
+    /// <summary>False keeps the real sign-in (for the OIDC-mode tests) instead of TestAuthHandler.</summary>
+    protected virtual bool UseTestAuth => true;
+
+    /// <summary>Extra settings a variant needs (applied after the defaults).</summary>
+    protected virtual void Configure(IWebHostBuilder builder)
+    {
+    }
+
     public Task InitializeAsync() => _db.StartAsync();
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -64,19 +72,24 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.ConfigureTestServices(services =>
         {
             // The real policies, with the role chosen per request (TestAuthHandler).
-            services.AddAuthentication(TestAuthHandler.SchemeName).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
-            services.PostConfigure<AuthenticationOptions>(o =>
+            if (UseTestAuth)
             {
-                o.DefaultScheme = TestAuthHandler.SchemeName;
-                o.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
-                o.DefaultChallengeScheme = TestAuthHandler.SchemeName;
-                o.DefaultForbidScheme = TestAuthHandler.SchemeName;
-            });
+                services.AddAuthentication(TestAuthHandler.SchemeName).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
+                services.PostConfigure<AuthenticationOptions>(o =>
+                {
+                    o.DefaultScheme = TestAuthHandler.SchemeName;
+                    o.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                    o.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+                    o.DefaultForbidScheme = TestAuthHandler.SchemeName;
+                });
+            }
+
             if (RunWorker)
             {
                 services.AddHostedService<ScanWorker>();
             }
         });
+        Configure(builder);
     }
 
     public async Task<string?> LlmSharingAcknowledgedByAsync(Guid repositoryId)
@@ -190,4 +203,54 @@ public sealed class ReadOnlyApiFactory : ApiFactory
     protected override bool RunWorker => false;
 
     protected override bool PullRequests => false;
+}
+
+/// <summary>
+/// The api in OIDC mode with its real cookie + OpenID Connect handlers, against a fake provider
+/// (WireMock discovery document), so sign-in behaviour is tested without an identity provider.
+/// </summary>
+public sealed class OidcApiFactory : ApiFactory
+{
+    public const string PublicUrl = "https://bss.example.com";
+
+    private readonly WireMock.Server.WireMockServer _provider = WireMock.Server.WireMockServer.Start();
+
+    public OidcApiFactory()
+    {
+        var issuer = _provider.Url!;
+        _provider.Given(WireMock.RequestBuilders.Request.Create().WithPath("/.well-known/openid-configuration").UsingGet())
+            .RespondWith(WireMock.ResponseBuilders.Response.Create().WithStatusCode(200).WithBodyAsJson(new
+            {
+                issuer,
+                authorization_endpoint = $"{issuer}/authorize",
+                token_endpoint = $"{issuer}/token",
+                jwks_uri = $"{issuer}/jwks",
+                end_session_endpoint = $"{issuer}/logout",
+                response_types_supported = new[] { "code" },
+                subject_types_supported = new[] { "public" },
+                id_token_signing_alg_values_supported = new[] { "RS256" },
+            }));
+        _provider.Given(WireMock.RequestBuilders.Request.Create().WithPath("/jwks").UsingGet())
+            .RespondWith(WireMock.ResponseBuilders.Response.Create().WithStatusCode(200).WithBodyAsJson(new { keys = Array.Empty<object>() }));
+    }
+
+    protected override bool RunWorker => false;
+
+    protected override bool UseTestAuth => false;
+
+    protected override void Configure(IWebHostBuilder builder)
+    {
+        builder.UseSetting("Auth:Mode", "Oidc");
+        builder.UseSetting("Auth:Authority", _provider.Url);
+        builder.UseSetting("Auth:ClientId", "bss-test");
+        builder.UseSetting("Auth:ClientSecret", "bss-test-secret");
+        builder.UseSetting("Auth:RequireHttpsMetadata", "false");
+        builder.UseSetting("App:PublicUrl", PublicUrl);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        _provider.Stop();
+        base.Dispose(disposing);
+    }
 }

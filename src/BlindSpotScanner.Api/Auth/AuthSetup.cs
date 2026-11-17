@@ -22,10 +22,16 @@ public static class AuthSetup
 
         if (options.IsOidc)
         {
+            // The redirect URIs come from the public address: behind nginx or a TLS proxy the request's
+            // own scheme and host are not what users (and the provider's registration) see.
+            var publicUrl = (builder.Configuration["App:PublicUrl"] is { Length: > 0 } url ? url : "http://localhost:8080").TrimEnd('/');
+
+            // The cookie answers every challenge (401/403 for API and hub calls); only /api/auth/login
+            // challenges OpenID Connect, explicitly.
             builder.Services.AddAuthentication(o =>
                 {
                     o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                    o.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+                    o.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 })
                 .AddCookie(o =>
                 {
@@ -44,10 +50,21 @@ public static class AuthSetup
                     o.CallbackPath = CallbackPath;
                     o.SignedOutCallbackPath = "/api/auth/signed-out";
                     o.SaveTokens = false;
+                    o.RequireHttpsMetadata = options.RequireHttpsMetadata;
                     o.GetClaimsFromUserInfoEndpoint = true;
                     o.MapInboundClaims = false;
                     o.Scope.Add("email");
                     o.TokenValidationParameters.NameClaimType = "name";
+                    o.Events.OnRedirectToIdentityProvider = context =>
+                    {
+                        context.ProtocolMessage.RedirectUri = publicUrl + CallbackPath;
+                        return Task.CompletedTask;
+                    };
+                    o.Events.OnRedirectToIdentityProviderForSignOut = context =>
+                    {
+                        context.ProtocolMessage.PostLogoutRedirectUri = publicUrl + "/api/auth/signed-out";
+                        return Task.CompletedTask;
+                    };
                     o.Events.OnTokenValidated = context =>
                     {
                         // One app role from the provider's role claim values (unknown values never elevate).

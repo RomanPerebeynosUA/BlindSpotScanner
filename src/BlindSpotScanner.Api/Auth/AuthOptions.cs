@@ -21,5 +21,8 @@ public sealed class AuthOptions
     /// <summary>The role of a signed-in user with no known role claim.</summary>
     public string DefaultRole { get; set; } = Roles.Viewer;
 
+    /// <summary>Only a local test provider may serve its metadata over plain HTTP.</summary>
+    public bool RequireHttpsMetadata { get; set; } = true;
+
     public bool IsOidc => string.Equals(Mode, OidcMode, StringComparison.OrdinalIgnoreCase);
 }
