@@ -30,6 +30,7 @@ const repository = {
   fullName: 'example-org/bookstore-api',
   defaultBranch: 'main',
   htmlUrl: 'https://github.com/example-org/bookstore-api',
+  llmSharingAcknowledged: true,
 };
 
 const profile = {
@@ -60,7 +61,7 @@ export interface MockApi {
  * Serves the REST API (`page.route`) and the `/hubs/scans` SignalR hub (`page.routeWebSocket`, JSON
  * protocol: records end with U+001E) in memory, per test.
  */
-export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean; readOnly?: boolean; filesChanged?: boolean } = {},
+export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean; readOnly?: boolean; filesChanged?: boolean; role?: 'Viewer' | 'Member' | 'Admin' | null } = {},
 ): Promise<MockApi> {
   let registered = options.registered ?? false;
   let finished = options.finished ?? false;
@@ -135,6 +136,20 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
       const created = ticket(`BSS-${jiraBodies.length}`);
       actions.unshift(created);
       return json(created, 201);
+    }
+    if (path === '/api/me') {
+      const role = options.role === undefined ? 'Admin' : options.role;
+      return role ? json({ name: 'e2e-user', roles: [role] }) : json({ title: 'Unauthorized' }, 401);
+    }
+    if (path === '/api/settings/connections' && method === 'GET') {
+      return json([
+        { kind: 'github', configured: true, masked: '••••abcd', details: { apiBaseUrl: 'https://api.github.com' } },
+        { kind: 'jira', configured: true, masked: '••••oken', details: { baseUrl: 'https://example.atlassian.net', email: 'dev@example.com', projectKey: 'BSS', issueType: 'Task' } },
+        { kind: 'llm', configured: true, masked: '••••wxyz', details: { model: 'claude-sonnet-5-5', maxCostUsdPerScan: '5', promptSetVersion: '1.0.0' } },
+      ]);
+    }
+    if (path === `/api/repositories/${REPO_ID}/llm-sharing`) {
+      return route.fulfill({ status: 204 });
     }
     if (path === '/api/features') {
       return json({ pullRequests: !options.readOnly, jira: true });

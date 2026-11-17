@@ -23,6 +23,8 @@
       @if (compareBase(); as base) {
         <a class="btn compare" routerLink="/compare" [queryParams]="{ base: base, target: runId() }">Compare with…</a>
       }
+      <a class="btn export" [href]="'/api/runs/' + runId() + '/export?format=json'" download>Export JSON</a>
+      <a class="btn export" [href]="'/api/runs/' + runId() + '/export?format=html'" target="_blank" rel="noopener">Print / HTML</a>
     </div>
   </div>
 

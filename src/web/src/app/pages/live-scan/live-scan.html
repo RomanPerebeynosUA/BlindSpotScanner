@@ -7,7 +7,9 @@
     <div class="muted mono">run {{ runId() }}</div>
   </div>
   @if (!outcome()) {
-    <button type="button" class="btn cancel" [disabled]="cancelling()" (click)="cancel()">{{ cancelling() ? 'Cancelling…' : 'Cancel scan' }}</button>
+    @if (auth.can('Member')) {
+      <button type="button" class="btn cancel" [disabled]="cancelling()" (click)="cancel()">{{ cancelling() ? 'Cancelling…' : 'Cancel scan' }}</button>
+    }
   }
 </div>
 

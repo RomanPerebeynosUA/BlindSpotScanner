@@ -5,20 +5,21 @@ import { RemediationAction } from '../../../core/api/api-types';
 import { Finding } from '../../../core/api/report';
 import { sampleReport } from '../../../../testing/sample-report';
 import { ReportStore } from '../report-store';
+import { provideTestAuth } from '../../../../testing/auth';
 import { JiraDialog } from '../jira-dialog/jira-dialog';
 import { JiraAction } from './jira-action';
 
 const ticket = (stableKey: string, key = 'BSS-1'): RemediationAction => ({
-  id: key, type: 'JiraTicket', stableKey, externalKey: key, url: `https://example.atlassian.net/browse/${key}`, status: 'In Progress', createdAt: '2026-11-17T10:00:00Z',
+  id: key, type: 'JiraTicket', stableKey, externalKey: key, url: `https://example.atlassian.net/browse/${key}`, status: 'In Progress', createdAt: '2026-11-17T10:00:00Z', createdBy: 'test-user',
 });
 
 describe('JiraAction', () => {
   let open: ReturnType<typeof vi.fn>;
   let store: ReportStore;
 
-  function render(finding: Finding, actions: RemediationAction[] = [], created?: RemediationAction) {
+  function render(finding: Finding, actions: RemediationAction[] = [], created?: RemediationAction, viewer = false) {
     open = vi.fn(() => ({ afterClosed: () => of(created) }));
-    TestBed.configureTestingModule({ imports: [JiraAction], providers: [ReportStore, { provide: MatDialog, useValue: { open } }] });
+    TestBed.configureTestingModule({ imports: [JiraAction], providers: [ReportStore, { provide: MatDialog, useValue: { open } }, provideTestAuth(viewer ? 'Viewer' : 'Member')] });
     store = TestBed.inject(ReportStore);
     store.report.set(sampleReport());
     store.actions.set(actions);
@@ -77,5 +78,13 @@ describe('JiraAction', () => {
 
     // Assert
     expect(open).toHaveBeenCalledWith(JiraDialog, expect.objectContaining({ ariaLabelledBy: 'jira-title' }));
+  });
+
+  it('Viewer sees no Create Jira button', () => {
+    // Act
+    const { el } = render(f3(), [], undefined, true);
+
+    // Assert
+    expect(el.querySelector('button')).toBeNull();
   });
 });

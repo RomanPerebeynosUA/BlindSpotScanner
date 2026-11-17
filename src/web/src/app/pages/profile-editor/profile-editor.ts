@@ -1,3 +1,4 @@
+import { AuthService } from '../../core/auth/auth';
 import { Component, computed, DOCUMENT, inject, input, OnInit, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
@@ -35,6 +36,7 @@ const lines = (text: string): string[] => text.split('\n').map((l) => l.trim()).
 })
 export class ProfileEditor implements OnInit {
   private readonly api = inject(RepositoriesApi);
+  private readonly auth = inject(AuthService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly document = inject(DOCUMENT);
 
@@ -64,7 +66,8 @@ export class ProfileEditor implements OnInit {
   /** A save was rejected because someone saved a newer version. */
   protected readonly conflict = signal(false);
 
-  protected readonly readOnly = computed(() => this.viewing() !== null);
+  /** An old version, or a Viewer (D26): nothing can be edited. */
+  protected readonly readOnly = computed(() => this.viewing() !== null || !this.auth.can('Member'));
   protected readonly preview = computed(() => marked.parse(this.markdown(), { async: false }));
 
   ngOnInit(): void {

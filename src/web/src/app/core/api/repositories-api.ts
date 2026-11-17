@@ -24,6 +24,11 @@ export class RepositoriesApi {
     return this.http.get<RunHistoryItem[]>(`/api/repositories/${id}/runs`);
   }
 
+  /** Doc 10: accept that code excerpts go to the LLM; needed once before the first scan. */
+  acknowledgeLlmSharing(id: string): Observable<void> {
+    return this.http.post<void>(`/api/repositories/${id}/llm-sharing`, null);
+  }
+
   startScan(id: string, branch?: string): Observable<{ runId: string }> {
     return this.http.post<{ runId: string }>(`/api/repositories/${id}/scans`, branch ? { branch } : {});
   }

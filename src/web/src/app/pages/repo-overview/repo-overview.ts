@@ -1,6 +1,10 @@
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+import { filter, switchMap } from 'rxjs';
+import { AuthService } from '../../core/auth/auth';
+import { LlmSharingDialog } from './llm-sharing-dialog/llm-sharing-dialog';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { Repository, RunHistoryItem } from '../../core/api/api-types';
 import { StatusChip } from '../../shared/status-chip/status-chip';
@@ -18,6 +22,8 @@ const TREND_LENGTH = 12;
 export class RepoOverview implements OnInit {
   private readonly api = inject(RepositoriesApi);
   private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
+  protected readonly auth = inject(AuthService);
 
   readonly id = input.required<string>();
 
@@ -39,7 +45,27 @@ export class RepoOverview implements OnInit {
     this.api.runs(this.id()).subscribe((runs) => this.runs.set(runs));
   }
 
+  /** The first scan of a repository asks for LLM data-sharing consent (doc 10) and records it. */
   protected scanNow(): void {
+    if (this.repository()?.llmSharingAcknowledged === false) {
+      this.dialog
+        .open<LlmSharingDialog, unknown, boolean>(LlmSharingDialog, { maxWidth: 'calc(100vw - 32px)', ariaLabelledBy: 'llm-title' })
+        .afterClosed()
+        .pipe(
+          filter((agreed) => agreed === true),
+          switchMap(() => this.api.acknowledgeLlmSharing(this.id())),
+        )
+        .subscribe(() => {
+          this.repository.update((r) => (r ? { ...r, llmSharingAcknowledged: true } : r));
+          this.start();
+        });
+      return;
+    }
+
+    this.start();
+  }
+
+  private start(): void {
     this.starting.set(true);
     this.api.startScan(this.id()).subscribe({
       next: ({ runId }) => void this.router.navigate(['/runs', runId, 'live']),

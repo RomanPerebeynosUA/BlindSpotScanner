@@ -1,3 +1,4 @@
+import { provideTestAuth } from '../../../testing/auth';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
@@ -16,13 +17,14 @@ const summary = (overrides: Partial<RepositorySummary> = {}): RepositorySummary 
   activeRunId: null,
   latestRunStatus: 'Succeeded',
   trend: [],
+  llmSharingAcknowledged: true,
   ...overrides,
 });
 
 async function render(list: RepositorySummary[]): Promise<HTMLElement> {
   TestBed.configureTestingModule({
     imports: [Repositories],
-    providers: [provideRouter([]), { provide: RepositoriesApi, useValue: { list: () => of(list) } }],
+    providers: [provideRouter([]), provideTestAuth(), { provide: RepositoriesApi, useValue: { list: () => of(list) } }],
   });
   const fixture = TestBed.createComponent(Repositories);
   await fixture.whenStable();

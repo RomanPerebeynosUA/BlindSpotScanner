@@ -1,3 +1,4 @@
+import { provideTestAuth } from '../../../testing/auth';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -37,6 +38,7 @@ describe('ProfileEditor', () => {
     TestBed.configureTestingModule({
       imports: [ProfileEditor],
       providers: [
+        provideTestAuth(),
         provideRouter([]),
         { provide: MatSnackBar, useValue: { open } },
         {

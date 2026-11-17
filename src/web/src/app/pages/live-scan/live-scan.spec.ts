@@ -1,3 +1,4 @@
+import { provideTestAuth } from '../../../testing/auth';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
@@ -39,6 +40,7 @@ describe('LiveScan', () => {
     TestBed.configureTestingModule({
       imports: [LiveScan],
       providers: [
+        provideTestAuth(),
         { provide: Router, useValue: { navigate } },
         { provide: RunsApi, useValue: { get: () => get(), steps: () => of(steps), cancel } },
         { provide: ScanProgressService, useValue: { watch: () => ({ events, completed, stop }) } },
@@ -175,6 +177,7 @@ describe('LiveScan', () => {
     TestBed.configureTestingModule({
       imports: [LiveScan],
       providers: [
+        provideTestAuth(),
         { provide: Router, useValue: { navigate } },
         { provide: RunsApi, useValue: { get: () => get(), steps: () => of(steps), cancel } },
         { provide: ScanProgressService, useValue: { watch } },

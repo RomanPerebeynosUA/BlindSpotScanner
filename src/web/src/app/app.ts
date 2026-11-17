@@ -1,11 +1,12 @@
 import { Component, DOCUMENT, inject } from '@angular/core';
+import { AuthService } from './core/auth/auth';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 type Theme = 'light' | 'dark';
 
 const THEME_KEY = 'bss-theme';
 
-/** The app shell: a nav rail (a top bar at ≤800px) and the routed page. */
+/** The app shell: a nav rail (a top bar at ≤800px) with the signed-in user, and the routed page; signed-out users see Sign in (D26). */
 @Component({
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   selector: 'app-root',
@@ -14,6 +15,7 @@ const THEME_KEY = 'bss-theme';
 })
 export class App {
   private readonly document = inject(DOCUMENT);
+  protected readonly auth = inject(AuthService);
 
   constructor() {
     const saved = readTheme();

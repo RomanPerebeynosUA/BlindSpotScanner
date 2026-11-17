@@ -9,7 +9,9 @@
       <a [routerLink]="['/repos', id(), 'profile']">Profile</a>
     </nav>
   </div>
-  <button type="button" class="btn primary" [disabled]="starting()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
+  @if (auth.can('Member')) {
+    <button type="button" class="btn primary" [disabled]="starting()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
+  }
 </div>
 
 @if (scoreTrend().length >= 2) {

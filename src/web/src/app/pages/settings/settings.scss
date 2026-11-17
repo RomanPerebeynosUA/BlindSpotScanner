@@ -1,0 +1,5 @@
+.cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+dt { color: var(--muted, #666); }
+dd { margin: 0; overflow-wrap: anywhere; }
+.state.ok, .result.ok { color: var(--ok, #2e7d32); }

@@ -1,0 +1,16 @@
+<form class="dialog" (submit)="submit($event)">
+  <h2 id="llm-title">Before the first scan</h2>
+  <p>
+    A scan sends excerpts of this repository's code (controllers, tests, the project file) to Claude to classify and grade tests.
+    Every excerpt goes through secret scrubbing first, and files like <code>.env*</code>, <code>*.pem</code>, <code>*.pfx</code>,
+    <code>appsettings.*.json</code> and <code>secrets.*</code> are never sent.
+  </p>
+  <label class="check">
+    <input type="checkbox" [checked]="agreed()" (change)="toggle($event)" />
+    <span>I understand that code excerpts from this repository are sent to the LLM.</span>
+  </label>
+  <div class="row actions">
+    <button type="button" class="btn" (click)="cancel()">Cancel</button>
+    <button type="submit" class="btn primary" [disabled]="!agreed()">Continue and scan</button>
+  </div>
+</form>

@@ -37,7 +37,7 @@ public sealed class AuthController(IOptions<AuthOptions> options) : ControllerBa
     public IActionResult Logout() =>
         options.Value.IsOidc
             ? SignOut(new AuthenticationProperties { RedirectUri = "/" }, CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme)
-            : NoContent();
+            : Redirect("/");
 
     /// <summary>"/x" only: not "//host" or "/\host", which browsers treat as another site.</summary>
     private static bool IsLocalPath(string? url) =>

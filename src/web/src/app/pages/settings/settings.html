@@ -1,0 +1,34 @@
+<div class="head">
+  <div>
+    <h1>Settings</h1>
+    <div class="muted">Connections are configured with environment variables (see the README); secrets are never shown in full.</div>
+  </div>
+</div>
+
+<div class="cards">
+  @for (c of connections(); track c.kind) {
+    <section class="panel stack" [attr.data-kind]="c.kind" [attr.aria-labelledby]="'conn-' + c.kind">
+      <h2 [id]="'conn-' + c.kind">{{ titles[c.kind] ?? c.kind }}</h2>
+      <div class="row">
+        <span class="chip state" [class.ok]="c.configured">{{ c.configured ? 'Configured' : 'Not configured' }}</span>
+        @if (c.masked) {
+          <span class="mono masked">{{ c.masked }}</span>
+        }
+      </div>
+      <dl>
+        @for (d of c.details | keyvalue; track d.key) {
+          <dt>{{ d.key }}</dt>
+          <dd class="mono">{{ d.value || '—' }}</dd>
+        }
+      </dl>
+      <div class="row">
+        <button type="button" class="btn sm" [disabled]="result(c.kind) === 'testing'" (click)="test(c.kind)">
+          {{ result(c.kind) === 'testing' ? 'Testing…' : 'Test' }}
+        </button>
+        @if (outcome(c.kind); as r) {
+          <span class="result" [class.ok]="r.ok" role="status">{{ r.message }}</span>
+        }
+      </div>
+    </section>
+  }
+</div>

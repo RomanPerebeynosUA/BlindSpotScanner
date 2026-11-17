@@ -5,19 +5,20 @@ import { RemediationAction } from '../../../core/api/api-types';
 import { Finding } from '../../../core/api/report';
 import { sampleReport } from '../../../../testing/sample-report';
 import { ReportStore } from '../report-store';
+import { provideTestAuth } from '../../../../testing/auth';
 import { FixDialog } from '../fix-dialog/fix-dialog';
 import { FixAction } from './fix-action';
 
 const pr = (stableKey: string): RemediationAction => ({
-  id: 'p1', type: 'PullRequest', stableKey, externalKey: '#7', url: 'https://github.com/example-org/bookstore-api/pull/7', status: 'Open · checks passing', createdAt: '2026-11-17T10:00:00Z',
+  id: 'p1', type: 'PullRequest', stableKey, externalKey: '#7', url: 'https://github.com/example-org/bookstore-api/pull/7', status: 'Open · checks passing', createdAt: '2026-11-17T10:00:00Z', createdBy: 'test-user',
 });
 
 describe('FixAction', () => {
   let open: ReturnType<typeof vi.fn>;
 
-  function render(finding: Finding, pullRequests = true, actions: RemediationAction[] = []) {
+  function render(finding: Finding, pullRequests = true, actions: RemediationAction[] = [], viewer = false) {
     open = vi.fn(() => ({ afterClosed: () => of(undefined) }));
-    TestBed.configureTestingModule({ imports: [FixAction], providers: [ReportStore, { provide: MatDialog, useValue: { open } }] });
+    TestBed.configureTestingModule({ imports: [FixAction], providers: [ReportStore, { provide: MatDialog, useValue: { open } }, provideTestAuth(viewer ? 'Viewer' : 'Member')] });
     const store = TestBed.inject(ReportStore);
     store.report.set(sampleReport());
     store.features.set({ pullRequests, jira: true });
@@ -72,5 +73,13 @@ describe('FixAction', () => {
 
     // Assert
     expect(open).toHaveBeenCalledWith(FixDialog, expect.objectContaining({ data: { runId: sampleReport().meta.runId, findingId: 'f3' }, ariaLabelledBy: 'fix-title' }));
+  });
+
+  it('Viewer sees no Fix with PR button', () => {
+    // Act
+    const el = render(finding('f3'), true, [], true);
+
+    // Assert
+    expect(el.querySelector('button')).toBeNull();
   });
 });

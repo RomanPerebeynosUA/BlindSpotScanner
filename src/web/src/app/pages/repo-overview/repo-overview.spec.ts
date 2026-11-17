@@ -4,6 +4,8 @@ import { NEVER, of, Observable } from 'rxjs';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { RunHistoryItem } from '../../core/api/api-types';
 import { RepoOverview } from './repo-overview';
+import { MatDialog } from '@angular/material/dialog';
+import { provideTestAuth } from '../../../testing/auth';
 
 const run = (overrides: Partial<RunHistoryItem> = {}): RunHistoryItem => ({
   runId: 'run1',
@@ -24,14 +26,25 @@ const run = (overrides: Partial<RunHistoryItem> = {}): RunHistoryItem => ({
   ...overrides,
 });
 
-const repository = { id: 'r1', owner: 'example-org', name: 'bookstore', fullName: 'example-org/bookstore', defaultBranch: 'main', htmlUrl: 'https://github.com/example-org/bookstore' };
+const repository = { id: 'r1', owner: 'example-org', name: 'bookstore', fullName: 'example-org/bookstore', defaultBranch: 'main', htmlUrl: 'https://github.com/example-org/bookstore', llmSharingAcknowledged: true };
 
-async function render(runs: RunHistoryItem[], startScan: () => Observable<{ runId: string }> = () => of({ runId: 'new' })) {
+const dialogOpen = vi.fn();
+const acknowledgeLlmSharing = vi.fn(() => of(undefined));
+
+async function render(
+  runs: RunHistoryItem[],
+  startScan: () => Observable<{ runId: string }> = () => of({ runId: 'new' }),
+  options: { role?: 'Viewer' | 'Member'; acknowledged?: boolean; consent?: boolean } = {},
+) {
+  dialogOpen.mockReset().mockReturnValue({ afterClosed: () => of(options.consent ?? false) });
+  const repo = { ...repository, llmSharingAcknowledged: options.acknowledged ?? true };
   TestBed.configureTestingModule({
     imports: [RepoOverview],
     providers: [
       provideRouter([]),
-      { provide: RepositoriesApi, useValue: { get: () => of(repository), runs: () => of(runs), startScan } },
+      provideTestAuth(options.role ?? 'Member'),
+      { provide: MatDialog, useValue: { open: dialogOpen } },
+      { provide: RepositoriesApi, useValue: { get: () => of(repo), runs: () => of(runs), startScan, acknowledgeLlmSharing } },
     ],
   });
   const fixture = TestBed.createComponent(RepoOverview);
@@ -140,5 +153,37 @@ describe('RepoOverview', () => {
 
     // Assert
     expect(el.textContent).toContain('No scans yet.');
+  });
+
+  it('Viewer sees no Scan now button', async () => {
+    // Act
+    const { el } = await render([], undefined, { role: 'Viewer' });
+
+    // Assert
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent?.includes('Scan now'))).toBe(false);
+  });
+
+  it('unacknowledged Scan now asks for consent and scans after it', async () => {
+    // Arrange
+    const startScan = vi.fn(() => of({ runId: 'new' }));
+    const { el } = await render([], startScan, { acknowledged: false, consent: true });
+
+    // Act
+    ([...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Scan now')) as HTMLButtonElement).click();
+
+    // Assert
+    expect([dialogOpen.mock.calls.length, acknowledgeLlmSharing.mock.calls.length, startScan.mock.calls.length]).toEqual([1, 1, 1]);
+  });
+
+  it('declined consent starts no scan', async () => {
+    // Arrange
+    const startScan = vi.fn(() => of({ runId: 'new' }));
+    const { el } = await render([], startScan, { acknowledged: false, consent: false });
+
+    // Act
+    ([...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Scan now')) as HTMLButtonElement).click();
+
+    // Assert
+    expect(startScan).not.toHaveBeenCalled();
   });
 });

@@ -17,6 +17,7 @@ export interface RepositorySummary {
   latestRunStatus: RunStatus | null;
   /** The last succeeded runs (at most 12), oldest first (D23). */
   trend: TrendPoint[];
+  llmSharingAcknowledged: boolean;
 }
 
 export interface TrendPoint {
@@ -50,6 +51,8 @@ export interface Repository {
   fullName: string;
   defaultBranch: string;
   htmlUrl: string;
+  /** Doc 10: scans need this accepted first (D26). */
+  llmSharingAcknowledged: boolean;
 }
 
 export interface RunHistoryItem {
@@ -122,6 +125,7 @@ export interface RemediationAction {
   url: string;
   status: string;
   createdAt: string;
+  createdBy: string;
 }
 
 /** POST …/jira-preview: the editable draft; `existing` is a ticket already made for this stable key. */
@@ -186,4 +190,17 @@ export interface FixCreate {
   body: string;
   force: boolean;
   baseSha: string;
+}
+
+/** GET /api/settings/connections (D26): what is configured, secrets masked as ••••last4. */
+export interface ConnectionStatus {
+  kind: 'github' | 'jira' | 'llm';
+  configured: boolean;
+  masked: string | null;
+  details: Record<string, string>;
+}
+
+export interface ConnectionTestResult {
+  ok: boolean;
+  message: string;
 }

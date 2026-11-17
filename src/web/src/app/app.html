@@ -1,10 +1,28 @@
-<div class="shell">
-  <nav class="rail" aria-label="Main">
-    <div class="brand"><i aria-hidden="true"></i>BlindSpotScanner</div>
-    <a class="navbtn" routerLink="/" routerLinkActive="active" ariaCurrentWhenActive="page" [routerLinkActiveOptions]="{ exact: false }">Repositories</a>
-    <button type="button" class="navbtn theme" (click)="toggleTheme()">Light / dark theme</button>
-  </nav>
-  <main>
-    <router-outlet />
+@if (auth.me(); as me) {
+  <div class="shell">
+    <nav class="rail" aria-label="Main">
+      <div class="brand"><i aria-hidden="true"></i>BlindSpotScanner</div>
+      <a class="navbtn" routerLink="/" routerLinkActive="active" ariaCurrentWhenActive="page" [routerLinkActiveOptions]="{ exact: false }">Repositories</a>
+      @if (auth.can('Admin')) {
+        <a class="navbtn" routerLink="/settings" routerLinkActive="active" ariaCurrentWhenActive="page">Settings</a>
+      }
+      <button type="button" class="navbtn theme" (click)="toggleTheme()">Light / dark theme</button>
+      <div class="user">
+        <span class="name">{{ me.name }}</span>
+        <span class="muted role">{{ me.roles.join(', ') }}</span>
+        <form method="post" action="/api/auth/logout"><button type="submit" class="navbtn signout">Sign out</button></form>
+      </div>
+    </nav>
+    <main>
+      <router-outlet />
+    </main>
+  </div>
+} @else if (auth.me() === null) {
+  <main class="signin-screen">
+    <div class="panel stack">
+      <h1>BlindSpotScanner</h1>
+      <p class="muted">Sign in to see your repositories' integration test coverage.</p>
+      <button type="button" class="btn primary signin" (click)="auth.login()">Sign in</button>
+    </div>
   </main>
-</div>
+}

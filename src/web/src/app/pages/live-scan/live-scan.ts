@@ -1,3 +1,4 @@
+import { AuthService } from '../../core/auth/auth';
 import { Component, computed, DestroyRef, effect, inject, input, OnInit, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
@@ -32,6 +33,7 @@ const POLL_MS = 5000;
 })
 export class LiveScan implements OnInit {
   private readonly runs = inject(RunsApi);
+  protected readonly auth = inject(AuthService);
   private readonly progress = inject(ScanProgressService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
