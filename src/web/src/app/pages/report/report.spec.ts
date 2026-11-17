@@ -4,7 +4,8 @@ import { provideRouter, Router } from '@angular/router';
 import { Observable, of, Subject, throwError } from 'rxjs';
 import { RunsApi } from '../../core/api/runs-api';
 import { RepositoriesApi } from '../../core/api/repositories-api';
-import { RunBody, RunHistoryItem } from '../../core/api/api-types';
+import { RemediationApi } from '../../core/api/remediation-api';
+import { RemediationAction, RunBody, RunHistoryItem } from '../../core/api/api-types';
 import { IntegrationReport } from '../../core/api/report';
 import { sampleReport } from '../../../testing/sample-report';
 import { Report } from './report';
@@ -27,7 +28,12 @@ describe('Report', () => {
   let navigate: ReturnType<typeof vi.fn>;
   let get: ReturnType<typeof vi.fn>;
 
-  async function render(body: Observable<RunBody>, history: RunHistoryItem[] = defaultHistory, getFor?: (runId: string) => Observable<RunBody>) {
+  async function render(
+    body: Observable<RunBody>,
+    history: RunHistoryItem[] = defaultHistory,
+    getFor?: (runId: string) => Observable<RunBody>,
+    actions: RemediationAction[] = [],
+  ) {
     get = vi.fn((runId: string) => getFor?.(runId) ?? body);
     TestBed.configureTestingModule({
       imports: [Report],
@@ -35,6 +41,7 @@ describe('Report', () => {
         provideRouter([]),
         { provide: RunsApi, useValue: { get, repository: () => of({ id: 'repo1' }) } },
         { provide: RepositoriesApi, useValue: { runs: () => of(history) } },
+        { provide: RemediationApi, useValue: { actions: () => of(actions) } },
       ],
     });
     navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true) as unknown as ReturnType<typeof vi.fn>;
@@ -328,5 +335,38 @@ describe('Report', () => {
 
     // Assert
     expect(el.textContent).toContain('Run not found');
+  });
+
+  const endpointRow = (el: HTMLElement, key: string) => el.querySelector(`tr.endpoint[data-key="${key}"]`) as HTMLElement;
+
+  it('untested endpoint row shows Create Jira', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    expect(endpointRow(el, 'POST api/orders/{id}/cancel').querySelector('app-jira-action button')?.textContent?.trim()).toBe('Create Jira');
+  });
+
+  it('covered endpoint row shows no Jira button', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    expect(endpointRow(el, 'GET api/books').querySelector('app-jira-action')).toBeNull();
+  });
+
+  it('actions log lists the repository tickets', async () => {
+    // Arrange
+    const ticket: RemediationAction = {
+      id: 'a1', type: 'JiraTicket', stableKey: 'uncovered-seam:payment-gateway', externalKey: 'BSS-4',
+      url: 'https://example.atlassian.net/browse/BSS-4', status: 'Done', createdAt: '2026-11-17T10:00:00Z',
+    };
+
+    // Act
+    const { el } = await render(withReport(), defaultHistory, undefined, [ticket]);
+
+    // Assert
+    expect(el.querySelector('app-actions-log')?.textContent).toContain('BSS-4');
+    expect(el.querySelector('[data-kind=UncoveredSeam] app-jira-action a')?.textContent?.trim()).toBe('BSS-4 · Done');
   });
 });

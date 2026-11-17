@@ -1,0 +1,41 @@
+<form class="dialog" (submit)="submit($event)" aria-labelledby="jira-title">
+  <h2 id="jira-title">Create Jira ticket</h2>
+  @if (draft(); as d) {
+    @if (existing(); as e) {
+      <div class="banner" role="alert">
+        Already ticketed: <a [href]="e.url" target="_blank" rel="noopener">{{ e.externalKey }}</a> ({{ e.status }}). Creating another makes a duplicate.
+      </div>
+    }
+    <div class="muted target">Project {{ d.projectKey }} · {{ d.issueType }}</div>
+    <label>
+      Summary
+      <input name="summary" required [value]="summary()" (input)="summary.set(read($event))" />
+    </label>
+    <label>
+      Description (Markdown)
+      <textarea name="description" rows="12" [value]="description()" (input)="description.set(read($event))"></textarea>
+    </label>
+    <div class="row">
+      <label>
+        Priority
+        <select name="priority" (change)="priority.set(read($event))">
+          @for (p of priorities; track p) {
+            <option [value]="p" [selected]="p === priority()">{{ p }}</option>
+          }
+        </select>
+      </label>
+      <label class="grow">
+        Labels
+        <input name="labels" [value]="labels()" (input)="labels.set(read($event))" />
+      </label>
+    </div>
+    <div class="row actions">
+      <button type="button" class="btn" (click)="cancel()">Cancel</button>
+      <button type="submit" class="btn primary" [disabled]="!summary().trim() || busy()">
+        {{ busy() ? 'Creating…' : existing() ? 'Create anyway' : 'Create ticket' }}
+      </button>
+    </div>
+  } @else {
+    <p class="muted">Preparing the draft…</p>
+  }
+</form>

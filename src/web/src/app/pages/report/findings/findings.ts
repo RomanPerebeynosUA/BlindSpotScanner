@@ -1,6 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 import { Finding, FindingKind, ReportMeta } from '../../../core/api/report';
 import { EvidenceLink } from '../../../shared/evidence-link/evidence-link';
+import { JiraAction } from '../jira-action/jira-action';
 
 const GROUPS: readonly { kind: FindingKind; title: string }[] = [
   { kind: 'FalsePositive', title: 'False positives' },
@@ -11,7 +12,7 @@ const GROUPS: readonly { kind: FindingKind; title: string }[] = [
 /** False positives, skipped tests and uncovered seams (doc 04 section 6); uncovered endpoints are in the coverage table. */
 @Component({
   selector: 'app-findings',
-  imports: [EvidenceLink],
+  imports: [EvidenceLink, JiraAction],
   templateUrl: './findings.html',
 })
 export class Findings {

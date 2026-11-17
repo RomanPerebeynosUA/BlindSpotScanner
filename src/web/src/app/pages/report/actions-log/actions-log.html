@@ -1,0 +1,25 @@
+<div class="stack actions-log">
+  <h2>Actions log</h2>
+  @if (actions().length > 0) {
+    <div class="panel tablewrap">
+      <table>
+        <thead>
+          <tr><th>Type</th><th>Key</th><th>Status</th><th>Stable key</th><th>Created</th></tr>
+        </thead>
+        <tbody>
+          @for (a of actions(); track a.id) {
+            <tr>
+              <td>{{ a.type === 'JiraTicket' ? 'Jira' : 'Pull request' }}</td>
+              <td><a [href]="a.url" target="_blank" rel="noopener">{{ a.externalKey }}</a></td>
+              <td>{{ a.status }}</td>
+              <td class="mono">{{ a.stableKey }}</td>
+              <td>{{ a.createdAt | date: 'd MMM y' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="panel muted">No tickets yet.</p>
+  }
+</div>

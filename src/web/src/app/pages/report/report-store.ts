@@ -1,5 +1,6 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { ControllerCoverage, COVERAGE_STATUSES, CoverageStatus, IntegrationReport, ReportMeta } from '../../core/api/report';
+import { RemediationAction } from '../../core/api/api-types';
 
 export type StatusFilter = CoverageStatus | 'all';
 
@@ -9,6 +10,14 @@ export class ReportStore {
   readonly report = signal<IntegrationReport | null>(null);
   readonly statusFilter = signal<StatusFilter>('all');
   readonly search = signal('');
+
+  /** The repository's tickets, newest first (D24); they outlive runs, so they match findings by stable key. */
+  readonly actions = signal<RemediationAction[]>([]);
+
+  /** The newest Jira ticket for a stable key, if any. */
+  ticketFor(stableKey: string): RemediationAction | undefined {
+    return this.actions().find((a) => a.type === 'JiraTicket' && a.stableKey === stableKey);
+  }
 
   /** Endpoint counts per status, for the filter buttons. */
   readonly statusCounts = computed(() => {

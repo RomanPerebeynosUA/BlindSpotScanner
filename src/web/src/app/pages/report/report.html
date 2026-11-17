@@ -46,6 +46,7 @@
   <app-endpoint-coverage [meta]="meta" />
   <app-scorecard [rows]="report.scorecard" [meta]="meta" [scoreLabel]="report.summary.scoreLabel" />
   <app-findings [findings]="report.findings" [meta]="meta" />
+  <app-actions-log [actions]="store.actions()" />
 
   <div class="note">
     Citations: {{ report.validation.citationsChecked ?? 0 }} checked, {{ report.validation.citationsResolved ?? 0 }} resolved at
