@@ -125,6 +125,15 @@ describe('RepoOverview', () => {
     expect(labels).toEqual(['Score: 4.7 to 5.1', 'Covered share: 40% to 60%']);
   });
 
+  it('overview trend keeps the last 12 succeeded runs like the repositories list', async () => {
+    // Act (13 runs, newest first: scores 5.2 down to 4.0)
+    const scores = [5.2, 5.1, 5.0, 4.9, 4.8, 4.7, 4.6, 4.5, 4.4, 4.3, 4.2, 4.1, 4.0];
+    const { el } = await render(scores.map((score, i) => run({ runId: `r${i}`, score })));
+
+    // Assert
+    expect(el.querySelector('.trends svg')?.getAttribute('aria-label')).toBe('Score: 4.1 to 5.2');
+  });
+
   it('no runs shows the empty state', async () => {
     // Act
     const { el } = await render([]);
