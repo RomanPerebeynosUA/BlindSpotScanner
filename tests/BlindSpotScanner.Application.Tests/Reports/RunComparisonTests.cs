@@ -138,6 +138,20 @@ public class RunComparisonTests
     }
 
     [Fact]
+    public async Task CompareAsync_QueuedRunOfAnotherRepository_ReturnsDifferentRepositories()
+    {
+        // Arrange
+        Add(Fixtures.Previous);
+        _runs.Runs.Add(ScanRun.Enqueue(CurrentId, Guid.NewGuid(), null, 5m, 1, "claude-sonnet-5-5", "1.0.0", DateTimeOffset.UtcNow));
+
+        // Act
+        var result = await Comparison.CompareAsync(PreviousId, CurrentId, CancellationToken.None);
+
+        // Assert
+        result.Status.Should().Be(CompareStatus.DifferentRepositories);
+    }
+
+    [Fact]
     public async Task CompareAsync_UnknownRun_ReturnsNotFound()
     {
         // Arrange

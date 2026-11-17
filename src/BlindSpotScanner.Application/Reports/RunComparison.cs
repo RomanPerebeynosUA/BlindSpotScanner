@@ -41,14 +41,15 @@ public sealed class RunComparison(IScanRequestStore runs)
             return new CompareResult(CompareStatus.NotFound);
         }
 
-        if (first is not { Status: RunStatus.Succeeded, ReportJson: { } firstJson } || second is not { Status: RunStatus.Succeeded, ReportJson: { } secondJson })
-        {
-            return new CompareResult(CompareStatus.NoReport);
-        }
-
+        // A pair from two repositories is a bad request whatever state the runs are in.
         if (first.RepositoryId != second.RepositoryId)
         {
             return new CompareResult(CompareStatus.DifferentRepositories);
+        }
+
+        if (first is not { Status: RunStatus.Succeeded, ReportJson: { } firstJson } || second is not { Status: RunStatus.Succeeded, ReportJson: { } secondJson })
+        {
+            return new CompareResult(CompareStatus.NoReport);
         }
 
         var (a, b) = (ReportJsonSerializer.Deserialize(firstJson), ReportJsonSerializer.Deserialize(secondJson));
