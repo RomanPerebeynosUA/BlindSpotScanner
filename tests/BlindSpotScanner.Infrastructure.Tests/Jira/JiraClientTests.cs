@@ -162,6 +162,53 @@ public sealed class JiraClientTests : IDisposable
     }
 
     [Fact]
+    public async Task GetStatusAsync_Timeout_ThrowsJiraException()
+    {
+        // Arrange
+        _server.Given(Request.Create().WithPath("/rest/api/3/issue/BSS-1").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithDelay(TimeSpan.FromSeconds(5)).WithBodyAsJson(new { }));
+        var client = new JiraClient(new HttpClient { Timeout = TimeSpan.FromMilliseconds(200) }, Options.Create(new JiraOptions
+        {
+            BaseUrl = _server.Url!, Email = Email, ApiToken = Token, ProjectKey = "BSS",
+        }));
+
+        // Act
+        var act = () => client.GetStatusAsync("BSS-1", CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<JiraException>()).Which.Message.Should().Be("Could not reach Jira for reading an issue.");
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_HtmlBody_ThrowsJiraException()
+    {
+        // Arrange (a misconfigured BaseUrl answering with a login page)
+        _server.Given(Request.Create().WithPath("/rest/api/3/issue/BSS-1").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody("<html>Log in</html>"));
+
+        // Act
+        var act = () => CreateClient().GetStatusAsync("BSS-1", CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<JiraException>()).Which.Message.Should().Be("Jira sent an unreadable answer for reading an issue.");
+    }
+
+    [Fact]
+    public async Task CreateIssueAsync_Unreachable_ThrowsJiraExceptionWithoutToken()
+    {
+        // Arrange (nothing listens on the stopped server's port)
+        var url = _server.Url!;
+        _server.Stop();
+        var client = new JiraClient(new HttpClient(), Options.Create(new JiraOptions { BaseUrl = url, Email = Email, ApiToken = Token, ProjectKey = "BSS" }));
+
+        // Act
+        var act = () => client.CreateIssueAsync(Draft(), CancellationToken.None);
+
+        // Assert
+        (await act.Should().ThrowAsync<JiraException>()).Which.Message.Should().Be("Could not reach Jira for creating an issue.");
+    }
+
+    [Fact]
     public async Task GetStatusAsync_ReturnsStatusName()
     {
         // Arrange

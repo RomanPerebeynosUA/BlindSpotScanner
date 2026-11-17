@@ -92,14 +92,35 @@ public sealed partial class JiraClient(HttpClient http, IOptions<JiraOptions> op
             request.Content = JsonContent.Create(body);
         }
 
-        using var response = await http.SendAsync(request, ct);
-        var text = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        string text;
+        try
         {
-            throw new JiraException($"Jira returned {(int)response.StatusCode} for {operation}{Messages(text)}");
+            response = await http.SendAsync(request, ct);
+            text = await response.Content.ReadAsStringAsync(ct);
+        }
+        // Unreachable or timed out (HttpClient reports its timeout as a cancellation the caller didn't ask for).
+        catch (Exception e) when (e is HttpRequestException || (e is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            throw new JiraException($"Could not reach Jira for {operation}.");
         }
 
-        return JsonNode.Parse(text) ?? new JsonObject();
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new JiraException($"Jira returned {(int)response.StatusCode} for {operation}{Messages(text)}");
+            }
+
+            try
+            {
+                return JsonNode.Parse(text) ?? new JsonObject();
+            }
+            catch (JsonException)
+            {
+                throw new JiraException($"Jira sent an unreadable answer for {operation}.");
+            }
+        }
     }
 
     /// <summary>Jira's own <c>errorMessages</c> and field <c>errors</c>, which never echo credentials.</summary>

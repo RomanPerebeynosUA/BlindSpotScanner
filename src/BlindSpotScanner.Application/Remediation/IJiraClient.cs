@@ -9,7 +9,7 @@ public sealed record JiraIssueRef(string Key, string Url, string Status);
 /// <summary>A Jira call failed. The message never carries the token or the Authorization header (principle 9).</summary>
 public sealed class JiraException(string message) : Exception(message);
 
-/// <summary>The three Jira Cloud REST calls M9 needs (doc 09).</summary>
+/// <summary>The three Jira Cloud REST calls M9 needs (doc 09). Every Jira failure (an error status, unreachable, timed out, unreadable) is a <see cref="JiraException"/>.</summary>
 public interface IJiraClient
 {
     /// <summary>False until the Jira site, email, API token and project key are all configured (D24).</summary>

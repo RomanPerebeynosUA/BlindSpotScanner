@@ -101,7 +101,7 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
                 action.Status = await jira.GetStatusAsync(action.ExternalKey, ct);
                 action.StatusCheckedAt = now;
             }
-            catch (Exception e) when (e is JiraException or HttpRequestException)
+            catch (JiraException)
             {
                 // The report must never fail because Jira is down; the cached status stays.
             }

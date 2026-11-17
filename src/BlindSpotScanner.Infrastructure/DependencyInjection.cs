@@ -39,7 +39,8 @@ public static class DependencyInjection
         services.AddTransient<GitHubRateLimitHandler>();
         services.AddHttpClient<IGitHubClient, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
         services.AddScoped<IBlobReader, CachingBlobReader>();
-        services.AddHttpClient<IJiraClient, JiraClient>();
+        // A short timeout: a hung Jira must not hold the report's actions list (D24).
+        services.AddHttpClient<IJiraClient, JiraClient>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<IEndpointExtractor, AspNetCoreEndpointExtractor>();
         services.AddSingleton<ITestSyntaxReader, CSharpTestSyntaxReader>();
 
