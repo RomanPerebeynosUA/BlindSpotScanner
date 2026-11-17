@@ -31,6 +31,7 @@ tests/
   BlindSpotScanner.Application.Tests/
   BlindSpotScanner.Infrastructure.Tests/   Infrastructure units + Testcontainers persistence (D12)
   BlindSpotScanner.Api.IntegrationTests/   HTTP-level tests
+  fixtures/bookstore/                      synthetic mini-repo read as text by the M4 extractors (never compiled)
 BlindSpotScanner.slnx
 global.json                         pins the .NET SDK (10.0.102, latestFeature)
 dotnet-tools.json                   local tools (dotnet-ef); run `dotnet tool restore`

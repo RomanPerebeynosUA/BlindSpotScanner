@@ -102,3 +102,28 @@ The user's choice: profiles don't carry exclude globs, so the `Exclude` line was
 `third_party`, `dist`, `wwwroot/lib`, `Generated`/`generated`, `*.Designer.cs` and `*.g.cs`.
 Symlinks (mode 120000) are not counted. Blob text is UTF-8 without its BOM; content that isn't
 valid UTF-8 decodes as Latin-1.
+
+## D18 — Profile classification rules are typed columns (2026-11-17)
+The user's choice: P4's rules live in `string[]` columns on `repo_profiles`, not parsed from the
+profile Markdown. `MinimalApiGlobs` (files with minimal API routes; they join `ControllerGlobs` as
+the denominator source), `IntegrationGlobs` (folders and naming), `IntegrationAttributes` (written
+without brackets, e.g. `Trait("Category","Integration")`; an entry without `(` matches by name),
+`IntegrationBaseTypes` (an entry without `<` matches any generic arity) and `NotIntegrationGlobs`
+(never integration, even inside an integration folder). All default to empty.
+
+## D19 — Endpoint extraction scope (2026-11-17)
+`AspNetCoreEndpointExtractor` reads C# syntax with Roslyn (no compilation). Supported: attribute
+routing (every class `[Route]` × every verb template or method `[Route]`, `[controller]`/`[action]`
+tokens, absolute `/` and `~/` templates) and minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapPatch`/
+`MapDelete`, with `MapGroup` prefixes through call chains and the nearest in-scope initializer or
+assignment). `[action]` honours `[ActionName]` and ASP.NET's trimmed `Async` suffix; `[area]` takes
+the class's `[Area]`. Controllers follow ASP.NET's rule: public, not abstract or static, not
+`[NonController]`. Not supported: conventional routing, and `Map`/`MapMethods`/`MapFallback`
+registrations (reported). These become unverified reasons, so nothing
+is dropped silently: a non-literal route; a controller with no attribute-routed actions; a partial
+controller or one deriving from a custom base (an inherited or other-file `[Route]` isn't read); an
+action routed without an `Http*` verb; a minimal API whose group prefix comes from a parameter or
+field this file doesn't resolve; any non-`.cs` file. In P4, non-`.cs` test files and files whose
+tests may be inherited from a class base go to Ambiguous (the LLM step), not Other. Derived test
+attributes (`[SkippableFact]`, `[IntegrationTheory]`) count as tests. A file's minimal APIs form one
+controller row named after the file. Roslyn is pinned to 5.0.0 to match EF Core Design's exact dependency.

@@ -191,6 +191,21 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("controller_globs");
 
+                    b.PrimitiveCollection<string[]>("IntegrationAttributes")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("integration_attributes");
+
+                    b.PrimitiveCollection<string[]>("IntegrationBaseTypes")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("integration_base_types");
+
+                    b.PrimitiveCollection<string[]>("IntegrationGlobs")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("integration_globs");
+
                     b.Property<string>("IntegrationMappedTo")
                         .IsRequired()
                         .HasColumnType("text")
@@ -200,6 +215,16 @@ namespace BlindSpotScanner.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("markdown");
+
+                    b.PrimitiveCollection<string[]>("MinimalApiGlobs")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("minimal_api_globs");
+
+                    b.PrimitiveCollection<string[]>("NotIntegrationGlobs")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("not_integration_globs");
 
                     b.PrimitiveCollection<string[]>("TestGlobs")
                         .IsRequired()

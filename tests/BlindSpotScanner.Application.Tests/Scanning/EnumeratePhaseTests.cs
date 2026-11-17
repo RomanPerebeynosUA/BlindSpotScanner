@@ -88,6 +88,32 @@ public class EnumeratePhaseTests
     }
 
     [Fact]
+    public async Task Enumerate_MinimalApiGlobs_JoinDenominator()
+    {
+        // Arrange
+        var phase = new EnumeratePhase(Repo([.. Bookstore, "src/Api/Endpoints/HealthEndpoints.cs"]));
+        var profile = new RepoProfile
+        {
+            RepositoryId = Profile.RepositoryId,
+            Version = 1,
+            Markdown = "# Profile",
+            IntegrationMappedTo = IntegrationMappedTo.RealSeam,
+            ControllerGlobs = Profile.ControllerGlobs,
+            TestGlobs = Profile.TestGlobs,
+            MinimalApiGlobs = ["**/Endpoints/*.cs"],
+        };
+
+        // Act
+        var inventory = await phase.EnumerateAsync(Run, profile, CancellationToken.None);
+
+        // Assert
+        inventory.ControllerFiles.Select(f => f.Path).Should().Equal(
+            "src/Api/Controllers/BooksController.cs",
+            "src/Api/Controllers/OrdersController.cs",
+            "src/Api/Endpoints/HealthEndpoints.cs");
+    }
+
+    [Fact]
     public async Task Enumerate_LowercaseGeneratedThirdPartyDistAndWwwrootLib_AreExcluded()
     {
         // Arrange
