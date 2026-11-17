@@ -63,6 +63,12 @@ public sealed class FixGuard : IFixGuard
             return $"{path}: contains something that looks like a secret";
         }
 
+        // The LLM saw secrets scrubbed; a modify that echoes the marker would commit it in place of the value.
+        if (file.Content.Contains(SecretScrubber.Redacted, StringComparison.Ordinal))
+        {
+            return $"{path}: contains a redacted value; restore it before opening the PR";
+        }
+
         var error = CSharpSyntaxTree.ParseText(file.Content).GetDiagnostics().FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
         return error is null
             ? null

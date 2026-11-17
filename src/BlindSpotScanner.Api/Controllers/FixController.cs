@@ -67,7 +67,8 @@ public sealed class FixController(FixPullRequests fixes) : ControllerBase
             : Failure(result.Status, result.Reasons, result.Existing);
     }
 
-    private static bool IsGitHubFailure(Exception e) => e is HttpRequestException or GitHubAuthenticationException or GitHubNotFoundException;
+    /// <summary>GitHub unreachable, rate-limited, rejecting the token, or not finding the repository or branch.</summary>
+    private static bool IsGitHubFailure(Exception e) => GitHubFailures.IsUnavailable(e) || e is GitHubNotFoundException;
 
     /// <summary>Nothing was stored; a branch created before the failure stays on GitHub (D25).</summary>
     private ObjectResult GitHubError(Exception e) =>

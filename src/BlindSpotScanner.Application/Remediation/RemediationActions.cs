@@ -33,7 +33,7 @@ public sealed class RemediationActions(IRemediationStore store, IJiraClient jira
                     ? await jira.GetStatusAsync(action.ExternalKey, ct)
                     : repository is null ? action.Status : await pulls.GetPullRequestStatusAsync(repository.Owner, repository.Name, int.Parse(action.ExternalKey[1..], System.Globalization.CultureInfo.InvariantCulture), ct);
             }
-            catch (Exception e) when (e is JiraException or HttpRequestException or GitHubAuthenticationException or GitHubNotFoundException)
+            catch (Exception e) when (e is JiraException or GitHubNotFoundException || GitHubFailures.IsUnavailable(e))
             {
                 // The report must never fail because Jira or GitHub is down; the cached status stays.
             }

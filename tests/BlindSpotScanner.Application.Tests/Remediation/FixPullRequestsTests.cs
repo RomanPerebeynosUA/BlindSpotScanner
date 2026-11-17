@@ -338,6 +338,23 @@ public class FixPullRequestsTests
     }
 
     [Fact]
+    public async Task ActionsAsync_GitHubRateLimited_KeepsCachedStatus()
+    {
+        // Arrange (a rate limit must not fail the report's actions list)
+        var pr = Action(ActionType.PullRequest, "#7", "https://github.com/example-org/bookstore-api/pull/7");
+        pr.StatusCheckedAt = Now.AddMinutes(-30);
+        _store.Actions.Add(pr);
+        _pulls.StatusFailure = new GitHubRateLimitException(Now.AddMinutes(5));
+        var actions = new RemediationActions(_store, new NoJira(), _pulls, new OneRepository(_repositoryId), new Clock(Now));
+
+        // Act
+        var listed = await actions.ActionsAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        listed.Single().Status.Should().Be("Open");
+    }
+
+    [Fact]
     public async Task ActionsAsync_StalePr_RefreshesStatus()
     {
         // Arrange
@@ -466,7 +483,10 @@ public class FixPullRequestsTests
 
         public Dictionary<int, string> Statuses { get; } = [];
 
-        public Task<string> GetPullRequestStatusAsync(string owner, string name, int number, CancellationToken ct) => Task.FromResult(Statuses[number]);
+        public Exception? StatusFailure { get; set; }
+
+        public Task<string> GetPullRequestStatusAsync(string owner, string name, int number, CancellationToken ct) =>
+            StatusFailure is null ? Task.FromResult(Statuses[number]) : Task.FromException<string>(StatusFailure);
     }
 
     internal sealed class Clock(DateTimeOffset now) : TimeProvider

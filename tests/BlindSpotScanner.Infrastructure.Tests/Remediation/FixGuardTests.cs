@@ -111,6 +111,19 @@ public class FixGuardTests
     }
 
     [Fact]
+    public void Check_RedactedValue_Rejected()
+    {
+        // Arrange (the LLM saw the file with its secret scrubbed and returned the marker)
+        var content = ValidTest + "// Password=«redacted»\n";
+
+        // Act
+        var errors = Check(new FixFile("tests/Bookstore.IntegrationTests/OrdersApiTests.cs", FixAction.Modify, content));
+
+        // Assert
+        errors.Should().Equal("tests/Bookstore.IntegrationTests/OrdersApiTests.cs: contains a redacted value; restore it before opening the PR");
+    }
+
+    [Fact]
     public void Check_SyntaxError_Rejected()
     {
         // Act
