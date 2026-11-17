@@ -4,6 +4,7 @@ import { StatusChip } from '../../../shared/status-chip/status-chip';
 import { EvidenceLink } from '../../../shared/evidence-link/evidence-link';
 import { ReportStore, StatusFilter } from '../report-store';
 import { JiraAction } from '../jira-action/jira-action';
+import { FixAction } from '../fix-action/fix-action';
 
 const FILTER_LABELS: Record<StatusFilter, string> = {
   all: 'All',
@@ -17,7 +18,7 @@ const FILTER_LABELS: Record<StatusFilter, string> = {
 /** Endpoint coverage grouped by controller, with status filters, search and row drill-down (doc 04). */
 @Component({
   selector: 'app-endpoint-coverage',
-  imports: [StatusChip, EvidenceLink, JiraAction],
+  imports: [StatusChip, EvidenceLink, JiraAction, FixAction],
   templateUrl: './endpoint-coverage.html',
   styleUrl: './endpoint-coverage.scss',
 })

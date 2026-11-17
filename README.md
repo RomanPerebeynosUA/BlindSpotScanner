@@ -68,7 +68,8 @@ node --version        # v26.x
 
 | Variable | What it is | Without it |
 |---|---|---|
-| `GITHUB_TOKEN` | A GitHub [personal access token](https://github.com/settings/personal-access-tokens) with read access to the repositories you want to scan | Public repositories work, but GitHub's anonymous rate limit (60 requests/hour) is quickly used up by a scan. Private repositories can't be read. |
+| `GITHUB_TOKEN` | A GitHub [personal access token](https://github.com/settings/personal-access-tokens) with read access to the repositories you want to scan. For "Fix with PR" it also needs **Contents: write** and **Pull requests: write** on those repositories. | Public repositories work, but GitHub's anonymous rate limit (60 requests/hour) is quickly used up by a scan. Private repositories can't be read. "Fix with PR" is hidden. |
+| `FEATURES_PULL_REQUESTS` | `true` (default) or `false`. `false` is read-only mode: the app never writes to GitHub. | |
 | `ANTHROPIC_API_KEY` | A [Claude API key](https://console.anthropic.com/). **Calls are billed** (a Claude Pro plan does not include API use). The cap is $5 per scan by default. | Scans still run, but the AI steps fail, so endpoints are reported as *unverified* and quality can't be scored. "Auto-draft with AI" doesn't work either. |
 
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` | Your Jira Cloud site (`https://<site>.atlassian.net`), the account's email, an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) and the project key that tickets go into. A [free Jira Cloud site](https://www.atlassian.com/software/jira/free) works. | "Create Jira" on the report shows "Jira not configured". Everything else works. |

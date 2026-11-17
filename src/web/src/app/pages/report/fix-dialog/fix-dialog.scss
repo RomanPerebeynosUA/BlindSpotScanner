@@ -1,0 +1,8 @@
+.dialog { background: var(--surface); color: var(--fg); padding: 20px; display: flex; flex-direction: column; gap: 14px; width: min(760px, 100%); }
+label { display: flex; flex-direction: column; gap: 4px; }
+textarea { font-family: var(--mono, monospace); resize: vertical; }
+.diff { max-height: 320px; overflow: auto; margin: 0; padding: 8px; font-family: var(--mono, monospace); font-size: 12px; white-space: pre; border: 1px solid var(--border, #ccc); }
+.diff span { display: block; }
+.diff .add { background: color-mix(in srgb, var(--ok, #2e7d32) 15%, transparent); }
+.diff .del { background: color-mix(in srgb, var(--bad, #c62828) 15%, transparent); }
+.actions { justify-content: flex-end; }

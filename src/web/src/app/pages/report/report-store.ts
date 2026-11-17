@@ -1,6 +1,6 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { ControllerCoverage, COVERAGE_STATUSES, CoverageStatus, IntegrationReport, ReportMeta } from '../../core/api/report';
-import { RemediationAction } from '../../core/api/api-types';
+import { Features, RemediationAction } from '../../core/api/api-types';
 
 export type StatusFilter = CoverageStatus | 'all';
 
@@ -13,6 +13,14 @@ export class ReportStore {
 
   /** The repository's tickets, newest first (D24); they outlive runs, so they match findings by stable key. */
   readonly actions = signal<RemediationAction[]>([]);
+
+  /** What the UI may offer (D25); fix PRs stay hidden until the API says otherwise. */
+  readonly features = signal<Features>({ pullRequests: false, jira: false });
+
+  /** The newest fix PR for a stable key, if any. */
+  pullRequestFor(stableKey: string): RemediationAction | undefined {
+    return this.actions().find((a) => a.type === 'PullRequest' && a.stableKey === stableKey);
+  }
 
   /** The newest Jira ticket for a stable key, if any. */
   ticketFor(stableKey: string): RemediationAction | undefined {

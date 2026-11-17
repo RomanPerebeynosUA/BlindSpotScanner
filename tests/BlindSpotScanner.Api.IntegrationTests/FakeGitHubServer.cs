@@ -55,6 +55,19 @@ public sealed class FakeGitHubServer : IDisposable
             tree = files.Select(f => new { path = f.Path, mode = "100644", type = "blob", sha = BlobSha(f.Bytes), size = f.Bytes.Length }),
         });
 
+        // Fix-PR writes (D25): the Git Data API, the draft PR and its label.
+        Json($"{Repo}/git/commits/{CommitSha}", new { sha = CommitSha, tree = new { sha = "base-tree" } });
+        Write("git/blobs", 201, new { sha = "new-blob" });
+        Write("git/trees", 201, new { sha = "new-tree" });
+        Write("git/commits", 201, new { sha = "new-commit" });
+        Write("git/refs", 201, new { @ref = "refs/heads/coverage/fix" });
+        Write("pulls", 201, new { number = 7, html_url = $"https://github.com/{Owner}/{Name}/pull/7" });
+        Write("issues/7/labels", 200, Array.Empty<object>());
+
+        // Repositories whose name says how a write should fail (tests pick the name).
+        Fail("branch-exists", "git/refs", 422, new { message = "Reference already exists" });
+        Fail("pull-fails", "pulls", 500, new { message = "Server Error" });
+
         foreach (var (path, bytes) in files)
         {
             Json($"{Repo}/git/blobs/{BlobSha(bytes)}", new { sha = BlobSha(bytes), encoding = "base64", content = Convert.ToBase64String(bytes) });
@@ -65,11 +78,33 @@ public sealed class FakeGitHubServer : IDisposable
 
     public string Url => _server.Url!;
 
+    /// <summary>The fix-PR requests GitHub received for one repository, in order: "METHOD path-after-repo" (D25).</summary>
+    public IReadOnlyList<string> CallsFor(string name) =>
+        [.. _server.LogEntries
+            .Select(e => e.RequestMessage!)
+            .Where(m => m.Path.StartsWith($"/repos/{Owner}/{name}/", StringComparison.Ordinal) && (m.Method == "POST" || m.Path.EndsWith("/branches/main", StringComparison.Ordinal)))
+            .OrderBy(m => m.DateTime)
+            .Select(m => $"{m.Method} {m.Path[$"/repos/{Owner}/{name}/".Length..]}")];
+
+    /// <summary>The body of the pulls request for one repository.</summary>
+    public System.Text.Json.Nodes.JsonNode PullBodyFor(string name) =>
+        System.Text.Json.Nodes.JsonNode.Parse(_server.LogEntries.Select(e => e.RequestMessage!).Single(m => m.Method == "POST" && m.Path == $"/repos/{Owner}/{name}/pulls").Body!)!;
+
     public void Dispose() => _server.Stop();
 
     /// <param name="path">Starts with <see cref="Repo"/>; the rest is matched literally.</param>
     private void Json(string path, object body) =>
         _server.Given(Request.Create().WithPath(new RegexMatcher($"^{Repo}{Regex.Escape(path[Repo.Length..])}$")).UsingGet()).RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(body));
+
+    private void Fail(string nameMarker, string path, int status, object body) =>
+        _server.Given(Request.Create().WithPath(new RegexMatcher($"^/repos/{Owner}/[^/]*{Regex.Escape(nameMarker)}[^/]*/{Regex.Escape(path)}$")).UsingPost())
+            .AtPriority(1)
+            .RespondWith(Response.Create().WithStatusCode(status).WithBodyAsJson(body));
+
+    private void Write(string path, int status, object body) =>
+        _server.Given(Request.Create().WithPath(new RegexMatcher($"^{Repo}/{Regex.Escape(path)}$")).UsingPost())
+            .AtPriority(10) // the named failures (priority 1) win for their repositories
+            .RespondWith(Response.Create().WithStatusCode(status).WithBodyAsJson(body));
 
     private static string BlobSha(byte[] bytes) => Convert.ToHexStringLower(SHA1.HashData(bytes));
 }

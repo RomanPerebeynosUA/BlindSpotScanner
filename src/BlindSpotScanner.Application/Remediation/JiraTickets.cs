@@ -31,13 +31,11 @@ public sealed record TicketResult<T>(TicketStatus Status, T? Value = default, Re
 /// <summary>
 /// Doc 09 Jira tickets: an editable draft built from the stored report, dedup by stable key (stored
 /// actions first, then Jira itself), creation only on an explicit request (principle 8), and a lazy
-/// status refresh cached for 10 minutes.
+/// statuses are refreshed by <see cref="RemediationActions"/>.
 /// </summary>
 public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store, IJiraClient jira, TimeProvider time, JiraDefaults defaults)
 {
     public const string CoverageLabel = "integration-coverage";
-
-    private static readonly TimeSpan StatusTtl = TimeSpan.FromMinutes(10);
 
     public async Task<TicketResult<JiraDraft>> PreviewAsync(Guid runId, string findingId, CancellationToken ct)
     {
@@ -84,36 +82,6 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
             new JiraIssueRequest(request.ProjectKey, request.IssueType, request.Summary, request.Description, request.Priority, Labels(request.Labels), finding!.StableKey),
             ct);
         return new TicketResult<RemediationAction>(TicketStatus.Ok, await StoreAsync(row, run!.RepositoryId, issue, ct));
-    }
-
-    /// <summary>The repository's actions, with Jira statuses older than 10 minutes re-read; a Jira failure keeps the last known status.</summary>
-    public async Task<IReadOnlyList<RemediationAction>> ActionsAsync(Guid repositoryId, CancellationToken ct)
-    {
-        var actions = await store.ActionsAsync(repositoryId, ct);
-        var now = time.GetUtcNow();
-        var stale = actions.Where(a => a.Type == ActionType.JiraTicket && now - a.StatusCheckedAt >= StatusTtl).ToList();
-        if (stale.Count == 0 || !jira.IsConfigured)
-        {
-            return actions;
-        }
-
-        foreach (var action in stale)
-        {
-            try
-            {
-                action.Status = await jira.GetStatusAsync(action.ExternalKey, ct);
-            }
-            catch (JiraException)
-            {
-                // The report must never fail because Jira is down; the cached status stays.
-            }
-
-            // Moved on either way, so a ticket Jira can't read is retried after 10 minutes, not on every view.
-            action.StatusCheckedAt = now;
-        }
-
-        await store.SaveChangesAsync(ct);
-        return actions;
     }
 
     private async Task<(TicketStatus Status, ScanRun? Run, IntegrationReport? Report, ReportFinding? Finding)> FindAsync(Guid runId, string findingId, CancellationToken ct)

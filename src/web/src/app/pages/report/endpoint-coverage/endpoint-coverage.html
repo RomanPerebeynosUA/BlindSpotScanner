@@ -35,7 +35,7 @@
                 @if (e.evidence.length > 0) {
                   <app-evidence-link [meta]="meta()" [citation]="e.evidence[0]" />
                 } @else if (findingFor(e); as finding) {
-                  <app-jira-action [finding]="finding" />
+                  <app-jira-action [finding]="finding" /> <app-fix-action [finding]="finding" />
                 }
               </td>
               <td>

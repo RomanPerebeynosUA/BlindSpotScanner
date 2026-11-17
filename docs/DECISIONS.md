@@ -251,3 +251,29 @@ with auth. "Create Jira" is offered on the Findings section and on untested endp
   either is stored; that race is accepted until M11 auth (no lock without a present need). Jira
   calls time out after 10 s, and every Jira failure surfaces as a Jira error (502 on create; the
   actions list keeps the cached status).
+
+## D25 — Fix pull requests (2026-11-17)
+The user's choices for M10: "Fix with PR" covers the single-test kinds: `UncoveredEndpoint` (a
+new test), `WeakTest` / `FalsePositive` (strengthen the existing test) and `SkippedTest` (un-skip
+if obvious, otherwise the LLM declines with `files: []`); `UncoveredSeam` and `Risk` stay
+Jira-only. When a target file changed on the default branch since the scan, creating the PR is
+refused (409 with the paths) and the dialog offers "Regenerate", so a billed call only follows a
+click. GitHub is tested with WireMock only; no live test.
+- Read-only mode: `Features:PullRequests` (default `true`) and a configured `GitHub:Token` are both
+  needed; otherwise the fix endpoints return 403 and the UI hides the button. The token (D16 PAT)
+  needs `contents:write` and `pull_requests:write`; a GitHub App waits for M11.
+- Writes go through a separate port (`IGitHubPullRequests`), implemented by the same typed
+  `GitHubClient`, so the scan's read-only `IGitHubClient` is unchanged.
+- The guard allows `.cs` files only, inside the test project folder (the nearest `.csproj` above
+  the sibling tests): project files can't change, so no new packages either. The server re-runs
+  the guard on whatever the client submits.
+- PR status: "Merged", "Closed", "Open", or "Open · checks passing|failing|pending" from the head
+  commit's check runs, refreshed like Jira statuses (10 minutes).
+- Contract additions: `GET /api/features` (`{ pullRequests, jira }`) for the UI; the fix-preview
+  body (`files[{path, action, content, original}]`, rationale, assumptions, riskNotes, branch,
+  title, body, costUsd, existing).
+- Base commit: a first draft is generated from the scanned commit; "Regenerate" (`fix-preview?regenerate=true`)
+  generates from the repository's default branch head. The draft carries that `baseSha`, and
+  create compares the target files at `baseSha` with the default branch head, so a regenerated fix
+  can be opened. The PR always goes against the default branch head (doc 09 step 5). The action is
+  stored as soon as GitHub returns the PR; the `integration-coverage` label is best effort.

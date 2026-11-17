@@ -1,9 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { JiraCreate, JiraDraft, RemediationAction } from './api-types';
+import { Features, FixCreate, FixDraft, JiraCreate, JiraDraft, RemediationAction } from './api-types';
 
-/** Jira tickets from findings (doc 09, D24): preview, create, and the repository's actions with live status. */
+/** Jira tickets and fix PRs from findings (doc 09, D24, D25), the repository's actions with live status, and the feature flags. */
 @Injectable({ providedIn: 'root' })
 export class RemediationApi {
   private readonly http = inject(HttpClient);
@@ -14,6 +14,20 @@ export class RemediationApi {
 
   createJira(runId: string, findingId: string, body: JiraCreate): Observable<RemediationAction> {
     return this.http.post<RemediationAction>(`/api/runs/${runId}/findings/${findingId}/jira`, body);
+  }
+
+  /** `regenerate` builds from the default branch head instead of the scanned commit (D25). */
+  fixPreview(runId: string, findingId: string, regenerate = false): Observable<FixDraft> {
+    const options = regenerate ? { params: { regenerate: 'true' } } : {};
+    return this.http.post<FixDraft>(`/api/runs/${runId}/findings/${findingId}/fix-preview`, null, options);
+  }
+
+  createPullRequest(runId: string, findingId: string, body: FixCreate): Observable<RemediationAction> {
+    return this.http.post<RemediationAction>(`/api/runs/${runId}/findings/${findingId}/pull-request`, body);
+  }
+
+  features(): Observable<Features> {
+    return this.http.get<Features>('/api/features');
   }
 
   actions(repositoryId: string): Observable<RemediationAction[]> {
