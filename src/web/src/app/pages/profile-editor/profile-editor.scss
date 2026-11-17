@@ -1,0 +1,14 @@
+:host { display: contents; }
+.tabs { display: flex; gap: 4px; margin-top: 12px; }
+.tabs a { padding: 6px 12px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+.tabs a.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 140px; gap: 20px; align-items: start; }
+.hint { font-size: .72rem; }
+.markdown { min-height: 320px; }
+.preview { border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-wrap: anywhere; }
+.versions .btn[aria-pressed='true'] { border-color: var(--accent); font-weight: 600; }
+.questions { margin: 8px 0 0; padding-left: 18px; }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}
