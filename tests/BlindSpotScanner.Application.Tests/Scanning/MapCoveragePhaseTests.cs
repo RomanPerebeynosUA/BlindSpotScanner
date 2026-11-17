@@ -39,6 +39,7 @@ public class MapCoveragePhaseTests
     private static readonly FakeBlobReader Blobs = new(new Dictionary<string, string>
     {
         ["t-books"] = """public class BooksApiTests { [Fact] public async Task List_returns_seeded_books() => await client.GetAsync("api/books"); }""",
+        ["t-segment"] = """public class CatalogTests { [Fact] public async Task Lists() => await client.GetAsync($"{Base}/books"); }""",
         ["t-health"] = """public class HealthTests { [Fact] public async Task Ping() => await client.GetAsync("/health"); }""",
     });
 
@@ -152,7 +153,7 @@ public class MapCoveragePhaseTests
     }
 
     [Fact]
-    public async Task Map_NoCandidateTests_NotSent()
+    public async Task Map_NoCandidateTests_NotSentAndUnverified()
     {
         // Arrange
         var llm = new FakeLlmClient(_ => FakeLlmClient.Failure("must not be called"));
@@ -165,7 +166,7 @@ public class MapCoveragePhaseTests
         new { Requests = llm.Requests.Count, Statuses = result.Value.Single().Endpoints.Select(e => e.Status) }.Should().BeEquivalentTo(new
         {
             Requests = 0,
-            Statuses = new[] { CoverageStatus.None },
+            Statuses = new[] { CoverageStatus.Unverified },
         });
     }
 
@@ -194,5 +195,50 @@ public class MapCoveragePhaseTests
 
         // Assert
         endpoints.Should().AllSatisfy(e => e.Should().BeEquivalentTo(new { Status = CoverageStatus.Unverified, Verified = false, Notes = "mapping failed" }));
+    }
+
+    [Fact]
+    public async Task Map_NoIntegrationTestsAtAll_IsNone()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Failure("must not be called"));
+
+        // Act
+        var result = await new MapCoveragePhase(llm, Blobs).MapAsync(
+            Run, new EndpointInventory([Books], []), new TestClassification([]), new RepositoryInventory([], [], []), Profile, 200_000, CancellationToken.None);
+
+        // Assert
+        result.Value.Single().Endpoints.Select(e => e.Status).Should().Equal(CoverageStatus.None, CoverageStatus.None);
+    }
+
+    [Fact]
+    public async Task Map_TestUsingRouteSegmentOnly_IsCandidate()
+    {
+        // Arrange (the URL is built from a base-path constant, so "api/books" never appears)
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(Endpoint("e1", "none"), Endpoint("e2", "none"))));
+        var tests = new TestClassification([new ClassifiedTestFile("tests/Api.IntegrationTests/CatalogTests.cs", "t-segment", TestFileKind.Integration, "rule", ["CatalogTests.Lists"])]);
+
+        // Act
+        await new MapCoveragePhase(llm, Blobs).MapAsync(
+            Run, new EndpointInventory([Books], []), tests, new RepositoryInventory([], [], []), Profile, 200_000, CancellationToken.None);
+
+        // Assert
+        llm.Requests.Should().ContainSingle().Which.InputJson.Should().Contain("CatalogTests.cs");
+    }
+
+    [Fact]
+    public async Task Map_RootRoute_SendsEveryTest()
+    {
+        // Arrange (a "/" route has no literal text to search for)
+        var root = new ExtractedController("RootEndpoints", "src/Api/Endpoints/RootEndpoints.cs", null, [new ExtractedEndpoint(EndpointMethod.Get, "")]);
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(Endpoint("e1", "none"))));
+
+        // Act
+        await new MapCoveragePhase(llm, Blobs).MapAsync(
+            Run, new EndpointInventory([root], []), Tests, new RepositoryInventory([], [], []), Profile, 200_000, CancellationToken.None);
+
+        // Assert
+        new { Books = llm.Requests.Single().InputJson.Contains(BooksTests, StringComparison.Ordinal), Health = llm.Requests.Single().InputJson.Contains(HealthTests, StringComparison.Ordinal) }
+            .Should().BeEquivalentTo(new { Books = true, Health = true });
     }
 }

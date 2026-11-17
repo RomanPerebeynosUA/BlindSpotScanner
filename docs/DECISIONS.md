@@ -136,9 +136,14 @@ The user's choices: the official Anthropic SDK (`Anthropic` NuGet); default mode
 structured JSON output, a schema check plus the phase's rule check, and at most 2 re-asks with the
 errors; a reply cut off (`max_tokens`) or refused counts as a failed attempt. Server-side refusal
 fallback (`fallbacks: "default"`) is on. Accepted answers are cached in `llm_cache` by a hash of
-prompt, prompt version, model, schema and input. P5 sends a controller only the integration tests
-that mention its routes; `allCandidateTestsIncluded` holds only when no test file is still
-ambiguous or withheld (denied path, over `Scan:MaxFileBytes`) and P2 reported nothing unverified.
+prompt, prompt version, model, schema and input. The scrubber runs on each string value of the
+input before it is serialized for the prompt. An API error after the SDK's retries is a failed call
+(items become unverified), never a crashed scan. P5 sends a controller the integration tests that
+mention any literal segment of its routes (ignoring `api` and version segments; a root route sends
+every test). Because that filter is a heuristic, a controller with no candidate tests is `none`
+only when the repository has no integration tests at all, otherwise `unverified`.
+`allCandidateTestsIncluded` holds only when no test file is still ambiguous or withheld (denied
+path, over `Scan:MaxFileBytes`) and P2 reported nothing unverified.
 Evidence that doesn't name a test method of a sent file makes the endpoint `unverified`. P6 takes
 dimension names and weights from code; without an answer all 7 dimensions are unscorable.
 `productionSeams` is sent empty (the seams are in the profile Markdown). The citation verifier,

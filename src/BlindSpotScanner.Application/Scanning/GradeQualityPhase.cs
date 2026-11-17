@@ -23,6 +23,7 @@ public sealed record QualityGrade(IReadOnlyList<ScoreDimension> Scorecard, IRead
 public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
 {
     private const string NotAssessed = "N/A — insufficient input";
+    private const int MaxRisks = 5;
 
     public async Task<PhaseResult<QualityGrade>> GradeAsync(
         RunContext run, TestClassification tests, IReadOnlyList<ControllerCoverage> coverage, RepoProfile profile, int maxFileBytes, CancellationToken ct)
@@ -138,12 +139,32 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
             {
                 errors.Add($"scorecard/{id}: the evidence bullet of a scored dimension needs a path::Test citation");
             }
+
+            // The report schema types scorecard evidence as citations.
+            var evidence = Strings(dimension.GetProperty("evidence"));
+            for (var k = 0; k < evidence.Count; k++)
+            {
+                if (!Citation().IsMatch(evidence[k]))
+                {
+                    errors.Add($"scorecard/{id}/evidence/{k}: malformed citation '{evidence[k]}'");
+                }
+            }
         }
 
+        // Report schema limits: at most 5 risks, each with 1 to 8 detail bullets.
         var risks = output.GetProperty("topRisks").EnumerateArray().ToList();
+        if (risks.Count > MaxRisks)
+        {
+            errors.Add($"topRisks: at most {MaxRisks} risks");
+        }
+
         for (var i = 0; i < risks.Count; i++)
         {
             errors.AddRange(ReportValidator.RiskTextViolations(risks[i].GetProperty("headline").GetString()!, risks[i].GetProperty("whyItMatters").GetString()!, $"topRisks/{i}"));
+            if (risks[i].GetProperty("detail").GetArrayLength() is < 1 or > 8)
+            {
+                errors.Add($"topRisks/{i}/detail: needs 1 to 8 bullets");
+            }
         }
 
         return errors;
@@ -238,4 +259,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
 
     [GeneratedRegex("([a-z])([A-Z])")]
     private static partial Regex KebabWord();
+
+    [GeneratedRegex(@"^[^:]+\.[A-Za-z0-9]+::[A-Za-z_][\w.]*$")]
+    private static partial Regex Citation();
 }

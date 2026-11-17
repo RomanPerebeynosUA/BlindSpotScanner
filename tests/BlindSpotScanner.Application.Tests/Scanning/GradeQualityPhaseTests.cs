@@ -135,7 +135,7 @@ public class GradeQualityPhaseTests
         // Arrange
         var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer()));
         await Grade(llm);
-        var risk = """{"headline":"BooksApiTests.cs only checks status","whyItMatters":"Wrong data passes.","severity":"Medium","detail":[],"evidence":[]}""";
+        var risk = """{"headline":"BooksApiTests.cs only checks status","whyItMatters":"Wrong data passes.","severity":"Medium","detail":["200 only"],"evidence":[]}""";
         using var answer = JsonDocument.Parse(Answer(risks: risk));
 
         // Act
@@ -158,5 +158,46 @@ public class GradeQualityPhaseTests
 
         // Assert
         errors.Should().Equal("scorecard: dimension 7 must appear exactly once");
+    }
+
+    private static string Risk(string detail = "[\"200 only\"]") =>
+        $$"""{"headline":"Some tests pass on wrong data","whyItMatters":"Wrong data passes.","severity":"Medium","detail":{{detail}},"evidence":[]}""";
+
+    private static async Task<IReadOnlyList<string>> ValidateWith(string answerJson)
+    {
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer()));
+        await Grade(llm);
+        using var answer = JsonDocument.Parse(answerJson);
+        return llm.Requests.Single().Validate!(answer.RootElement);
+    }
+
+    [Fact]
+    public async Task Grade_Validator_RejectsUncitedScorecardEvidence()
+    {
+        // Act
+        var errors = await ValidateWith(Answer().Replace($"\"evidence\":[\"{BooksTests}::List_returns_seeded_books\"]}}", "\"evidence\":[\"tests/ApiFactory.cs\"]}", StringComparison.Ordinal));
+
+        // Assert
+        errors.Should().Contain("scorecard/1/evidence/0: malformed citation 'tests/ApiFactory.cs'");
+    }
+
+    [Fact]
+    public async Task Grade_Validator_RejectsMoreThanFiveRisks()
+    {
+        // Act
+        var errors = await ValidateWith(Answer(risks: string.Join(',', Enumerable.Repeat(Risk(), 6))));
+
+        // Assert
+        errors.Should().Equal("topRisks: at most 5 risks");
+    }
+
+    [Fact]
+    public async Task Grade_Validator_RejectsRiskWithoutDetail()
+    {
+        // Act
+        var errors = await ValidateWith(Answer(risks: Risk(detail: "[]")));
+
+        // Assert
+        errors.Should().Equal("topRisks/0/detail: needs 1 to 8 bullets");
     }
 }

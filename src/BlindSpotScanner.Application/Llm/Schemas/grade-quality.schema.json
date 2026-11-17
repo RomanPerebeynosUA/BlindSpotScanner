@@ -11,7 +11,7 @@
         "required": ["id", "score", "scorable", "confidence", "justificationBullets", "evidence"],
         "properties": {
           "id": { "type": "integer" },
-          "score": { "type": ["integer", "null"] },
+          "score": { "anyOf": [{ "type": "integer" }, { "type": "null" }] },
           "scorable": { "type": "boolean" },
           "confidence": { "type": "string", "enum": ["High", "Med", "Low"] },
           "justificationBullets": { "type": "array", "items": { "type": "string" } },

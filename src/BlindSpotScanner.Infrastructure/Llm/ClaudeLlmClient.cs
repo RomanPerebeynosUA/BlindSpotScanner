@@ -1,5 +1,8 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Anthropic;
+using Anthropic.Exceptions;
 using Anthropic.Models.Beta.Messages;
 using BlindSpotScanner.Application.Llm;
 using Json.Schema;
@@ -19,6 +22,9 @@ public sealed class ClaudeLlmClient : ILlmClient
     private const string FallbackBeta = "server-side-fallback-2026-07-01";
 
     private static readonly EvaluationOptions SchemaOptions = new() { OutputFormat = OutputFormat.List };
+
+    /// <summary>Relaxed escaping keeps quotes and code readable for the model; the text is a prompt, not HTML.</summary>
+    private static readonly JsonSerializerOptions PromptJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private readonly PromptLibrary _prompts;
     private readonly LlmOptions _options;
@@ -41,14 +47,17 @@ public sealed class ClaudeLlmClient : ILlmClient
             ?? throw new ArgumentException("The output schema is empty.", nameof(request));
         var messages = new List<BetaMessageParam>
         {
-            new BetaUserMessageParam { Content = $"{_prompts.Task(request.Prompt)}\n\nInput:\n{SecretScrubber.Scrub(request.InputJson)}" },
+            new BetaUserMessageParam { Content = $"{_prompts.Task(request.Prompt)}\n\nInput:\n{ScrubStrings(request.InputJson)}" },
         };
 
         var usage = LlmUsage.None;
         IReadOnlyList<string> errors = [];
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            var response = await _client.Beta.Messages.Create(
+            BetaMessage response;
+            try
+            {
+                response = await _client.Beta.Messages.Create(
                 new MessageCreateParams
                 {
                     Model = _options.Model,
@@ -60,6 +69,12 @@ public sealed class ClaudeLlmClient : ILlmClient
                     Fallbacks = new Default(),
                 },
                 ct);
+            }
+            catch (Exception ex) when (ex is AnthropicException or HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                // The SDK already retried 429/5xx. Only the exception type is reported: messages may echo request details.
+                return new LlmResult(null, [$"the Claude API call failed ({ex.GetType().Name})"], usage, FromCache: false);
+            }
 
             usage = usage.Add(Usage(response));
             var text = string.Concat(response.Content.Select(b => b.Value).OfType<BetaTextBlock>().Select(t => t.Text));
@@ -79,10 +94,9 @@ public sealed class ClaudeLlmClient : ILlmClient
     private static IReadOnlyList<string> Check(BetaMessage response, string text, JsonSchema schema, Func<JsonElement, IReadOnlyList<string>>? validate, out JsonElement output)
     {
         output = default;
-        var stopReason = response.StopReason?.ToString();
-        if (stopReason is "refusal" or "max_tokens")
+        if (response.StopReason is { } reason && (reason == BetaStopReason.Refusal || reason == BetaStopReason.MaxTokens))
         {
-            return [$"the answer stopped early ({stopReason})"];
+            return [$"the answer stopped early ({(reason == BetaStopReason.Refusal ? "refusal" : "max_tokens")})"];
         }
 
         try
@@ -105,6 +119,25 @@ public sealed class ClaudeLlmClient : ILlmClient
         }
 
         return validate?.Invoke(output) ?? [];
+    }
+
+    /// <summary>
+    /// Scrubs every string value of the input JSON before it is re-serialized. Scrubbing the serialized
+    /// text would miss secrets: the escapes for a quote or an ampersand end in a digit, which defeats the
+    /// scrubber's word-boundary anchors.
+    /// </summary>
+    private static string ScrubStrings(string inputJson)
+    {
+        var node = JsonNode.Parse(inputJson);
+        return Scrub(node)?.ToJsonString(PromptJson) ?? "null";
+
+        static JsonNode? Scrub(JsonNode? value) => value switch
+        {
+            JsonObject obj => new JsonObject(obj.Select(p => KeyValuePair.Create(p.Key, Scrub(p.Value)))),
+            JsonArray array => new JsonArray(array.Select(Scrub).ToArray()),
+            JsonValue leaf when leaf.TryGetValue<string>(out var text) => JsonValue.Create(SecretScrubber.Scrub(text)),
+            _ => value?.DeepClone(),
+        };
     }
 
     private LlmUsage Usage(BetaMessage response)

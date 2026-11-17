@@ -170,4 +170,54 @@ public sealed class ClaudeLlmClientTests : IDisposable
         // Assert
         new { Answer = result.Output?.GetProperty("answer").GetString(), Requests = RequestBodies().Count }.Should().BeEquivalentTo(new { Answer = "ok", Requests = 2 });
     }
+
+    [Fact]
+    public async Task Complete_QuotedSecretsSerializedLikeThePhases_AreScrubbed()
+    {
+        // Arrange (the phases serialize file content with the web defaults, which escape quotes and '&')
+        var token = "ghp_" + new string('a', 36);
+        var aws = "AKIA" + "ABCDEFGHIJKLMNOP";
+        var content = $"var t = \"{token}\";\nvar k = \"{aws}\";\nvar c = \"Host=x;Password=s3cret\";\nvar u = \"user=bob&password=hunter2\";";
+        var input = JsonSerializer.Serialize(new { files = new[] { new { path = "tests/A.cs", content } } }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        RespondInOrder(Reply("""{"answer":"x"}"""));
+
+        // Act
+        await CreateClient().CompleteAsync(Call(input), CancellationToken.None);
+
+        // Assert
+        var body = RequestBodies().Single();
+        new[] { token, aws, "s3cret", "hunter2" }.Where(secret => body.Contains(secret, StringComparison.Ordinal)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Complete_ApiError_ReturnsFailureWithoutThrowing()
+    {
+        // Arrange
+        _server.Given(Request.Create().WithPath("/v1/messages").UsingPost())
+            .RespondWith(Response.Create().WithStatusCode(400).WithBodyAsJson(new { type = "error", error = new { type = "invalid_request_error", message = "output_config.format.schema: unsupported" } }));
+
+        // Act
+        var result = await CreateClient().CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        new { result.Output, Error = result.Errors.Single() }.Should().BeEquivalentTo(new
+        {
+            Output = (JsonElement?)null,
+            Error = "the Claude API call failed (AnthropicBadRequestException)",
+        });
+    }
+
+    [Fact]
+    public async Task Complete_MaxTokensWithParsableJson_IsRejected()
+    {
+        // Arrange (a cut-off answer can still parse; it must not be accepted)
+        RespondInOrder(Reply("""{"answer":"partial"}""", stopReason: "max_tokens"), Reply("""{"answer":"full"}"""));
+
+        // Act
+        var result = await CreateClient().CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        new { Answer = result.Output?.GetProperty("answer").GetString(), Reason = RequestBodies().Last().Contains("the answer stopped early (max_tokens)", StringComparison.Ordinal) }
+            .Should().BeEquivalentTo(new { Answer = "full", Reason = true });
+    }
 }

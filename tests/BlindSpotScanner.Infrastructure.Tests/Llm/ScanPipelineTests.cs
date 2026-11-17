@@ -62,8 +62,9 @@ public class ScanPipelineTests
         // Act
         var outcome = await ScanAsync(new CannedLlmClient());
 
-        // Assert (Books 2 covered + 1 weak, Orders 1 covered + 1 none, Health not tested → none)
-        outcome.Report.Summary.Endpoints.Should().BeEquivalentTo(new StatusCounts { Total = 6, Covered = 3, Weak = 1, Skipped = 0, None = 2, Unverified = 0 });
+        // Assert (Books 2 covered + 1 weak, Orders 1 covered + 1 none; no test mentions health, and the
+        // route filter is a heuristic, so its absence is unverified rather than a confirmed none)
+        outcome.Report.Summary.Endpoints.Should().BeEquivalentTo(new StatusCounts { Total = 6, Covered = 3, Weak = 1, Skipped = 0, None = 1, Unverified = 1 });
     }
 
     [Fact]

@@ -54,8 +54,9 @@ public sealed partial class MapCoveragePhase(ILlmClient llm, IBlobReader blobs)
             IReadOnlyList<EndpointResult> results;
             if (candidates.Count == 0)
             {
-                results = controller.Endpoints.Select(e => allIncluded
-                    ? Result(e, CoverageStatus.None, verified: true, [], null, "no candidate integration tests were read")
+                // The filter is a heuristic: only "there are no integration tests at all" confirms absence.
+                results = controller.Endpoints.Select(e => allIncluded && readable.Count == 0
+                    ? Result(e, CoverageStatus.None, verified: true, [], null, "the repository has no integration tests")
                     : Result(e, CoverageStatus.Unverified, verified: false, [], null, "no candidate integration tests were read")).ToList();
             }
             else
@@ -86,13 +87,24 @@ public sealed partial class MapCoveragePhase(ILlmClient llm, IBlobReader blobs)
         return new PhaseResult<IReadOnlyList<ControllerCoverage>>(coverage, usage, notes);
     }
 
-    /// <summary>A test is a candidate if it mentions the prefix or a route's literal part before its first parameter.</summary>
-    private static bool MentionsRoute(string content, ExtractedController controller) =>
-        new[] { controller.RoutePrefix }
-            .Concat(controller.Endpoints.Select(e => e.Route.Split('{')[0]))
-            .Select(r => r?.Trim('/'))
-            .Where(r => !string.IsNullOrEmpty(r))
-            .Any(r => content.Contains(r!, StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// A test is a candidate if it mentions any literal route segment of the controller (ignoring
+    /// "api" and version segments), so URLs built from base-path constants still match. An endpoint
+    /// with no such segment (a root "/" route) makes every test a candidate.
+    /// </summary>
+    private static bool MentionsRoute(string content, ExtractedController controller)
+    {
+        var perEndpoint = controller.Endpoints.Select(e => LiteralSegments(e.Route).Concat(LiteralSegments(controller.RoutePrefix)).ToList()).ToList();
+        return perEndpoint.Any(segments => segments.Count == 0)
+            || perEndpoint.SelectMany(s => s).Distinct(StringComparer.OrdinalIgnoreCase).Any(s => content.Contains(s, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IEnumerable<string> LiteralSegments(string? route) =>
+        (route ?? string.Empty).Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(s => !s.StartsWith('{') && !GenericSegment().IsMatch(s));
+
+    [GeneratedRegex(@"^(api|v\d+(\.\d+)?)$", RegexOptions.IgnoreCase)]
+    private static partial Regex GenericSegment();
 
     private static string Input(ExtractedController controller, List<(ClassifiedTestFile File, string Content)> candidates, bool allIncluded, RepoProfile profile) =>
         JsonSerializer.Serialize(
