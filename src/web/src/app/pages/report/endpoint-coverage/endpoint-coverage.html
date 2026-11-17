@@ -25,7 +25,7 @@
             <td colspan="3"><app-status-chip [status]="c.status" /></td>
           </tr>
           @for (e of c.endpoints; track $index) {
-            @let k = key(c.controller, e.method, e.route);
+            @let k = key(c.controller, c.sourcePath, $index, e.method, e.route);
             @let open = expanded().has(k);
             <tr class="endpoint" [attr.data-key]="e.method + ' ' + e.route">
               <td class="mono">{{ e.method }}</td>

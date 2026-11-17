@@ -1,6 +1,7 @@
 import { Component, computed, DestroyRef, effect, inject, input, OnInit, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RunsApi } from '../../core/api/runs-api';
 import { isReport, RunBody, RunStatusBody, ScanStep } from '../../core/api/api-types';
@@ -42,11 +43,13 @@ export class LiveScan implements OnInit {
   protected readonly watch = signal<ScanWatch | null>(null);
   protected readonly outcome = signal<RunStatusBody | null>(null);
   protected readonly cancelling = signal(false);
+  protected readonly loadError = signal<string | null>(null);
 
   protected readonly events = computed(() => this.watch()?.events() ?? []);
   protected readonly pct = computed(() => this.events().at(-1)?.pct ?? 0);
 
   private timer: ReturnType<typeof setInterval> | null = null;
+  private stopped = false;
 
   constructor() {
     effect(() => {
@@ -60,14 +63,18 @@ export class LiveScan implements OnInit {
 
   ngOnInit(): void {
     // Every read ends with the page: a late answer must not start watching or navigate after the user left.
-    this.runs.get(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((body) => {
-      if (this.handle(body)) {
-        return;
-      }
+    this.runs.get(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (body) => {
+        if (this.handle(body)) {
+          return;
+        }
 
-      this.runs.steps(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((steps) => this.steps.set(steps));
-      this.watch.set(this.progress.watch(this.runId()));
-      this.timer = setInterval(() => this.refresh(), POLL_MS);
+        this.readSteps();
+        this.watch.set(this.progress.watch(this.runId()));
+        this.timer = setInterval(() => this.refresh(), POLL_MS);
+      },
+      error: (error: unknown) =>
+        this.loadError.set(error instanceof HttpErrorResponse && error.status === 404 ? 'Run not found' : 'Could not load this run'),
     });
   }
 
@@ -94,9 +101,17 @@ export class LiveScan implements OnInit {
     this.runs.cancel(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => this.cancelling.set(false) });
   }
 
-  /** Re-reads the run (hub completion or the D21 poll). */
+  /** Re-reads the run and its steps (hub completion or the D21 poll), so the stepper moves even without the hub. */
   private refresh(): void {
-    this.runs.get(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((body) => this.handle(body));
+    this.runs.get(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((body) => {
+      if (!this.handle(body)) {
+        this.readSteps();
+      }
+    });
+  }
+
+  private readSteps(): void {
+    this.runs.steps(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((steps) => this.steps.set(steps));
   }
 
   /** True when the run is finished: a report opens the report page; a failure shows its reasons. */
@@ -107,7 +122,8 @@ export class LiveScan implements OnInit {
       return true;
     }
 
-    if (body.status === 'Failed' || body.status === 'Cancelled') {
+    // Succeeded always carries a report; without one, say so rather than poll forever.
+    if (body.status === 'Failed' || body.status === 'Cancelled' || body.status === 'Succeeded') {
       this.stopWatching();
       this.outcome.set(body);
       return true;
@@ -117,6 +133,11 @@ export class LiveScan implements OnInit {
   }
 
   private stopWatching(): void {
+    if (this.stopped) {
+      return;
+    }
+
+    this.stopped = true;
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;

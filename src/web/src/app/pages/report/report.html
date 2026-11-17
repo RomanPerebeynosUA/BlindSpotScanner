@@ -26,7 +26,7 @@
   </div>
 } @else if (outcome(); as done) {
   <div class="panel outcome stack" role="status">
-    <h1>Scan {{ done.status === 'Failed' ? 'failed' : 'cancelled' }}</h1>
+    <h1>{{ done.status === 'Succeeded' ? 'Scan finished, but its report is missing' : done.status === 'Failed' ? 'Scan failed' : 'Scan cancelled' }}</h1>
     <ul>
       @for (reason of done.failureReasons; track $index) {
         <li>{{ reason }}</li>

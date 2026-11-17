@@ -57,7 +57,7 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
     if (path === '/api/repositories' && method === 'GET') {
-      return json(registered ? [{ id: REPO_ID, fullName: repository.fullName, defaultBranch: 'main', lastRunId: null, lastScore: null, lastCoveredShare: null, lastScanAt: null, activeRunId: null }] : []);
+      return json(registered ? [{ id: REPO_ID, fullName: repository.fullName, defaultBranch: 'main', lastRunId: null, lastScore: null, lastCoveredShare: null, lastScanAt: null, activeRunId: null, latestRunStatus: null }] : []);
     }
     if (path === '/api/repositories' && method === 'POST') {
       registered = true;

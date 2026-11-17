@@ -29,8 +29,9 @@ export class EndpointCoverage {
   protected readonly labels = FILTER_LABELS;
   protected readonly expanded = signal<ReadonlySet<string>>(new Set());
 
-  protected key(controller: string, method: string, route: string): string {
-    return `${controller}|${method} ${route}`;
+  /** Unique per row: the same route can be declared twice (D14), so the position is part of the key. */
+  protected key(controller: string, sourcePath: string, index: number, method: string, route: string): string {
+    return `${controller}|${sourcePath}|${index}|${method} ${route}`;
   }
 
   protected toggle(key: string): void {

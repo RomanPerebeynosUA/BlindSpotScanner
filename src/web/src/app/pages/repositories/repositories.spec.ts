@@ -14,6 +14,7 @@ const summary = (overrides: Partial<RepositorySummary> = {}): RepositorySummary 
   lastCoveredShare: 0.6,
   lastScanAt: '2026-11-15T09:00:00Z',
   activeRunId: null,
+  latestRunStatus: 'Succeeded',
   ...overrides,
 });
 
@@ -67,6 +68,14 @@ describe('Repositories', () => {
 
     // Assert
     expect(el.querySelector('tbody a.btn')?.getAttribute('href')).toBe('/repos/r1');
+  });
+
+  it('only failed scans show Last scan failed', async () => {
+    // Act
+    const el = await render([summary({ lastRunId: null, lastScore: null, lastCoveredShare: null, lastScanAt: null, latestRunStatus: 'Failed' })]);
+
+    // Assert
+    expect(cells(el)[4]).toBe('Last scan failed');
   });
 
   it('empty list shows the empty state', async () => {

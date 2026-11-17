@@ -1,4 +1,5 @@
-import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, DOCUMENT, inject, input, OnInit, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { marked } from 'marked';
@@ -35,6 +36,7 @@ const lines = (text: string): string[] => text.split('\n').map((l) => l.trim()).
 export class ProfileEditor implements OnInit {
   private readonly api = inject(RepositoriesApi);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly document = inject(DOCUMENT);
 
   readonly id = input.required<string>();
 
@@ -56,10 +58,27 @@ export class ProfileEditor implements OnInit {
   protected readonly drafting = signal(false);
   protected readonly openQuestions = signal<string[]>([]);
 
+  /** Edits since the last load or save. */
+  protected readonly dirty = signal(false);
+
+  /** A save was rejected because someone saved a newer version. */
+  protected readonly conflict = signal(false);
+
   protected readonly readOnly = computed(() => this.viewing() !== null);
   protected readonly preview = computed(() => marked.parse(this.markdown(), { async: false }));
 
   ngOnInit(): void {
+    this.loadLatest();
+  }
+
+  /** After a 409: take the newer version as the base (unsaved edits are dropped). */
+  protected reloadLatest(): void {
+    this.conflict.set(false);
+    this.viewing.set(null);
+    this.loadLatest();
+  }
+
+  private loadLatest(): void {
     this.api.profile(this.id()).subscribe((profile) => {
       this.latest.set(profile);
       this.load(profile);
@@ -68,6 +87,10 @@ export class ProfileEditor implements OnInit {
   }
 
   protected show(version: number): void {
+    if (this.dirty() && !(this.document.defaultView?.confirm('Discard your unsaved changes?') ?? true)) {
+      return;
+    }
+
     const latest = this.latest();
     if (latest && version === latest.version) {
       this.viewing.set(null);
@@ -113,7 +136,10 @@ export class ProfileEditor implements OnInit {
         this.load(saved);
         this.snackBar.open(`Saved as version ${saved.version}`, 'Dismiss', { duration: 4000 });
       },
-      error: () => this.saving.set(false),
+      error: (error: unknown) => {
+        this.saving.set(false);
+        this.conflict.set(error instanceof HttpErrorResponse && error.status === 409);
+      },
     });
   }
 
@@ -123,6 +149,7 @@ export class ProfileEditor implements OnInit {
       next: (draft) => {
         this.drafting.set(false);
         this.markdown.set(draft.markdown);
+        this.dirty.set(true);
         this.openQuestions.set(draft.openQuestions);
       },
       error: () => this.drafting.set(false),
@@ -132,6 +159,7 @@ export class ProfileEditor implements OnInit {
   protected setList(key: ListField, event: Event): void {
     const value = (event.target as HTMLTextAreaElement).value;
     this.lists.update((l) => ({ ...l, [key]: value }));
+    this.dirty.set(true);
   }
 
   protected value(event: Event): string {
@@ -140,9 +168,16 @@ export class ProfileEditor implements OnInit {
 
   protected setMapping(event: Event): void {
     this.mapping.set(this.value(event) as IntegrationMappedTo);
+    this.dirty.set(true);
+  }
+
+  protected setMarkdown(event: Event): void {
+    this.markdown.set(this.value(event));
+    this.dirty.set(true);
   }
 
   private load(profile: Profile): void {
+    this.dirty.set(false);
     this.markdown.set(profile.markdown);
     this.mapping.set(profile.integrationMappedTo);
     this.lists.set(this.listsOf(profile));

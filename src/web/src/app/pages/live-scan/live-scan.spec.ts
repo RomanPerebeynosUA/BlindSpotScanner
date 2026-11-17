@@ -1,7 +1,8 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { of, Observable, NEVER, Subject } from 'rxjs';
+import { of, Observable, NEVER, Subject, throwError } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { RunsApi } from '../../core/api/runs-api';
 import { RunBody, RunStatus, ScanStep } from '../../core/api/api-types';
 import { ScanProgress, ScanProgressService } from '../../core/scan-progress';
@@ -205,6 +206,60 @@ describe('LiveScan', () => {
 
     // Assert
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('stops the watch only once when finishing then leaving', async () => {
+    // Arrange
+    const { fixture, settle } = await render();
+    get = () => of(report);
+    completed.set('Succeeded');
+    await settle();
+
+    // Act
+    fixture.destroy();
+
+    // Assert
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('poll re-reads the steps', async () => {
+    // Arrange
+    vi.useFakeTimers();
+    const { fixture, el } = await render();
+    steps = [step('P1', 'Succeeded')];
+
+    // Act
+    vi.advanceTimersByTime(5000);
+    fixture.detectChanges();
+
+    // Assert
+    expect(state(el, 'P1')).toBe('done');
+  });
+
+  it('initial load error shows Run not found', async () => {
+    // Arrange
+    get = () => throwError(() => new HttpErrorResponse({ status: 404 }));
+
+    // Act
+    const { el } = await render();
+
+    // Assert
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe('Run not found');
+    expect(el.querySelector('button.cancel')).toBeNull();
+  });
+
+  it('succeeded without a report shows the report as missing', async () => {
+    // Arrange
+    const { el, settle } = await render();
+    get = () => of({ runId: 'run1', status: 'Succeeded', failureReasons: [] });
+
+    // Act
+    completed.set('Succeeded');
+    await settle();
+
+    // Assert
+    expect(el.querySelector('.outcome h2')?.textContent?.trim()).toBe('Scan finished, but its report is missing');
+    expect(stop).toHaveBeenCalled();
   });
 
   it('stops watching on destroy', async () => {
