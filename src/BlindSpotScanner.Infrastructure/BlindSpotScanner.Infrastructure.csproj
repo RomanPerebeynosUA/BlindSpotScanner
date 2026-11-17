@@ -27,4 +27,9 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
+  <!-- A missing prompt would otherwise embed nothing and only fail at runtime (e.g. a Docker context without the blueprint). -->
+  <Target Name="RequirePrompts" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('..\..\BlindSpotScanner-Blueprint\prompts\_system.md')" Text="BlindSpotScanner-Blueprint/prompts/ is missing; the LLM prompts are embedded from it (D20)." />
+  </Target>
+
 </Project>
