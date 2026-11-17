@@ -95,6 +95,11 @@ export class Compare {
       .subscribe((history) => this.choices.set(history.filter((r) => r.status === 'Succeeded')));
   }
 
+  /** Whether a picker can show this run; otherwise it shows "Pick a run" instead of the first option. */
+  protected listed(runId: string | undefined): boolean {
+    return this.choices().some((r) => r.runId === runId);
+  }
+
   protected label(name: string): string {
     return METRIC_LABELS[name] ?? name;
   }

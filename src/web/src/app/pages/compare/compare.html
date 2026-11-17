@@ -8,6 +8,7 @@
       <label>
         Baseline
         <select name="base" (change)="pick('base', $event)">
+          <option value="" disabled [selected]="!listed(base())">Pick a run</option>
           @for (run of choices(); track run.runId) {
             <option [value]="run.runId" [selected]="run.runId === base()">{{ run.generatedAt | date: 'd MMM y' }} · {{ run.commitSha.slice(0, 7) }}</option>
           }
@@ -16,6 +17,7 @@
       <label>
         Target
         <select name="target" (change)="pick('target', $event)">
+          <option value="" disabled [selected]="!listed(target())">Pick a run</option>
           @for (run of choices(); track run.runId) {
             <option [value]="run.runId" [selected]="run.runId === target()">{{ run.generatedAt | date: 'd MMM y' }} · {{ run.commitSha.slice(0, 7) }}</option>
           }

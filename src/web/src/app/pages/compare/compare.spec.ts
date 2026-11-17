@@ -144,6 +144,15 @@ describe('Compare', () => {
     expect(navigate).toHaveBeenCalledWith(['/compare'], { queryParams: { base: PREVIOUS, target: PREVIOUS } });
   });
 
+  it('a base run missing from the picker list shows the placeholder, not the first run', async () => {
+    // Act
+    const el = await render(of(comparison()), { base: 'not-listed', target: CURRENT });
+
+    // Assert
+    const select = el.querySelector('select[name=base]') as HTMLSelectElement;
+    expect(select.selectedOptions[0].textContent?.trim()).toBe('Pick a run');
+  });
+
   it('compare error shows cannot be compared', async () => {
     // Act
     const el = await render(throwError(() => new HttpErrorResponse({ status: 409 })));
