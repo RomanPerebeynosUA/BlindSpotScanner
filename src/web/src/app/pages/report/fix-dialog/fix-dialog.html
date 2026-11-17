@@ -1,0 +1,73 @@
+<form class="dialog" (submit)="submit($event)">
+  <h2 id="fix-title">Fix with a draft PR</h2>
+  @if (declined(); as why) {
+    <div class="note">The fix was declined: {{ why }}</div>
+    <div class="row actions"><button type="button" class="btn" (click)="cancel()">Close</button></div>
+  } @else if (draft(); as d) {
+    @if (existing(); as e) {
+      <div class="banner" role="alert">
+        Already has a PR: <a [href]="e.url" target="_blank" rel="noopener">{{ e.externalKey }}</a> ({{ e.status }}). Opening another makes a duplicate.
+      </div>
+    }
+    @if (changed().length > 0) {
+      <div class="banner" role="alert">
+        Files changed since the scan: {{ changed().join(', ') }}.
+        <button type="button" class="btn sm regenerate" (click)="generate()">Regenerate</button>
+      </div>
+    }
+    @if (reasons().length > 0) {
+      <ul class="reasons" role="alert">
+        @for (reason of reasons(); track $index) {
+          <li>{{ reason }}</li>
+        }
+      </ul>
+    }
+
+    @for (file of files(); track file.path; let i = $index) {
+      <div class="file stack">
+        <div class="row">
+          <span class="mono">{{ file.path }}</span>
+          <span class="chip">{{ file.action }}</span>
+          <button type="button" class="btn sm edit" [attr.aria-pressed]="file.editing" (click)="toggle(i)">{{ file.editing ? 'Done' : 'Edit' }}</button>
+        </div>
+        @if (file.editing) {
+          <textarea [attr.name]="'file-' + i" rows="16" [attr.aria-label]="'Content of ' + file.path" [value]="file.content" (input)="edit(i, $event)"></textarea>
+        } @else {
+          <pre class="diff" [attr.aria-label]="'Changes to ' + file.path">@for (line of diff(file); track $index) {<span [class]="line.kind">{{ line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' ' }} {{ line.text }}</span>
+}</pre>
+        }
+      </div>
+    }
+
+    <div class="stack">
+      <div><b>Why:</b> {{ d.rationale }}</div>
+      @if (d.assumptions.length > 0) {
+        <div><b>Assumptions</b><ul>@for (a of d.assumptions; track $index) {<li>{{ a }}</li>}</ul></div>
+      }
+      @if (d.riskNotes.length > 0) {
+        <div><b>Risks</b><ul>@for (r of d.riskNotes; track $index) {<li>{{ r }}</li>}</ul></div>
+      }
+      <div class="muted cost">Cost: ${{ d.costUsd | number: '1.2-2' }}</div>
+    </div>
+
+    <label>Branch <input name="branch" [value]="branch()" (input)="branch.set(read($event))" /></label>
+    <label>Title <input name="title" [value]="title()" (input)="title.set(read($event))" /></label>
+    <label>Body (Markdown) <textarea name="body" rows="8" [value]="body()" (input)="body.set(read($event))"></textarea></label>
+
+    <div class="row actions">
+      <button type="button" class="btn" (click)="cancel()">Cancel</button>
+      <button type="submit" class="btn primary" [disabled]="busy() || !branch().trim() || !title().trim()">
+        {{ busy() ? 'Opening…' : existing() ? 'Open anyway' : 'Open draft PR' }}
+      </button>
+    </div>
+  } @else if (reasons().length > 0) {
+    <ul class="reasons" role="alert">
+      @for (reason of reasons(); track $index) {
+        <li>{{ reason }}</li>
+      }
+    </ul>
+    <div class="row actions"><button type="button" class="btn" (click)="cancel()">Close</button></div>
+  } @else {
+    <p class="muted" aria-live="polite">Generating… (this calls Claude and is billed)</p>
+  }
+</form>

@@ -42,7 +42,7 @@ describe('Report', () => {
         provideRouter([]),
         { provide: RunsApi, useValue: { get, repository: () => of({ id: 'repo1' }) } },
         { provide: RepositoriesApi, useValue: { runs: () => of(history) } },
-        { provide: RemediationApi, useValue: { actions: () => (Array.isArray(actions) ? of(actions) : actions) } },
+        { provide: RemediationApi, useValue: { actions: () => (Array.isArray(actions) ? of(actions) : actions), features: () => of({ pullRequests: true, jira: true }) } },
       ],
     });
     navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true) as unknown as ReturnType<typeof vi.fn>;

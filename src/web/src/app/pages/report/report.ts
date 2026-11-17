@@ -54,6 +54,11 @@ export class Report {
   protected readonly compareBase = computed(() => this.store.report()?.delta?.baseRunId ?? this.older()?.runId ?? null);
 
   constructor() {
+    // Read once: whether fix PRs may be offered (read-only mode hides them, D25).
+    this.remediation
+      .features()
+      .pipe(catchError(() => of({ pullRequests: false, jira: false })), takeUntilDestroyed())
+      .subscribe((features) => this.store.features.set(features));
     // The run picker navigates between runs on this same route. switchMap drops the answer for a run
     // the user already left, so a late reply can't show the wrong report or redirect to its live page.
     const runId$ = toObservable(this.runId);

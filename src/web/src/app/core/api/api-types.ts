@@ -146,3 +146,41 @@ export interface JiraCreate {
   labels: string[];
   force: boolean;
 }
+
+/** GET /api/features (D25): what the UI may offer. */
+export interface Features {
+  pullRequests: boolean;
+  jira: boolean;
+}
+
+export type FixFileAction = 'create' | 'modify';
+
+/** A generated file; `original` is the content at the scanned commit, for a modify. */
+export interface FixDraftFile {
+  path: string;
+  action: FixFileAction;
+  content: string;
+  original: string | null;
+}
+
+/** POST …/fix-preview: the guarded, editable fix (doc 09). */
+export interface FixDraft {
+  files: FixDraftFile[];
+  rationale: string;
+  assumptions: string[];
+  riskNotes: string[];
+  branch: string;
+  title: string;
+  body: string;
+  costUsd: number;
+  existing: RemediationAction | null;
+}
+
+/** POST …/pull-request body; `force` is "Open anyway". */
+export interface FixCreate {
+  files: { path: string; action: FixFileAction; content: string }[];
+  branch: string;
+  title: string;
+  body: string;
+  force: boolean;
+}
