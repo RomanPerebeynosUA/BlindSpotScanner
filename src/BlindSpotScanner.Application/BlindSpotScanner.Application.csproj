@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Llm\Schemas\*.json" LogicalName="schemas.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\BlindSpotScanner-Blueprint\profiles\_template.md" LogicalName="profile-template.md" />
   </ItemGroup>
 
   <PropertyGroup>

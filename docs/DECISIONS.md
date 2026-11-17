@@ -184,3 +184,26 @@ context doesn't grow with the repository. The api applies migrations at startup.
 `Scan:HeartbeatSeconds` 30, `Scan:PollMilliseconds` 2000. `ScanWorker` lives in Infrastructure so
 the end-to-end tests host it next to the api; the Worker project only hosts it. Configuration is
 read when services resolve, so hosts and test factories can add sources after registration.
+
+## D22 — Repositories, profiles and the web UI (2026-11-17)
+The user's choices for M7: adding a repository saves profile v1 from template defaults, and the
+profile page also offers "Auto-draft with AI" (`prompts/draft-profile.md`); the profile editor
+edits the typed D18 columns and the Markdown; there is no settings page until M9 (connections stay
+in configuration); the web app uses hand-written typed API services instead of openapi-generator
+(the contract defines almost no response schemas).
+- Profile v1 is `profiles/_template.md` with the repository's `owner/name`, `real-seam`, and the
+  globs the M6 end-to-end test proved on the bookstore fixture: controllers
+  `src/**/Controllers/**/*Controller.cs`, minimal APIs `src/**/Endpoints/**/*.cs`, tests
+  `tests/**/*.cs`, integration `tests/*.IntegrationTests/**`, attribute
+  `Trait("Category","Integration")`, base type `WebApplicationFactory`, never `**/*Fixture.cs`.
+- The branch is the request's `defaultBranch`, else the URL's `/tree/{branch}`, else GitHub's
+  default, and it must exist. Duplicates match on GitHub's canonical owner/name (a unique index),
+  so URLs that differ by case, `.git` or `/tree/` find the registered repository (409 with its id).
+- Contract additions: `RepositorySummary` gains `defaultBranch` and `activeRunId` (the newest
+  queued or running run); `GET …/profile?version=n`, `GET …/profile/versions`, and `baseVersion` on
+  `PUT …/profile` (409 when another save came first).
+- The AI draft fills only the Markdown (D18: the typed columns are not parsed from it) and is never
+  saved by itself; the user saves it. The template is appended to the draft prompt at runtime, as
+  the prompt says.
+- New endpoints return errors as ProblemDetails. Validation stays in the application services (as
+  in M6), so FluentValidation is not added yet. No auth header until M11 (OIDC).
