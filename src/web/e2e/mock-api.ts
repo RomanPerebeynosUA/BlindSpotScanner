@@ -50,16 +50,20 @@ export interface MockApi {
   completeRun(): void;
   sendProgress(phase: string, pct: number, message: string): Promise<void>;
   sendCompleted(status: string): Promise<void>;
+  /** The bodies POSTed to …/findings/{id}/jira, in order. */
+  jiraBodies(): { summary: string; force: boolean }[];
 }
 
 /**
  * Serves the REST API (`page.route`) and the `/hubs/scans` SignalR hub (`page.routeWebSocket`, JSON
  * protocol: records end with U+001E) in memory, per test.
  */
-export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean } = {}): Promise<MockApi> {
+export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean } = {}): Promise<MockApi> {
   let registered = options.registered ?? false;
   let finished = options.finished ?? false;
   let hub: WebSocketRoute | null = null;
+  const jiraBodies: { summary: string; force: boolean }[] = [];
+  const actions: unknown[] = [];
   let subscribed: () => void = () => undefined;
   const subscription = new Promise<void>((resolve) => (subscribed = resolve));
 
@@ -110,6 +114,27 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
     if (path === `/api/runs/${RUN_ID}/steps`) {
       return json([]);
     }
+    const jira = /^\/api\/runs\/[^/]+\/findings\/([^/]+)\/(jira-preview|jira)$/.exec(path);
+    if (jira && method === 'POST') {
+      const finding = (report.findings as { id: string; stableKey: string; headline: string; severity: string }[]).find((f) => f.id === jira[1])!;
+      const ticket = (key: string) => ({
+        id: key, type: 'JiraTicket', stableKey: finding.stableKey, externalKey: key,
+        url: `https://example.atlassian.net/browse/${key}`, status: 'To Do', createdAt: '2026-11-17T10:00:00Z',
+      });
+      if (jira[2] === 'jira-preview') {
+        return json({
+          summary: `[Integration coverage] ${finding.headline}`, description: `## Problem\n${finding.headline}`, projectKey: 'BSS', issueType: 'Task',
+          priority: finding.severity, labels: ['integration-coverage'], stableKey: finding.stableKey, existing: options.ticketed ? ticket('BSS-1') : null,
+        });
+      }
+      jiraBodies.push(request.postDataJSON() as { summary: string; force: boolean });
+      const created = ticket(`BSS-${jiraBodies.length}`);
+      actions.unshift(created);
+      return json(created, 201);
+    }
+    if (path === `/api/repositories/${REPO_ID}/actions`) {
+      return json(actions);
+    }
     if (path === `/api/runs/${RUN_ID}/cancel`) {
       return route.fulfill({ status: 202 });
     }
@@ -141,6 +166,7 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
   return {
     completeRun: () => (finished = true),
     sendProgress: (phase, pct, message) => invoke('ScanProgress', [RUN_ID, phase, pct, message]),
+    jiraBodies: () => jiraBodies,
     sendCompleted: (status) => invoke('ScanCompleted', [RUN_ID, status]),
   };
 }
