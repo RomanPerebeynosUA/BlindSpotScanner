@@ -38,6 +38,7 @@ public static class DependencyInjection
         // The typed client owns its HttpClient; the rate-limit handler sits in its handler chain (D16).
         services.AddTransient<GitHubRateLimitHandler>();
         services.AddHttpClient<IGitHubClient, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
+        services.AddHttpClient<IGitHubPullRequests, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
         services.AddScoped<IBlobReader, CachingBlobReader>();
         // A short timeout: a hung Jira must not hold the report's actions list (D24).
         services.AddHttpClient<IJiraClient, JiraClient>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));

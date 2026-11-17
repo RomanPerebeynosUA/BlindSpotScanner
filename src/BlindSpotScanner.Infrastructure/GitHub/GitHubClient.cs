@@ -13,7 +13,7 @@ namespace BlindSpotScanner.Infrastructure.GitHub;
 /// handler chain should include <see cref="GitHubRateLimitHandler"/>. Headers and the base URL go
 /// on each request, so the injected HttpClient is never mutated.
 /// </summary>
-public sealed class GitHubClient(HttpClient http, IOptions<GitHubOptions> options) : IGitHubClient
+public sealed partial class GitHubClient(HttpClient http, IOptions<GitHubOptions> options) : IGitHubClient, IGitHubPullRequests
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
