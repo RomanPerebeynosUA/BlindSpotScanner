@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.AddHttpClient<IJiraClient, JiraClient>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<IEndpointExtractor, AspNetCoreEndpointExtractor>();
         services.AddSingleton<ITestSyntaxReader, CSharpTestSyntaxReader>();
+        services.AddSingleton<IFixGuard, FixGuard>();
 
         services.AddSingleton<PromptLibrary>();
         services.AddSingleton<ClaudeLlmClient>();
