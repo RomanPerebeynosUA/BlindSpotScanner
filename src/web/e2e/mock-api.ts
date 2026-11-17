@@ -52,18 +52,22 @@ export interface MockApi {
   sendCompleted(status: string): Promise<void>;
   /** The bodies POSTed to …/findings/{id}/jira, in order. */
   jiraBodies(): { summary: string; force: boolean }[];
+  /** The bodies POSTed to …/findings/{id}/pull-request, in order. */
+  pullRequestBodies(): { branch: string; title: string; force: boolean }[];
 }
 
 /**
  * Serves the REST API (`page.route`) and the `/hubs/scans` SignalR hub (`page.routeWebSocket`, JSON
  * protocol: records end with U+001E) in memory, per test.
  */
-export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean } = {}): Promise<MockApi> {
+export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean; readOnly?: boolean; filesChanged?: boolean } = {},
+): Promise<MockApi> {
   let registered = options.registered ?? false;
   let finished = options.finished ?? false;
   let hub: WebSocketRoute | null = null;
   const jiraBodies: { summary: string; force: boolean }[] = [];
   const actions: unknown[] = [];
+  const pullRequestBodies: { branch: string; title: string; force: boolean }[] = [];
   let subscribed: () => void = () => undefined;
   const subscription = new Promise<void>((resolve) => (subscribed = resolve));
 
@@ -132,6 +136,34 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
       actions.unshift(created);
       return json(created, 201);
     }
+    if (path === '/api/features') {
+      return json({ pullRequests: !options.readOnly, jira: true });
+    }
+    const fix = /^\/api\/runs\/[^/]+\/findings\/([^/]+)\/(fix-preview|pull-request)$/.exec(path);
+    if (fix && method === 'POST') {
+      const finding = (report.findings as { id: string; stableKey: string }[]).find((f) => f.id === fix[1])!;
+      const slug = finding.stableKey.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
+      if (fix[2] === 'fix-preview') {
+        return json({
+          files: [{ path: 'tests/Bookstore.IntegrationTests/BooksApiTests.cs', action: 'modify', content: 'class BooksApiTests\n{\n    // asserts the title\n}', original: 'class BooksApiTests\n{\n}' }],
+          rationale: 'Asserts the returned book, not only the status.',
+          assumptions: [],
+          riskNotes: [],
+          branch: `coverage/fix-${slug}-${String(report.meta.commitSha).slice(0, 7)}`,
+          title: 'test: assert the returned book',
+          body: 'Strengthens the test.',
+          costUsd: 0.04,
+          existing: null,
+        });
+      }
+      if (options.filesChanged) {
+        return json({ title: 'Files changed since the scan', detail: 'Regenerate the fix against the current code.', paths: ['tests/Bookstore.IntegrationTests/BooksApiTests.cs'] }, 409);
+      }
+      pullRequestBodies.push(request.postDataJSON() as { branch: string; title: string; force: boolean });
+      const created = { id: 'pr7', type: 'PullRequest', stableKey: finding.stableKey, externalKey: '#7', url: 'https://github.com/example-org/bookstore-api/pull/7', status: 'Open', createdAt: '2026-11-17T10:00:00Z' };
+      actions.unshift(created);
+      return json(created, 201);
+    }
     if (path === `/api/repositories/${REPO_ID}/actions`) {
       return json(actions);
     }
@@ -167,6 +199,7 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
     completeRun: () => (finished = true),
     sendProgress: (phase, pct, message) => invoke('ScanProgress', [RUN_ID, phase, pct, message]),
     jiraBodies: () => jiraBodies,
+    pullRequestBodies: () => pullRequestBodies,
     sendCompleted: (status) => invoke('ScanCompleted', [RUN_ID, status]),
   };
 }
