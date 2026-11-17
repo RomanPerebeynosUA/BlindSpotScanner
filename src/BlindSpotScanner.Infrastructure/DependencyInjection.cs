@@ -1,5 +1,6 @@
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Llm;
+using BlindSpotScanner.Application.Remediation;
 using BlindSpotScanner.Application.Reports;
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Application.Scanning;
@@ -7,6 +8,7 @@ using BlindSpotScanner.Infrastructure.Extraction;
 using BlindSpotScanner.Infrastructure.GitHub;
 using BlindSpotScanner.Infrastructure.Llm;
 using BlindSpotScanner.Infrastructure.Persistence;
+using BlindSpotScanner.Infrastructure.Remediation;
 using BlindSpotScanner.Infrastructure.Reports;
 using BlindSpotScanner.Infrastructure.Repositories;
 using BlindSpotScanner.Infrastructure.Scanning;
@@ -70,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<IRepositoryStore, EfRepositoryStore>();
         services.AddScoped<RepositoryService>();
         services.AddScoped<RunComparison>();
+        services.AddScoped<IRemediationStore, EfRemediationStore>();
         services.AddScoped<IProfileStore, EfProfileStore>();
         services.AddScoped<ProfileService>();
         services.AddScoped(sp => new ProfileDrafter(

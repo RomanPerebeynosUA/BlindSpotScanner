@@ -224,3 +224,23 @@ the repositories table and on the repository overview; ad-hoc compare always run
   `generatedAt`, `score`, `coveredShare`; an unscorable run keeps a null score).
 - Non-comparable deltas (`comparable: false`) show a warning banner with the reasons and neutral,
   uncoloured chips (principle 6).
+
+## D24 — Jira tickets (2026-11-17)
+The user's choices for M9: the Jira connection comes from configuration only (`Jira:BaseUrl`,
+`Jira:Email`, `Jira:ApiToken` from user secrets or env vars, `Jira:ProjectKey`, `Jira:IssueType`
+default `Task`, `Jira:Labels` default `["integration-coverage"]`); the settings page moves to M11
+with auth. "Create Jira" is offered on the Findings section and on untested endpoint rows only
+(top risks, scorecard rows and bulk epics wait). Jira is tested with WireMock only; no live test.
+- `findingId` in the API is the report's finding id (`f2`). Its `findings` row is created lazily
+  when the first action needs it (unique on run + report finding id), so older runs work too.
+- Dedup: a stored JiraTicket action for the same repository and `StableKey`, then JQL
+  `labels = integration-coverage AND text ~ "<key with non-alphanumerics as spaces>"`. A search
+  hit counts only when its description holds the footer `BlindSpotScanner key: <stableKey>`,
+  which the server always appends (and `integration-coverage` is always among the labels), so a
+  user's edits can't break dedup. A ticket found only in Jira is stored as an action (adopted).
+  "Create anyway" (`force`) skips both checks.
+- `CreatedBy` is `anonymous` until M11 auth. Jira not configured → 503 ProblemDetails naming the
+  missing settings; a Jira error on create → 502 with Jira's message (never the token).
+- Status refresh: `GET /api/repositories/{id}/actions` (a contract addition) re-reads statuses
+  checked 10 or more minutes ago; a Jira failure keeps the last known status.
+- `App:PublicUrl` (default `http://localhost:8080`) builds the report link in ticket descriptions.
