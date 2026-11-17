@@ -18,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace BlindSpotScanner.Infrastructure;
@@ -115,7 +116,8 @@ public static class DependencyInjection
             sp.GetRequiredService<ILlmClient>,
             sp.GetRequiredService<ScanPipelineFactory>(),
             sp.GetRequiredService<CitationVerifier>(),
-            sp.GetRequiredService<TimeProvider>()));
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<ScanOrchestrator>>()));
         return services;
     }
 

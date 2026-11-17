@@ -12,6 +12,8 @@ using BlindSpotScanner.Infrastructure.Tests.Extraction;
 using BlindSpotScanner.Infrastructure.Tests.Llm;
 using BlindSpotScanner.Infrastructure.Tests.Persistence;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 
@@ -71,7 +73,8 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         return repository.Id;
     }
 
-    private async Task<RunStatus?> OrchestrateAsync(Guid runId, ILlmClient? llm = null, IScanEvents? events = null, IGitHubClient? github = null)
+    private async Task<RunStatus?> OrchestrateAsync(
+        Guid runId, ILlmClient? llm = null, IScanEvents? events = null, IGitHubClient? github = null, ILogger<ScanOrchestrator>? logger = null)
     {
         await using var context = db.CreateContext();
         var repo = FixtureRepository.Bookstore();
@@ -79,7 +82,7 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         var pipelines = new ScanPipelineFactory(gh, repo, new AspNetCoreEndpointExtractor(), new CSharpTestSyntaxReader(),
             new ReportValidator(new ReportSchemaValidator()), _time, new ScanPipelineOptions("claude-sonnet-5-5", "1.0.0", 200_000));
         var orchestrator = new ScanOrchestrator(new EfScanStore(context), events ?? new RecordingEvents(), () => llm ?? new CannedLlmClient(), pipelines,
-            new CitationVerifier(gh, new CSharpTestSyntaxReader()), _time);
+            new CitationVerifier(gh, new CSharpTestSyntaxReader()), _time, logger ?? NullLogger<ScanOrchestrator>.Instance);
         return await orchestrator.RunAsync(runId, CancellationToken.None);
     }
 
@@ -88,6 +91,26 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         await using var context = db.CreateContext();
         return (await context.ScanRuns.AsNoTracking().SingleAsync(r => r.Id == runId),
             await context.ScanSteps.AsNoTracking().Where(s => s.ScanRunId == runId).OrderBy(s => s.StartedAt).ThenBy(s => s.Phase).ToListAsync());
+    }
+
+    [Fact]
+    public async Task RunAsync_LogsWithRunIdAndPhaseScopes()
+    {
+        // Arrange (doc 10: logs carry the run id and the phase)
+        var runId = await RunningScanAsync();
+        var logger = new CapturingLogger<ScanOrchestrator>();
+
+        // Act
+        await OrchestrateAsync(runId, logger: logger);
+
+        // Assert
+        var phases = logger.Entries.Where(e => e.Properties.ContainsKey("phase")).ToList();
+        new
+        {
+            AllCarryRunId = phases.All(e => Equals(e.Scope.GetValueOrDefault("runId"), runId)),
+            First = phases.Count > 0 ? phases[0].Properties["phase"] : null,
+            Any = phases.Count > 0,
+        }.Should().Be(new { AllCarryRunId = true, First = (object?)"P1", Any = true });
     }
 
     [Fact]
@@ -431,5 +454,49 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         public Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) => throw new NotSupportedException();
+    }
+}
+
+/// <summary>Records each entry's structured properties and the scope properties active when it was written.</summary>
+internal sealed class CapturingLogger<T> : ILogger<T>
+{
+    private readonly AsyncLocal<ImmutableScopes?> _scopes = new();
+
+    public List<(Dictionary<string, object?> Properties, Dictionary<string, object?> Scope)> Entries { get; } = [];
+
+    public IDisposable BeginScope<TState>(TState state) where TState : notnull
+    {
+        var parent = _scopes.Value;
+        _scopes.Value = new ImmutableScopes(parent, Pairs(state));
+        return new Pop(() => _scopes.Value = parent);
+    }
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        var scope = new Dictionary<string, object?>();
+        for (var s = _scopes.Value; s is not null; s = s.Parent)
+        {
+            foreach (var (key, value) in s.Values)
+            {
+                scope.TryAdd(key, value);
+            }
+        }
+
+        lock (Entries)
+        {
+            Entries.Add((Pairs(state), scope));
+        }
+    }
+
+    private static Dictionary<string, object?> Pairs(object? state) =>
+        state is IEnumerable<KeyValuePair<string, object?>> pairs ? pairs.Where(p => p.Key != "{OriginalFormat}").ToDictionary(p => p.Key, p => p.Value) : [];
+
+    private sealed record ImmutableScopes(ImmutableScopes? Parent, Dictionary<string, object?> Values);
+
+    private sealed class Pop(Action pop) : IDisposable
+    {
+        public void Dispose() => pop();
     }
 }

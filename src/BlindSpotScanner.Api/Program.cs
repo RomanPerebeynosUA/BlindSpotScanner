@@ -1,6 +1,7 @@
 using BlindSpotScanner.Api.Auth;
 using BlindSpotScanner.Api.Hubs;
 using BlindSpotScanner.Infrastructure;
+using BlindSpotScanner.Infrastructure.Logging;
 using BlindSpotScanner.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +14,7 @@ builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<BlindSpotScanner.Application.ICurrentUser, HttpCurrentUser>();
 builder.Services.AddBlindSpotScannerCore();
+builder.Services.AddBlindSpotScannerLogging(builder);
 builder.AddBlindSpotScannerAuth();
 builder.Services.AddSingleton<ScanEventRelay>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ScanEventRelay>());
