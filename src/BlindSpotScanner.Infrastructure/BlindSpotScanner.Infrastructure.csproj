@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Reports\integration-report.schema.json" LogicalName="integration-report.schema.json" />
+    <EmbeddedResource Include="..\..\BlindSpotScanner-Blueprint\prompts\*.md" LogicalName="prompts.%(Filename).md" />
+    <EmbeddedResource Include="..\..\BlindSpotScanner-Blueprint\docs\06-scoring-rubric.md" LogicalName="rubric.md" />
   </ItemGroup>
 
   <PropertyGroup>
