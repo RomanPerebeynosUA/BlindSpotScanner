@@ -82,7 +82,8 @@ export class Report {
       )
       .subscribe(({ history, actions }) => {
         this.siblings.set(history.filter((r) => r.status === 'Succeeded'));
-        this.store.actions.set(actions);
+        // Merged, not replaced: a ticket created while this (status-refreshing) load was slow stays.
+        this.store.actions.update((local) => [...local.filter((a) => !actions.some((l) => l.id === a.id)), ...actions]);
       });
   }
 
@@ -98,6 +99,7 @@ export class Report {
     this.store.report.set(null);
     this.store.statusFilter.set('all');
     this.store.search.set('');
+    this.store.actions.set([]);
     this.outcome.set(null);
     this.notFound.set(false);
   }

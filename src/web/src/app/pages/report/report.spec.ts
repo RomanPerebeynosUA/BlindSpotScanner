@@ -9,6 +9,7 @@ import { RemediationAction, RunBody, RunHistoryItem } from '../../core/api/api-t
 import { IntegrationReport } from '../../core/api/report';
 import { sampleReport } from '../../../testing/sample-report';
 import { Report } from './report';
+import { ReportStore } from './report-store';
 
 const PREVIOUS = '11111111-1111-4111-8111-111111111111';
 
@@ -32,7 +33,7 @@ describe('Report', () => {
     body: Observable<RunBody>,
     history: RunHistoryItem[] = defaultHistory,
     getFor?: (runId: string) => Observable<RunBody>,
-    actions: RemediationAction[] = [],
+    actions: RemediationAction[] | Observable<RemediationAction[]> = [],
   ) {
     get = vi.fn((runId: string) => getFor?.(runId) ?? body);
     TestBed.configureTestingModule({
@@ -41,7 +42,7 @@ describe('Report', () => {
         provideRouter([]),
         { provide: RunsApi, useValue: { get, repository: () => of({ id: 'repo1' }) } },
         { provide: RepositoriesApi, useValue: { runs: () => of(history) } },
-        { provide: RemediationApi, useValue: { actions: () => of(actions) } },
+        { provide: RemediationApi, useValue: { actions: () => (Array.isArray(actions) ? of(actions) : actions) } },
       ],
     });
     navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true) as unknown as ReturnType<typeof vi.fn>;
@@ -368,5 +369,24 @@ describe('Report', () => {
     // Assert
     expect(el.querySelector('app-actions-log')?.textContent).toContain('BSS-4');
     expect(el.querySelector('[data-kind=UncoveredSeam] app-jira-action a')?.textContent?.trim()).toBe('BSS-4 · Done');
+  });
+
+  it('a slow actions load keeps a ticket created meanwhile', async () => {
+    // Arrange (the load is slow while the server refreshes statuses from Jira)
+    const slow = new Subject<RemediationAction[]>();
+    const { fixture, settle, el } = await render(withReport(), defaultHistory, undefined, slow);
+    const created: RemediationAction = {
+      id: 'new', type: 'JiraTicket', stableKey: 'uncovered-seam:payment-gateway', externalKey: 'BSS-5',
+      url: 'https://example.atlassian.net/browse/BSS-5', status: 'To Do', createdAt: '2026-11-17T11:00:00Z',
+    };
+    fixture.debugElement.injector.get(ReportStore).actions.update((a) => [created, ...a]);
+
+    // Act
+    slow.next([]);
+    slow.complete();
+    await settle();
+
+    // Assert
+    expect(el.querySelector('[data-kind=UncoveredSeam] app-jira-action a')?.textContent?.trim()).toBe('BSS-5 · To Do');
   });
 });
