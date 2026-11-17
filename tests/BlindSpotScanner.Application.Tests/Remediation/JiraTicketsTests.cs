@@ -240,6 +240,19 @@ public class JiraTicketsTests
     }
 
     [Fact]
+    public async Task CreateAsync_LabelWithSpaces_SendsHyphenated()
+    {
+        // Arrange (Jira rejects labels containing spaces)
+        var draft = await DraftAsync();
+
+        // Act
+        await Tickets.CreateAsync(_runId, "f2", Create(draft) with { Labels = ["needs  review"] }, CancellationToken.None);
+
+        // Assert
+        _jira.Created.Single().Labels.Should().Equal("integration-coverage", "needs-review");
+    }
+
+    [Fact]
     public async Task ActionsAsync_StaleStatus_Refreshes()
     {
         // Arrange
@@ -278,7 +291,8 @@ public class JiraTicketsTests
         var actions = await Tickets.ActionsAsync(_repositoryId, CancellationToken.None);
 
         // Assert
-        new { actions.Single().Status, actions.Single().StatusCheckedAt }.Should().Be(new { Status = "To Do", StatusCheckedAt = Now.AddHours(-1) });
+        // The check time moves on, so a ticket Jira can't read (for example deleted) waits 10 minutes before the next try.
+        new { actions.Single().Status, actions.Single().StatusCheckedAt }.Should().Be(new { Status = "To Do", StatusCheckedAt = Now });
     }
 
     private sealed class Clock(DateTimeOffset now) : TimeProvider

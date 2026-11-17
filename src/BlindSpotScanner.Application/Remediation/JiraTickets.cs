@@ -102,12 +102,14 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
             try
             {
                 action.Status = await jira.GetStatusAsync(action.ExternalKey, ct);
-                action.StatusCheckedAt = now;
             }
             catch (JiraException)
             {
                 // The report must never fail because Jira is down; the cached status stays.
             }
+
+            // Moved on either way, so a ticket Jira can't read is retried after 10 minutes, not on every view.
+            action.StatusCheckedAt = now;
         }
 
         await store.SaveChangesAsync(ct);
@@ -156,8 +158,11 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
         return action;
     }
 
+    /// <summary><c>integration-coverage</c> first, no blanks or duplicates; Jira rejects spaces, so they become hyphens.</summary>
     private static List<string> Labels(IEnumerable<string> labels) =>
-        [.. new[] { CoverageLabel }.Concat(labels.Select(l => l.Trim()).Where(l => l.Length > 0)).Distinct(StringComparer.Ordinal)];
+        [.. new[] { CoverageLabel }
+            .Concat(labels.Select(l => string.Join('-', l.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))).Where(l => l.Length > 0))
+            .Distinct(StringComparer.Ordinal)];
 
     private static string Priority(Severity severity) => severity == Severity.Critical ? "Highest" : severity.ToString();
 
