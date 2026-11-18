@@ -37,6 +37,19 @@ public class AuthApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnly
     }
 
     [Fact]
+    public async Task Me_LocalMode_SaysSo()
+    {
+        // Arrange (signing out means nothing when everyone is the local admin, so the UI needs to know)
+        using var client = factory.CreateClient(Roles.Member);
+
+        // Act
+        var me = await client.GetFromJsonAsync<JsonElement>("/api/me");
+
+        // Assert
+        me.GetProperty("localMode").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
     public async Task StartScan_Viewer_Returns403()
     {
         // Arrange

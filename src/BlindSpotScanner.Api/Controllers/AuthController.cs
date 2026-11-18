@@ -9,7 +9,8 @@ using Microsoft.Extensions.Options;
 
 namespace BlindSpotScanner.Api.Controllers;
 
-public sealed record MeResponse(string Name, IReadOnlyList<string> Roles);
+/// <param name="LocalMode">Auth:Mode is Local: everyone is the built-in admin, so signing out means nothing (D26).</param>
+public sealed record MeResponse(string Name, IReadOnlyList<string> Roles, bool LocalMode);
 
 /// <summary>Sign-in endpoints (D26) and who is signed in.</summary>
 [ApiController]
@@ -19,7 +20,8 @@ public sealed class AuthController(IOptions<AuthOptions> options) : ControllerBa
     [HttpGet("me")]
     public MeResponse Me() => new(
         HttpCurrentUser.NameOf(User),
-        [.. User.FindAll(ClaimTypes.Role).Select(c => c.Value).Distinct(StringComparer.Ordinal)]);
+        [.. User.FindAll(ClaimTypes.Role).Select(c => c.Value).Distinct(StringComparer.Ordinal)],
+        !options.Value.IsOidc);
 
     /// <summary>Starts sign-in, then returns to <paramref name="returnUrl"/> when it is a local path (anything else goes home).</summary>
     [AllowAnonymous]

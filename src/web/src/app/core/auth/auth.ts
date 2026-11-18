@@ -8,6 +8,8 @@ export type Role = 'Viewer' | 'Member' | 'Admin';
 export interface Me {
   name: string;
   roles: string[];
+  /** Everyone is the built-in admin (Auth:Mode=Local), so there is nothing to sign out of. */
+  localMode: boolean;
 }
 
 /** Lowest to highest; a higher role includes the lower ones (doc 10). */

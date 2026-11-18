@@ -2,13 +2,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
 import { provideTestAuth } from '../testing/auth';
-import { AuthService } from './core/auth/auth';
+import { AuthService, Me } from './core/auth/auth';
 
 describe('App', () => {
-  async function configure(role: 'Viewer' | 'Member' | 'Admin' | null = 'Admin') {
+  async function configure(role: 'Viewer' | 'Member' | 'Admin' | null = 'Admin', user: Partial<Me> = {}) {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([]), provideTestAuth(role)],
+      providers: [provideRouter([]), provideTestAuth(role, user)],
     }).compileComponents();
   }
 
@@ -24,8 +24,8 @@ describe('App', () => {
     await fixture.whenStable();
 
     // Assert
-    const link = (fixture.nativeElement as HTMLElement).querySelector('nav.rail a');
-    expect(link?.textContent?.trim()).toBe('Repositories');
+    const link = (fixture.nativeElement as HTMLElement).querySelector('nav.rail .links a');
+    expect(link?.querySelector('.label')?.textContent?.trim()).toBe('Repositories');
     expect(link?.getAttribute('href')).toBe('/');
   });
 
@@ -43,8 +43,10 @@ describe('App', () => {
     expect(['light', 'dark']).toContain(html.getAttribute('data-theme'));
   });
 
-  it('user bar shows the name and Settings for an Admin', async () => {
+  it('account card shows initials, name, role and Settings for an Admin', async () => {
     // Arrange
+    TestBed.resetTestingModule();
+    await configure('Admin', { name: 'Dev Example' });
     const fixture = TestBed.createComponent(App);
 
     // Act
@@ -52,7 +54,54 @@ describe('App', () => {
 
     // Assert
     const el = fixture.nativeElement as HTMLElement;
-    expect([el.querySelector('.user .name')?.textContent?.trim(), el.querySelector('nav.rail a[href="/settings"]') !== null]).toEqual(['test-user', true]);
+    expect([
+      el.querySelector('.account .avatar')?.textContent?.trim(),
+      el.querySelector('.account .name')?.textContent?.trim(),
+      el.querySelector('.account .role')?.textContent?.trim(),
+      el.querySelector('nav.rail a[href="/settings"]') !== null,
+    ]).toEqual(['DE', 'Dev Example', 'Admin', true]);
+  });
+
+  it('local mode explains itself instead of offering Sign out', async () => {
+    // Arrange
+    TestBed.resetTestingModule();
+    await configure('Admin', { name: 'local-admin', localMode: true });
+    const fixture = TestBed.createComponent(App);
+
+    // Act
+    await fixture.whenStable();
+
+    // Assert
+    const el = fixture.nativeElement as HTMLElement;
+    expect([
+      el.querySelector('.account .name')?.textContent?.trim(),
+      el.querySelector('.account .mode-note')?.textContent?.trim(),
+      el.querySelector('button.signout'),
+    ]).toEqual(['Local admin', 'Local mode: everyone is an admin', null]);
+  });
+
+  it('signed-in users get a named Sign out button', async () => {
+    // Arrange
+    const fixture = TestBed.createComponent(App);
+
+    // Act
+    await fixture.whenStable();
+
+    // Assert
+    expect((fixture.nativeElement as HTMLElement).querySelector('button.signout')?.getAttribute('aria-label')).toBe('Sign out');
+  });
+
+  it('theme toggle names what it will do', async () => {
+    // Arrange
+    document.documentElement.setAttribute('data-theme', 'dark');
+    const fixture = TestBed.createComponent(App);
+
+    // Act
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Assert
+    expect((fixture.nativeElement as HTMLElement).querySelector('button.theme')?.getAttribute('aria-label')).toBe('Switch to light theme');
   });
 
   it('anonymous shows Sign in instead of the app', async () => {
@@ -66,7 +115,7 @@ describe('App', () => {
 
     // Assert
     const el = fixture.nativeElement as HTMLElement;
-    expect([el.querySelector('button.signin')?.textContent?.trim(), el.querySelector('router-outlet')]).toEqual(['Sign in', null]);
+    expect([el.querySelector('button.signin')?.textContent?.trim(), el.querySelector('router-outlet')]).toEqual(['Sign in with your organization account', null]);
   });
 
   it('an unreachable server shows a retry, not Sign in', async () => {

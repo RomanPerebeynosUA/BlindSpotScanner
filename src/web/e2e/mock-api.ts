@@ -61,7 +61,7 @@ export interface MockApi {
  * Serves the REST API (`page.route`) and the `/hubs/scans` SignalR hub (`page.routeWebSocket`, JSON
  * protocol: records end with U+001E) in memory, per test.
  */
-export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean; readOnly?: boolean; filesChanged?: boolean; role?: 'Viewer' | 'Member' | 'Admin' | null } = {},
+export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean; readOnly?: boolean; filesChanged?: boolean; role?: 'Viewer' | 'Member' | 'Admin' | null; localMode?: boolean } = {},
 ): Promise<MockApi> {
   let registered = options.registered ?? false;
   let finished = options.finished ?? false;
@@ -139,7 +139,9 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
     }
     if (path === '/api/me') {
       const role = options.role === undefined ? 'Admin' : options.role;
-      return role ? json({ name: 'e2e-user', roles: [role] }) : json({ title: 'Unauthorized' }, 401);
+      return role
+        ? json(options.localMode ? { name: 'local-admin', roles: [role], localMode: true } : { name: 'Dev Example', roles: [role], localMode: false })
+        : json({ title: 'Unauthorized' }, 401);
     }
     if (path === '/api/settings/connections' && method === 'GET') {
       return json([
