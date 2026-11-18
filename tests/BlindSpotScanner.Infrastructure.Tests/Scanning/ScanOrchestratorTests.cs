@@ -207,6 +207,44 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RunAsync_CancelledInsideAPhase_EndsThatPhaseSpan()
+    {
+        // Arrange (the cancel lands while a phase's LLM call runs, so the pipeline never reports the phase as failed)
+        var runId = await RunningScanAsync();
+        var started = new List<System.Diagnostics.Activity>();
+        var stopped = new List<System.Diagnostics.Activity>();
+        using var listener = new System.Diagnostics.ActivityListener
+        {
+            ShouldListenTo = s => s.Name == ScanTelemetry.SourceName,
+            Sample = (ref System.Diagnostics.ActivityCreationOptions<System.Diagnostics.ActivityContext> _) => System.Diagnostics.ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStarted = a => { lock (started) { started.Add(a); } },
+            ActivityStopped = a => { lock (stopped) { stopped.Add(a); } },
+        };
+        System.Diagnostics.ActivitySource.AddActivityListener(listener);
+
+        // Act
+        await OrchestrateAsync(runId, llm: new CancelDuringCall(db, runId));
+
+        // Assert
+        var run = stopped.Single(s => s.OperationName == "scan.run" && Equals(s.GetTagItem("run.id"), runId.ToString()));
+        var phasesStarted = started.Count(s => s.OperationName == "scan.phase" && s.ParentSpanId == run.SpanId);
+        stopped.Count(s => s.OperationName == "scan.phase" && s.ParentSpanId == run.SpanId).Should().Be(phasesStarted);
+    }
+
+    /// <summary>Requests a cancel, then fails the call as cancelled (like a cancelled HTTP request).</summary>
+    private sealed class CancelDuringCall(PostgresFixture db, Guid runId) : ILlmClient
+    {
+        public async Task<LlmResult> CompleteAsync(LlmRequest request, CancellationToken ct)
+        {
+            await using var context = db.CreateContext();
+            var run = await context.ScanRuns.SingleAsync(r => r.Id == runId, ct);
+            run.RequestCancel();
+            await context.SaveChangesAsync(ct);
+            throw new OperationCanceledException("cancelled mid-call");
+        }
+    }
+
+    [Fact]
     public async Task Run_CancelRequestedDuringScan_EndsCancelled()
     {
         // Arrange (someone presses cancel while P3 runs)

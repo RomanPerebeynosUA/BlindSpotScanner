@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using BlindSpotScanner.Infrastructure.Llm;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -55,9 +56,34 @@ public static class LoggingSetup
 {
     /// <summary>Serilog compact JSON to the console (doc 10), with secret redaction; levels from the "Serilog" section.</summary>
     public static IServiceCollection AddBlindSpotScannerLogging(this IServiceCollection services, IHostApplicationBuilder builder) =>
-        services.AddSerilog((_, configuration) => configuration
-            .ReadFrom.Configuration(builder.Configuration)
-            .Destructure.With<RedactingDestructuringPolicy>()
-            .Enrich.FromLogContext()
-            .WriteTo.Console(new ScrubbingFormatter(new CompactJsonFormatter())));
+        services.AddSerilog((_, configuration) => Configure(configuration, builder.Configuration, output: null));
+
+    /// <summary>
+    /// The one logger setup. Configuration may only set levels (<c>Serilog:MinimumLevel:Default</c> and
+    /// <c>:Override:*</c>): a sink added there would bypass the redaction, so sinks are not read from it.
+    /// </summary>
+    /// <param name="output">Where to write; null is the console.</param>
+    public static LoggerConfiguration Configure(LoggerConfiguration logger, IConfiguration configuration, TextWriter? output)
+    {
+        var levels = configuration.GetSection("Serilog:MinimumLevel");
+        logger.MinimumLevel.Is(Level(levels["Default"]) ?? LogEventLevel.Information);
+        foreach (var source in levels.GetSection("Override").GetChildren())
+        {
+            if (Level(source.Value) is { } level)
+            {
+                logger.MinimumLevel.Override(source.Key, level);
+            }
+        }
+
+        var formatter = new ScrubbingFormatter(new CompactJsonFormatter());
+        logger.Destructure.With<RedactingDestructuringPolicy>().Enrich.FromLogContext();
+        return output is null ? logger.WriteTo.Console(formatter) : logger.WriteTo.Sink(new TextWriterSink(formatter, output));
+    }
+
+    private static LogEventLevel? Level(string? value) => Enum.TryParse<LogEventLevel>(value, ignoreCase: true, out var level) ? level : null;
+
+    private sealed class TextWriterSink(ITextFormatter formatter, TextWriter output) : ILogEventSink
+    {
+        public void Emit(LogEvent logEvent) => formatter.Format(logEvent, output);
+    }
 }

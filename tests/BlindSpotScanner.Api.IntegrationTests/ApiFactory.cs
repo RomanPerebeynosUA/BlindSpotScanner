@@ -209,13 +209,18 @@ public sealed class ReadOnlyApiFactory : ApiFactory
 /// The api in OIDC mode with its real cookie + OpenID Connect handlers, against a fake provider
 /// (WireMock discovery document), so sign-in behaviour is tested without an identity provider.
 /// </summary>
-public sealed class OidcApiFactory : ApiFactory
+public class OidcApiFactory : ApiFactory
 {
     public const string PublicUrl = "https://bss.example.com";
 
     private readonly WireMock.Server.WireMockServer _provider = WireMock.Server.WireMockServer.Start();
 
     public OidcApiFactory()
+        : this(endSession: true)
+    {
+    }
+
+    protected OidcApiFactory(bool endSession)
     {
         var issuer = _provider.Url!;
         _provider.Given(WireMock.RequestBuilders.Request.Create().WithPath("/.well-known/openid-configuration").UsingGet())
@@ -225,7 +230,7 @@ public sealed class OidcApiFactory : ApiFactory
                 authorization_endpoint = $"{issuer}/authorize",
                 token_endpoint = $"{issuer}/token",
                 jwks_uri = $"{issuer}/jwks",
-                end_session_endpoint = $"{issuer}/logout",
+                end_session_endpoint = endSession ? $"{issuer}/logout" : null,
                 response_types_supported = new[] { "code" },
                 subject_types_supported = new[] { "public" },
                 id_token_signing_alg_values_supported = new[] { "RS256" },
@@ -254,3 +259,6 @@ public sealed class OidcApiFactory : ApiFactory
         base.Dispose(disposing);
     }
 }
+
+/// <summary>A provider without an end-session endpoint (Google, for example).</summary>
+public sealed class OidcNoEndSessionApiFactory() : OidcApiFactory(endSession: false);

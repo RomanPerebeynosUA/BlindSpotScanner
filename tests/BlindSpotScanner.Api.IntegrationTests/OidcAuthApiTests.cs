@@ -36,6 +36,19 @@ public class OidcAuthApiTests(OidcApiFactory factory) : IClassFixture<OidcApiFac
     }
 
     [Fact]
+    public async Task Logout_ProviderWithEndSession_RedirectsToIt()
+    {
+        // Arrange
+        using var client = Client();
+
+        // Act
+        using var response = await client.PostAsync("/api/auth/logout", null);
+
+        // Assert
+        new { response.StatusCode, ToProvider = response.Headers.Location?.AbsolutePath == "/logout" }.Should().Be(new { StatusCode = HttpStatusCode.Redirect, ToProvider = true });
+    }
+
+    [Fact]
     public async Task Login_RedirectsToProviderWithPublicCallbackUrl()
     {
         // Arrange (behind nginx or a TLS proxy the request host isn't the address users reach)
@@ -48,5 +61,21 @@ public class OidcAuthApiTests(OidcApiFactory factory) : IClassFixture<OidcApiFac
         var location = response.Headers.Location!.ToString();
         new { response.StatusCode, Callback = location.Contains("redirect_uri=" + Uri.EscapeDataString(OidcApiFactory.PublicUrl + "/api/auth/callback"), StringComparison.Ordinal) }
             .Should().Be(new { StatusCode = HttpStatusCode.Redirect, Callback = true });
+    }
+}
+
+public class OidcNoEndSessionAuthApiTests(OidcNoEndSessionApiFactory factory) : IClassFixture<OidcNoEndSessionApiFactory>
+{
+    [Fact]
+    public async Task Logout_ProviderWithoutEndSession_SignsOutHereAndGoesHome()
+    {
+        // Arrange
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        // Act
+        using var response = await client.PostAsync("/api/auth/logout", null);
+
+        // Assert
+        new { response.StatusCode, Location = response.Headers.Location?.ToString() }.Should().Be(new { StatusCode = HttpStatusCode.Redirect, Location = (string?)"/" });
     }
 }

@@ -68,6 +68,11 @@ public sealed class ScanOrchestrator(
         {
             run.Fail([ScanFailure.Describe(ex)]);
         }
+        finally
+        {
+            // A cancel or takeover inside a phase skips PhaseFailedAsync; its span must still end.
+            recorder.EndOpenPhase();
+        }
 
         if (run.Status != RunStatus.Succeeded)
         {
@@ -204,6 +209,14 @@ public sealed class ScanOrchestrator(
             logger.LogWarning("Phase {phase} failed: {reason}", phase, reason);
             EndPhase(ActivityStatusCode.Error);
             return store.SaveStepAsync(Step(phase, RunStatus.Failed, LlmUsage.None, 0, reason), ct);
+        }
+
+        public void EndOpenPhase()
+        {
+            if (_phase is not null)
+            {
+                EndPhase(ActivityStatusCode.Error);
+            }
         }
 
         private void EndPhase(ActivityStatusCode status)

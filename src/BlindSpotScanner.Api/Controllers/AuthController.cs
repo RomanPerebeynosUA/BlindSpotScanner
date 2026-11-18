@@ -33,10 +33,35 @@ public sealed class AuthController(IOptions<AuthOptions> options) : ControllerBa
             : Redirect(target);
     }
 
+    /// <summary>
+    /// Ends the session here, and at the provider when it offers an end-session endpoint (some, such
+    /// as Google, don't; asking them anyway fails the sign-out).
+    /// </summary>
     [AllowAnonymous]
     [HttpPost("auth/logout")]
-    public IActionResult Logout() =>
-        options.Value.IsOidc
-            ? SignOut(new AuthenticationProperties { RedirectUri = "/" }, CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme)
-            : Redirect("/");
+    public async Task<IActionResult> Logout([FromServices] IOptionsMonitor<OpenIdConnectOptions> oidc, CancellationToken ct)
+    {
+        if (!options.Value.IsOidc)
+        {
+            return Redirect("/");
+        }
+
+        var home = new AuthenticationProperties { RedirectUri = "/" };
+        return await ProviderEndsSessionAsync(oidc.Get(OpenIdConnectDefaults.AuthenticationScheme), ct)
+            ? SignOut(home, CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme)
+            : SignOut(home, CookieAuthenticationDefaults.AuthenticationScheme);
+    }
+
+    private static async Task<bool> ProviderEndsSessionAsync(OpenIdConnectOptions oidc, CancellationToken ct)
+    {
+        try
+        {
+            return oidc.ConfigurationManager is { } manager && !string.IsNullOrEmpty((await manager.GetConfigurationAsync(ct)).EndSessionEndpoint);
+        }
+        catch (InvalidOperationException)
+        {
+            // The provider's metadata can't be read right now: still end the session here.
+            return false;
+        }
+    }
 }

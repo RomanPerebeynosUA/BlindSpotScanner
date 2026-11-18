@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using BlindSpotScanner.Infrastructure.Logging;
 using FluentAssertions;
 using Serilog;
@@ -53,6 +54,29 @@ public class SecretRedactionTests
 
         // Assert
         line.Should().NotContain(GitHubToken);
+    }
+
+    [Fact]
+    public void LoggingSetup_RealConfiguration_RedactsAndHonoursLevelOverrides()
+    {
+        // Arrange (the hosts' own setup, not a hand-built logger; config may set levels, not sinks)
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Serilog:MinimumLevel:Default"] = "Information",
+            ["Serilog:MinimumLevel:Override:Noisy"] = "Warning",
+        }).Build();
+        using var output = new StringWriter();
+        using (var logger = LoggingSetup.Configure(new LoggerConfiguration(), configuration, output).CreateLogger())
+        {
+            // Act
+            logger.ForContext(Serilog.Core.Constants.SourceContextPropertyName, "Noisy").Information("hidden {Value}", 1);
+            logger.Information("Token {Header}", "Bearer " + GitHubToken);
+        }
+
+        // Assert
+        var text = output.ToString();
+        new { Hidden = !text.Contains("hidden", StringComparison.Ordinal), Redacted = !text.Contains(GitHubToken, StringComparison.Ordinal), Logged = text.Contains("Token", StringComparison.Ordinal) }
+            .Should().Be(new { Hidden = true, Redacted = true, Logged = true });
     }
 
     [Fact]
