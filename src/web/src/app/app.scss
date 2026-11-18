@@ -20,3 +20,8 @@ main {
   .brand { width: 100%; padding-bottom: 6px; }
   .theme { margin-top: 0; margin-left: auto; }
 }
+
+.user { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px 0; overflow-wrap: anywhere; }
+.user form { margin: 0; }
+.signin-screen { display: grid; place-items: center; min-height: 100vh; padding: 16px; }
+.signin-screen .panel { max-width: 420px; }

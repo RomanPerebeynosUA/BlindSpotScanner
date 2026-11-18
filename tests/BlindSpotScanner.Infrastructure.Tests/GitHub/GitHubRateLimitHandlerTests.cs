@@ -41,6 +41,26 @@ public class GitHubRateLimitHandlerTests
     private static HttpRequestMessage Get() => new(HttpMethod.Get, "https://api.github.com/repos/example-org/bookstore-api");
 
     [Fact]
+    public async Task Send_RecordsRateLimitRemaining()
+    {
+        // Arrange (doc 10 metric: GitHub rate-limit remaining)
+        var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        response.Headers.Add("x-ratelimit-remaining", "4321");
+        using var invoker = new HttpMessageInvoker(new GitHubRateLimitHandler(_time, Microsoft.Extensions.Options.Options.Create(new GitHubOptions())) { InnerHandler = new Answer(response) });
+
+        // Act
+        await invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/x"), CancellationToken.None);
+
+        // Assert
+        BlindSpotScanner.Application.Scanning.ScanTelemetry.GitHubRateLimitRemaining.Should().Be(4321);
+    }
+
+    private sealed class Answer(HttpResponseMessage response) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(response);
+    }
+
+    [Fact]
     public async Task Send_PrimaryLimitExhausted_WaitsUntilResetThenRetries()
     {
         // Arrange

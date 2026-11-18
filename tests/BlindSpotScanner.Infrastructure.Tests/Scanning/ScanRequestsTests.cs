@@ -68,6 +68,10 @@ public sealed class ScanRequestsTests(PostgresFixture db) : IAsyncLifetime
 
         public Task<bool> RepositoryExistsAsync(Guid repositoryId, CancellationToken ct) => inner.RepositoryExistsAsync(repositoryId, ct);
 
+        public Task<bool> LlmSharingAcknowledgedAsync(Guid repositoryId, CancellationToken ct) => inner.LlmSharingAcknowledgedAsync(repositoryId, ct);
+
+        public Task<bool> AcknowledgeLlmSharingAsync(Guid repositoryId, string by, DateTimeOffset at, CancellationToken ct) => inner.AcknowledgeLlmSharingAsync(repositoryId, by, at, ct);
+
         public Task<int?> LatestProfileVersionAsync(Guid repositoryId, CancellationToken ct) => inner.LatestProfileVersionAsync(repositoryId, ct);
 
         public Task<IReadOnlyList<ScanStep>> StepsAsync(Guid runId, CancellationToken ct) => inner.StepsAsync(runId, ct);

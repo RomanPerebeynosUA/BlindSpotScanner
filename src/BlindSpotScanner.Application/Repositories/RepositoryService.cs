@@ -49,6 +49,9 @@ public sealed record RepositorySummary(
 {
     /// <summary>The last succeeded runs (at most 12), oldest first (D23).</summary>
     public IReadOnlyList<TrendPoint> Trend { get; init; } = Trend ?? [];
+
+    /// <summary>Whether LLM data sharing was accepted (doc 10); a scan needs it.</summary>
+    public bool LlmSharingAcknowledged { get; init; }
 }
 
 /// <param name="CoveredShare">Covered / total endpoints; null when the run had no endpoints.</param>

@@ -8,7 +8,7 @@ import { FixDialog } from './fix-dialog';
 
 const created: RemediationAction = {
   id: 'p1', type: 'PullRequest', stableKey: 'uncovered-endpoint:POST api/orders/{}/cancel', externalKey: '#7',
-  url: 'https://github.com/example-org/bookstore-api/pull/7', status: 'Open', createdAt: '2026-11-17T10:00:00Z',
+  url: 'https://github.com/example-org/bookstore-api/pull/7', status: 'Open', createdAt: '2026-11-17T10:00:00Z', createdBy: 'test-user',
 };
 
 const draft = (): FixDraft => ({

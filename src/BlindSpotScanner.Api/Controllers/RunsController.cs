@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -32,6 +34,39 @@ public sealed class RunsController(ScanRequests scans, Application.Repositories.
             : Ok(new RunStatusResponse(run.Id, run.Status.ToString(), run.FailureReasons));
     }
 
+    /// <summary>The report as JSON (as stored) or as a printable HTML page, as a download (D26).</summary>
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(Guid runId, [FromQuery] string? format, CancellationToken ct)
+    {
+        var kind = string.IsNullOrEmpty(format) ? "json" : format.ToLowerInvariant();
+        if (kind is not ("json" or "html"))
+        {
+            return Problem("format must be json or html.", statusCode: StatusCodes.Status400BadRequest, title: "Invalid export");
+        }
+
+        if (await scans.FindAsync(runId, ct) is not { } run)
+        {
+            return NotFound();
+        }
+
+        if (run is not { Status: RunStatus.Succeeded, ReportJson: { } json })
+        {
+            return Problem("Only succeeded scans have a report to export.", statusCode: StatusCodes.Status409Conflict, title: "No report");
+        }
+
+        var report = Domain.Reports.ReportJsonSerializer.Deserialize(json);
+        var name = $"report-{report.Meta.Repo.Owner}-{report.Meta.Repo.Name}-{report.Meta.CommitSha[..Math.Min(7, report.Meta.CommitSha.Length)]}";
+        if (kind == "json")
+        {
+            return File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", $"{name}.json");
+        }
+
+        // Opened in the browser to print. Report text is LLM-authored, so the page may not run or load anything.
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'";
+        return File(System.Text.Encoding.UTF8.GetBytes(Application.Reports.ReportHtmlRenderer.Render(report)), "text/html; charset=utf-8");
+    }
+
     [HttpGet("steps")]
     public async Task<IActionResult> Steps(Guid runId, CancellationToken ct)
     {
@@ -45,6 +80,7 @@ public sealed class RunsController(ScanRequests scans, Application.Repositories.
     }
 
     /// <summary>Cancels a queued or running scan; a finished one is left as it is.</summary>
+    [Authorize(Policy = Roles.Member)]
     [HttpPost("cancel")]
     public async Task<IActionResult> Cancel(Guid runId, CancellationToken ct) =>
         await scans.CancelAsync(runId, ct) ? Accepted() : NotFound();

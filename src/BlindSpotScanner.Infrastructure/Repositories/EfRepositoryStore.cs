@@ -81,7 +81,8 @@ public sealed class EfRepositoryStore(BlindSpotScannerDbContext db) : IRepositor
                     last is { EndpointsTotal: > 0 } ? (decimal)last.EndpointsCovered!.Value / last.EndpointsTotal.Value : null,
                     last?.GeneratedAt, active.TryGetValue(r.Id, out var runId) ? runId : null,
                     newest.TryGetValue(r.Id, out var status) ? status : null,
-                    trends.GetValueOrDefault(r.Id));
+                    trends.GetValueOrDefault(r.Id))
+                { LlmSharingAcknowledged = r.LlmSharingAcknowledgedAt is not null };
             })
             .OrderBy(r => r.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();

@@ -1,3 +1,4 @@
+import { AuthService } from '../../core/auth/auth';
 import { Component, inject, signal } from '@angular/core';
 import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -17,6 +18,7 @@ import { Sparkline } from '../../shared/sparkline/sparkline';
 export class Repositories {
   private readonly api = inject(RepositoriesApi);
   private readonly dialog = inject(MatDialog);
+  protected readonly auth = inject(AuthService);
 
   protected readonly repositories = signal<RepositorySummary[] | null>(null);
 

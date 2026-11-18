@@ -8,7 +8,7 @@ import { JiraDialog } from './jira-dialog';
 
 const ticket = (key = 'BSS-1'): RemediationAction => ({
   id: 'a1', type: 'JiraTicket', stableKey: 'uncovered-endpoint:POST api/orders/{}/cancel', externalKey: key,
-  url: `https://example.atlassian.net/browse/${key}`, status: 'To Do', createdAt: '2026-11-17T10:00:00Z',
+  url: `https://example.atlassian.net/browse/${key}`, status: 'To Do', createdAt: '2026-11-17T10:00:00Z', createdBy: 'test-user',
 });
 
 const draft = (existing: RemediationAction | null = null): JiraDraft => ({

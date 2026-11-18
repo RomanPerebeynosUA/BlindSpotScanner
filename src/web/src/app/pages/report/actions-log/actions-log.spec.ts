@@ -4,7 +4,7 @@ import { ActionsLog } from './actions-log';
 
 const ticket: RemediationAction = {
   id: 'a1', type: 'JiraTicket', stableKey: 'uncovered-seam:payment-gateway', externalKey: 'BSS-1',
-  url: 'https://example.atlassian.net/browse/BSS-1', status: 'Done', createdAt: '2026-11-17T10:00:00Z',
+  url: 'https://example.atlassian.net/browse/BSS-1', status: 'Done', createdAt: '2026-11-17T10:00:00Z', createdBy: 'test-user',
 };
 
 describe('ActionsLog', () => {

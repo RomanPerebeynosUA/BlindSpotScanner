@@ -1,3 +1,5 @@
+using BlindSpotScanner.Api.Auth;
+using Microsoft.AspNetCore.Authorization;
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
@@ -6,9 +8,9 @@ namespace BlindSpotScanner.Api.Controllers;
 
 public sealed record CreateRepositoryRequest(string? Url, string? DefaultBranch);
 
-public sealed record RepositoryResponse(Guid Id, string Owner, string Name, string FullName, string DefaultBranch, string HtmlUrl)
+public sealed record RepositoryResponse(Guid Id, string Owner, string Name, string FullName, string DefaultBranch, string HtmlUrl, bool LlmSharingAcknowledged)
 {
-    public static RepositoryResponse From(Repository r) => new(r.Id, r.Owner, r.Name, $"{r.Owner}/{r.Name}", r.DefaultBranch, r.HtmlUrl);
+    public static RepositoryResponse From(Repository r) => new(r.Id, r.Owner, r.Name, $"{r.Owner}/{r.Name}", r.DefaultBranch, r.HtmlUrl, r.LlmSharingAcknowledgedAt is not null);
 }
 
 public sealed record RunHistoryItemResponse(
@@ -34,6 +36,7 @@ public sealed class RepositoriesController(RepositoryService repositories, Appli
     public async Task<IReadOnlyList<RepositorySummary>> List(CancellationToken ct) => await repositories.ListAsync(ct);
 
     /// <summary>Registers a repository by its GitHub URL and gives it profile v1 (D22).</summary>
+    [Authorize(Policy = Roles.Member)]
     [HttpPost]
     public async Task<IActionResult> Add([FromBody] CreateRepositoryRequest request, CancellationToken ct)
     {

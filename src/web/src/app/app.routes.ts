@@ -1,4 +1,6 @@
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
+import { AuthService } from './core/auth/auth';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', loadComponent: () => import('./pages/repositories/repositories').then((m) => m.Repositories) },
@@ -7,5 +9,10 @@ export const routes: Routes = [
   { path: 'runs/:runId', loadComponent: () => import('./pages/report/report').then((m) => m.Report) },
   { path: 'runs/:runId/live', loadComponent: () => import('./pages/live-scan/live-scan').then((m) => m.LiveScan) },
   { path: 'compare', loadComponent: () => import('./pages/compare/compare').then((m) => m.Compare) },
+  {
+    path: 'settings',
+    canMatch: [() => inject(AuthService).can('Admin')],
+    loadComponent: () => import('./pages/settings/settings').then((m) => m.Settings),
+  },
   { path: '**', redirectTo: '' },
 ];

@@ -10,6 +10,7 @@ import { IntegrationReport } from '../../core/api/report';
 import { sampleReport } from '../../../testing/sample-report';
 import { Report } from './report';
 import { ReportStore } from './report-store';
+import { provideTestAuth } from '../../../testing/auth';
 
 const PREVIOUS = '11111111-1111-4111-8111-111111111111';
 
@@ -42,6 +43,7 @@ describe('Report', () => {
         provideRouter([]),
         { provide: RunsApi, useValue: { get, repository: () => of({ id: 'repo1' }) } },
         { provide: RepositoriesApi, useValue: { runs: () => of(history) } },
+        provideTestAuth(),
         { provide: RemediationApi, useValue: { actions: () => (Array.isArray(actions) ? of(actions) : actions), features: () => of({ pullRequests: true, jira: true }) } },
       ],
     });
@@ -360,7 +362,7 @@ describe('Report', () => {
     // Arrange
     const ticket: RemediationAction = {
       id: 'a1', type: 'JiraTicket', stableKey: 'uncovered-seam:payment-gateway', externalKey: 'BSS-4',
-      url: 'https://example.atlassian.net/browse/BSS-4', status: 'Done', createdAt: '2026-11-17T10:00:00Z',
+      url: 'https://example.atlassian.net/browse/BSS-4', status: 'Done', createdAt: '2026-11-17T10:00:00Z', createdBy: 'test-user',
     };
 
     // Act
@@ -377,7 +379,7 @@ describe('Report', () => {
     const { fixture, settle, el } = await render(withReport(), defaultHistory, undefined, slow);
     const created: RemediationAction = {
       id: 'new', type: 'JiraTicket', stableKey: 'uncovered-seam:payment-gateway', externalKey: 'BSS-5',
-      url: 'https://example.atlassian.net/browse/BSS-5', status: 'To Do', createdAt: '2026-11-17T11:00:00Z',
+      url: 'https://example.atlassian.net/browse/BSS-5', status: 'To Do', createdAt: '2026-11-17T11:00:00Z', createdBy: 'test-user',
     };
     fixture.debugElement.injector.get(ReportStore).actions.update((a) => [created, ...a]);
 
@@ -388,5 +390,14 @@ describe('Report', () => {
 
     // Assert
     expect(el.querySelector('[data-kind=UncoveredSeam] app-jira-action a')?.textContent?.trim()).toBe('BSS-5 · To Do');
+  });
+
+  it('export links point at the export endpoint', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    const links = [...el.querySelectorAll('a.export')].map((a) => a.getAttribute('href'));
+    expect(links).toEqual(['/api/runs/run1/export?format=json', '/api/runs/run1/export?format=html']);
   });
 });

@@ -11,6 +11,7 @@ public enum StartScanStatus
     RepositoryNotFound,
     NoProfile,
     InvalidMaxCost,
+    LlmSharingNotAcknowledged,
 }
 
 public sealed record StartScanResult(StartScanStatus Status, Guid? RunId = null);
@@ -19,6 +20,12 @@ public sealed record StartScanResult(StartScanStatus Status, Guid? RunId = null)
 public interface IScanRequestStore
 {
     Task<bool> RepositoryExistsAsync(Guid repositoryId, CancellationToken ct);
+
+    /// <summary>Whether someone accepted LLM data sharing for the repository (doc 10).</summary>
+    Task<bool> LlmSharingAcknowledgedAsync(Guid repositoryId, CancellationToken ct);
+
+    /// <summary>Records the first acknowledgement (later ones keep it); false when the repository doesn't exist.</summary>
+    Task<bool> AcknowledgeLlmSharingAsync(Guid repositoryId, string by, DateTimeOffset at, CancellationToken ct);
 
     Task<int?> LatestProfileVersionAsync(Guid repositoryId, CancellationToken ct);
 
@@ -49,6 +56,11 @@ public sealed class ScanRequests(IScanRequestStore store, IScanQueue queue, ISca
             return new StartScanResult(StartScanStatus.RepositoryNotFound);
         }
 
+        if (!await store.LlmSharingAcknowledgedAsync(repositoryId, ct))
+        {
+            return new StartScanResult(StartScanStatus.LlmSharingNotAcknowledged);
+        }
+
         if (await store.LatestProfileVersionAsync(repositoryId, ct) is not { } profileVersion)
         {
             return new StartScanResult(StartScanStatus.NoProfile);
@@ -60,6 +72,10 @@ public sealed class ScanRequests(IScanRequestStore store, IScanQueue queue, ISca
         await queue.EnqueueAsync(run, ct);
         return new StartScanResult(StartScanStatus.Accepted, run.Id);
     }
+
+    /// <summary>Doc 10's "LLM data sharing acknowledged"; false when the repository doesn't exist.</summary>
+    public Task<bool> AcknowledgeLlmSharingAsync(Guid repositoryId, string by, CancellationToken ct) =>
+        store.AcknowledgeLlmSharingAsync(repositoryId, by, time.GetUtcNow(), ct);
 
     public Task<ScanRun?> FindAsync(Guid runId, CancellationToken ct) => store.FindRunAsync(runId, ct);
 

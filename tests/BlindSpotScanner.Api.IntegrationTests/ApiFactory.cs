@@ -3,6 +3,8 @@ using BlindSpotScanner.Domain.Enums;
 using BlindSpotScanner.Domain.Reports;
 using BlindSpotScanner.Infrastructure.Persistence;
 using BlindSpotScanner.Infrastructure.Scanning;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -34,6 +36,14 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>False is read-only mode: no fix PRs (D25).</summary>
     protected virtual bool PullRequests => true;
 
+    /// <summary>False keeps the real sign-in (for the OIDC-mode tests) instead of TestAuthHandler.</summary>
+    protected virtual bool UseTestAuth => true;
+
+    /// <summary>Extra settings a variant needs (applied after the defaults).</summary>
+    protected virtual void Configure(IWebHostBuilder builder)
+    {
+    }
+
     public Task InitializeAsync() => _db.StartAsync();
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -61,11 +71,45 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Jira:ProjectKey", "BSS");
         builder.ConfigureTestServices(services =>
         {
+            // The real policies, with the role chosen per request (TestAuthHandler).
+            if (UseTestAuth)
+            {
+                services.AddAuthentication(TestAuthHandler.SchemeName).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
+                services.PostConfigure<AuthenticationOptions>(o =>
+                {
+                    o.DefaultScheme = TestAuthHandler.SchemeName;
+                    o.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                    o.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+                    o.DefaultForbidScheme = TestAuthHandler.SchemeName;
+                });
+            }
+
             if (RunWorker)
             {
                 services.AddHostedService<ScanWorker>();
             }
         });
+        Configure(builder);
+    }
+
+    public async Task<string?> LlmSharingAcknowledgedByAsync(Guid repositoryId)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>();
+        return (await db.Repositories.AsNoTracking().SingleAsync(r => r.Id == repositoryId)).LlmSharingAcknowledgedBy;
+    }
+
+    /// <summary>A client signed in with <paramref name="role"/> ("none" = anonymous).</summary>
+    public HttpClient CreateClient(string role, string? user = null)
+    {
+        var client = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RoleHeader, role);
+        if (user is not null)
+        {
+            client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeader, user);
+        }
+
+        return client;
     }
 
     /// <summary>
@@ -73,13 +117,19 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// answers cached by an earlier test never serve this one; <paramref name="marker"/> lets a test
     /// steer the fake Claude (see <see cref="FakeClaudeServer.ForgeMarker"/>).
     /// </summary>
-    public async Task<Guid> SeedRepositoryAsync(bool withProfile = true, string marker = "")
+    public async Task<Guid> SeedRepositoryAsync(bool withProfile = true, string marker = "", bool acknowledged = true)
     {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>();
         // Names are unique (D22); the fake GitHub serves the bookstore under any name of its owner.
         var name = $"{FakeGitHubServer.Name}-{Guid.NewGuid():N}";
         var repository = new Repository { Id = Guid.NewGuid(), Owner = FakeGitHubServer.Owner, Name = name, DefaultBranch = "main", HtmlUrl = $"https://github.com/{FakeGitHubServer.Owner}/{name}" };
+        if (acknowledged)
+        {
+            repository.LlmSharingAcknowledgedAt = DateTimeOffset.UtcNow;
+            repository.LlmSharingAcknowledgedBy = "test-seed";
+        }
+
         db.Repositories.Add(repository);
         if (withProfile)
         {
@@ -154,3 +204,61 @@ public sealed class ReadOnlyApiFactory : ApiFactory
 
     protected override bool PullRequests => false;
 }
+
+/// <summary>
+/// The api in OIDC mode with its real cookie + OpenID Connect handlers, against a fake provider
+/// (WireMock discovery document), so sign-in behaviour is tested without an identity provider.
+/// </summary>
+public class OidcApiFactory : ApiFactory
+{
+    public const string PublicUrl = "https://bss.example.com";
+
+    private readonly WireMock.Server.WireMockServer _provider = WireMock.Server.WireMockServer.Start();
+
+    public OidcApiFactory()
+        : this(endSession: true)
+    {
+    }
+
+    protected OidcApiFactory(bool endSession)
+    {
+        var issuer = _provider.Url!;
+        _provider.Given(WireMock.RequestBuilders.Request.Create().WithPath("/.well-known/openid-configuration").UsingGet())
+            .RespondWith(WireMock.ResponseBuilders.Response.Create().WithStatusCode(200).WithBodyAsJson(new
+            {
+                issuer,
+                authorization_endpoint = $"{issuer}/authorize",
+                token_endpoint = $"{issuer}/token",
+                jwks_uri = $"{issuer}/jwks",
+                end_session_endpoint = endSession ? $"{issuer}/logout" : null,
+                response_types_supported = new[] { "code" },
+                subject_types_supported = new[] { "public" },
+                id_token_signing_alg_values_supported = new[] { "RS256" },
+            }));
+        _provider.Given(WireMock.RequestBuilders.Request.Create().WithPath("/jwks").UsingGet())
+            .RespondWith(WireMock.ResponseBuilders.Response.Create().WithStatusCode(200).WithBodyAsJson(new { keys = Array.Empty<object>() }));
+    }
+
+    protected override bool RunWorker => false;
+
+    protected override bool UseTestAuth => false;
+
+    protected override void Configure(IWebHostBuilder builder)
+    {
+        builder.UseSetting("Auth:Mode", "Oidc");
+        builder.UseSetting("Auth:Authority", _provider.Url);
+        builder.UseSetting("Auth:ClientId", "bss-test");
+        builder.UseSetting("Auth:ClientSecret", "bss-test-secret");
+        builder.UseSetting("Auth:RequireHttpsMetadata", "false");
+        builder.UseSetting("App:PublicUrl", PublicUrl);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        _provider.Stop();
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>A provider without an end-session endpoint (Google, for example).</summary>
+public sealed class OidcNoEndSessionApiFactory() : OidcApiFactory(endSession: false);

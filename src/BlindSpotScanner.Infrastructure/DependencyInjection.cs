@@ -1,9 +1,11 @@
+using BlindSpotScanner.Application;
 using BlindSpotScanner.Application.GitHub;
 using BlindSpotScanner.Application.Llm;
 using BlindSpotScanner.Application.Remediation;
 using BlindSpotScanner.Application.Reports;
 using BlindSpotScanner.Application.Repositories;
 using BlindSpotScanner.Application.Scanning;
+using BlindSpotScanner.Application.Settings;
 using BlindSpotScanner.Infrastructure.Extraction;
 using BlindSpotScanner.Infrastructure.GitHub;
 using BlindSpotScanner.Infrastructure.Jira;
@@ -13,10 +15,12 @@ using BlindSpotScanner.Infrastructure.Remediation;
 using BlindSpotScanner.Infrastructure.Reports;
 using BlindSpotScanner.Infrastructure.Repositories;
 using BlindSpotScanner.Infrastructure.Scanning;
+using BlindSpotScanner.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace BlindSpotScanner.Infrastructure;
@@ -35,12 +39,16 @@ public static class DependencyInjection
         services.AddOptions<JiraOptions>().BindConfiguration("Jira");
         services.TryAddSingleton(TimeProvider.System);
 
+        // Hosts that know a signed-in user (the api) register theirs first; otherwise actions are "system".
+        services.TryAddScoped<ICurrentUser, SystemUser>();
+
         // The typed client owns its HttpClient; the rate-limit handler sits in its handler chain (D16).
         services.AddTransient<GitHubRateLimitHandler>();
         services.AddHttpClient<IGitHubClient, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
         services.AddHttpClient<IGitHubPullRequests, GitHubClient>().AddHttpMessageHandler<GitHubRateLimitHandler>();
         services.AddScoped<IBlobReader, CachingBlobReader>();
         // A short timeout: a hung Jira must not hold the report's actions list (D24).
+        services.AddHttpClient<IConnectionSettings, ConnectionTester>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddHttpClient<IJiraClient, JiraClient>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<IEndpointExtractor, AspNetCoreEndpointExtractor>();
         services.AddSingleton<ITestSyntaxReader, CSharpTestSyntaxReader>();
@@ -83,14 +91,14 @@ public static class DependencyInjection
         services.AddScoped(sp => new FixPullRequests(
             sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IRepositoryStore>(), sp.GetRequiredService<FixContextBuilder>(),
             sp.GetRequiredService<IFixGuard>(), sp.GetRequiredService<ILlmClient>(), sp.GetRequiredService<IGitHubClient>(),
-            sp.GetRequiredService<IGitHubPullRequests>(), sp.GetRequiredService<TimeProvider>(), FixDefaultsFrom(sp)));
+            sp.GetRequiredService<IGitHubPullRequests>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ICurrentUser>(), FixDefaultsFrom(sp)));
         services.AddScoped<RemediationActions>();
         services.AddScoped(sp =>
         {
             var jira = sp.GetRequiredService<IOptions<JiraOptions>>().Value;
             var publicUrl = PublicUrl(sp.GetRequiredService<IConfiguration>());
             return new JiraTickets(
-                sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IJiraClient>(), sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<IScanRequestStore>(), sp.GetRequiredService<IRemediationStore>(), sp.GetRequiredService<IJiraClient>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ICurrentUser>(),
                 new JiraDefaults(jira.ProjectKey, jira.IssueType, jira.Labels, publicUrl));
         });
         services.AddScoped<IProfileStore, EfProfileStore>();
@@ -111,7 +119,8 @@ public static class DependencyInjection
             sp.GetRequiredService<ILlmClient>,
             sp.GetRequiredService<ScanPipelineFactory>(),
             sp.GetRequiredService<CitationVerifier>(),
-            sp.GetRequiredService<TimeProvider>()));
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<ScanOrchestrator>>()));
         return services;
     }
 

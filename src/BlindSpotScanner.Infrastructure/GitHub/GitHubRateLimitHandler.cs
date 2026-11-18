@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using BlindSpotScanner.Application.GitHub;
+using BlindSpotScanner.Application.Scanning;
 using Microsoft.Extensions.Options;
 
 namespace BlindSpotScanner.Infrastructure.GitHub;
@@ -24,6 +25,11 @@ public sealed class GitHubRateLimitHandler(TimeProvider time, IOptions<GitHubOpt
         for (var attempt = 0; ; attempt++)
         {
             var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (long.TryParse(Header(response, "x-ratelimit-remaining"), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var remaining))
+            {
+                ScanTelemetry.GitHubRateLimitRemaining = remaining; // doc 10 metric
+            }
+
             var wait = await RateLimitWaitAsync(response, cancellationToken).ConfigureAwait(false);
             if (wait is null)
             {

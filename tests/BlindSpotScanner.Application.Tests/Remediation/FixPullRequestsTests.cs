@@ -34,6 +34,7 @@ public class FixPullRequestsTests
 
     private FixPullRequests Fixes => new(
         _runs, _store, new OneRepository(_repositoryId, "trunk"), new FixContextBuilder(_github), new PathGuard(), _llm, _github, _pulls, new Clock(Now),
+        new JiraTicketsTests.NamedUser("dev@example.com"),
         new FixDefaults(_enabled, "http://localhost:8080"));
 
     private Guid AddRun(IntegrationReport report)
@@ -328,6 +329,16 @@ public class FixPullRequestsTests
     }
 
     [Fact]
+    public async Task CreateAsync_New_RecordsCreatedBy()
+    {
+        // Act
+        var result = await CreateAsync();
+
+        // Assert
+        result.Value!.CreatedBy.Should().Be("dev@example.com");
+    }
+
+    [Fact]
     public async Task CreateAsync_LabelFails_StillStoresThePr()
     {
         // Arrange (the PR exists on GitHub once the pulls call returns; the label is extra)
@@ -591,6 +602,10 @@ public class FixPullRequestsTests
         public Task<ScanRun?> FindRunAsync(Guid runId, CancellationToken ct) => Task.FromResult(Runs.SingleOrDefault(r => r.Id == runId));
 
         public Task<bool> RepositoryExistsAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> LlmSharingAcknowledgedAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> AcknowledgeLlmSharingAsync(Guid repositoryId, string by, DateTimeOffset at, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<int?> LatestProfileVersionAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
 

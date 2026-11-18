@@ -1,3 +1,4 @@
+using BlindSpotScanner.Application;
 using BlindSpotScanner.Application.Remediation;
 using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Application.Tests.Reports;
@@ -22,7 +23,7 @@ public class JiraTicketsTests
 
     public JiraTicketsTests() => _runId = AddRun(Fixtures.Current);
 
-    private JiraTickets Tickets => new(_runs, _store, _jira, _clock, new JiraDefaults("BSS", "Task", ["integration-coverage", "qa"], "http://localhost:8080"));
+    private JiraTickets Tickets => new(_runs, _store, _jira, _clock, new NamedUser("dev@example.com"), new JiraDefaults("BSS", "Task", ["integration-coverage", "qa"], "http://localhost:8080"));
 
     private RemediationActions Actions =>
         new(_store, _jira, new FixPullRequestsTests.RecordingPulls(), new FixPullRequestsTests.OneRepository(_repositoryId), _clock);
@@ -168,6 +169,19 @@ public class JiraTicketsTests
     }
 
     [Fact]
+    public async Task CreateAsync_New_RecordsCreatedBy()
+    {
+        // Arrange
+        var draft = await DraftAsync();
+
+        // Act
+        var result = await Tickets.CreateAsync(_runId, "f2", Create(draft), CancellationToken.None);
+
+        // Assert
+        result.Value!.CreatedBy.Should().Be("dev@example.com");
+    }
+
+    [Fact]
     public async Task CreateAsync_StoredTicket_ReturnsExistsWithoutCallingJira()
     {
         // Arrange
@@ -298,6 +312,11 @@ public class JiraTicketsTests
         new { actions.Single().Status, actions.Single().StatusCheckedAt }.Should().Be(new { Status = "To Do", StatusCheckedAt = Now });
     }
 
+    internal sealed class NamedUser(string name) : ICurrentUser
+    {
+        public string Name => name;
+    }
+
     private sealed class Clock(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
@@ -398,6 +417,10 @@ public class JiraTicketsTests
         public Task<ScanRun?> FindRunAsync(Guid runId, CancellationToken ct) => Task.FromResult(Runs.SingleOrDefault(r => r.Id == runId));
 
         public Task<bool> RepositoryExistsAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> LlmSharingAcknowledgedAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> AcknowledgeLlmSharingAsync(Guid repositoryId, string by, DateTimeOffset at, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<int?> LatestProfileVersionAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
 

@@ -132,6 +132,38 @@ Compose starts four containers:
 3. **Runs → Scan now.** The live page shows the phases P1–P7 as they run.
 4. **The report opens when the scan finishes.** It has the score, endpoint coverage with status
    filters and search, evidence links to the exact commit, the scorecard and the findings.
+   **Export JSON** downloads the report as stored; **Print / HTML** opens a printable page.
+
+The first **Scan now** on a repository asks you to confirm that code excerpts are sent to Claude
+(after secret scrubbing; `.env*`, `*.pem`, `*.pfx`, `appsettings.*.json` and `secrets.*` are never
+sent). This is asked once per repository.
+
+### Sign-in and roles
+
+By default (`Auth__Mode=Local`) everyone is the built-in **local admin**, which suits a laptop. Compose publishes the ports on `127.0.0.1` only, and the API logs a warning when Local mode runs outside Development. **Never expose Local mode to a network:** anyone who reaches it is Admin and can spend your Claude budget, create Jira tickets and open PRs with your GitHub token.
+To make people sign in, use any OpenID Connect provider (Entra ID, Okta, Auth0, Keycloak, Google…):
+
+| Variable | Value |
+|---|---|
+| `Auth__Mode` | `Oidc` |
+| `Auth__Authority` | the provider's issuer URL, e.g. `https://login.microsoftonline.com/<tenant>/v2.0` |
+| `Auth__ClientId` / `Auth__ClientSecret` | from the app you register with the provider (keep the secret in `.env`) |
+| `Auth__RoleClaim` | the claim carrying role names (default `roles`) |
+| `Auth__DefaultRole` | the role of users with none of the names below (default `Viewer`) |
+
+Register the redirect URI `https://<your-host>/api/auth/callback` and give users one of the roles
+**Viewer** (reads reports), **Member** (also adds repositories, scans, creates Jira tickets and PRs)
+or **Admin** (also sees **Settings**, which shows each connection with its secret masked and a
+**Test** button). The browser never handles tokens: the API keeps an HttpOnly session cookie.
+
+### Telemetry
+
+Logs are JSON on the console, with secrets redacted. Traces (a span per scan phase plus every
+GitHub, Jira and Claude call) and metrics (scan duration, tokens, cost, failures, GitHub rate-limit
+headroom) are exported over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, for example
+`http://otel-collector:4317`. Without it, nothing leaves the process.
+
+See `docs/SECURITY-CHECKLIST.md` for each security rule and the test that proves it.
 
 ## 4. Local development (without containers for the app)
 

@@ -1,3 +1,5 @@
+import { MatDialog } from '@angular/material/dialog';
+import { provideTestAuth } from '../../../testing/auth';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -24,6 +26,8 @@ const profile = (overrides: Partial<Profile> = {}): Profile => ({
 describe('ProfileEditor', () => {
   const saveProfile = vi.fn();
   const draftProfile = vi.fn();
+  const acknowledgeLlmSharing = vi.fn(() => of(undefined));
+  const dialogOpen = vi.fn(() => ({ afterClosed: () => of(true) }));
   const open = vi.fn();
 
   beforeEach(() => {
@@ -37,8 +41,10 @@ describe('ProfileEditor', () => {
     TestBed.configureTestingModule({
       imports: [ProfileEditor],
       providers: [
+        provideTestAuth(),
         provideRouter([]),
         { provide: MatSnackBar, useValue: { open } },
+        { provide: MatDialog, useValue: { open: dialogOpen } },
         {
           provide: RepositoriesApi,
           useValue: {
@@ -46,6 +52,7 @@ describe('ProfileEditor', () => {
             profileVersions: () => of([2, 1]),
             saveProfile,
             draftProfile,
+            acknowledgeLlmSharing,
           },
         },
       ],
@@ -217,5 +224,19 @@ describe('ProfileEditor', () => {
     await settle();
     expect(field(el, 'markdown').readOnly).toBe(false);
     expect(field(el, 'markdown').value).toBe('# Old');
+  });
+
+  it('a draft refused for LLM sharing asks for consent, records it, then drafts', async () => {
+    // Arrange (doc 10: drafting sends code to the LLM too)
+    const refused = new HttpErrorResponse({ status: 409, error: { title: 'LLM data sharing not acknowledged' } });
+    draftProfile.mockReturnValueOnce(throwError(() => refused)).mockReturnValueOnce(of({ markdown: '# Drafted', openQuestions: [] }));
+    const { el, settle } = await render();
+
+    // Act
+    (el.querySelector('button.draft') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect([dialogOpen.mock.calls.length, acknowledgeLlmSharing.mock.calls.length, draftProfile.mock.calls.length]).toEqual([1, 1, 2]);
   });
 });

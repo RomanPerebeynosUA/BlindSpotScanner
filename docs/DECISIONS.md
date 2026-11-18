@@ -277,3 +277,34 @@ click. GitHub is tested with WireMock only; no live test.
   create compares the target files at `baseSha` with the default branch head, so a regenerated fix
   can be opened. The PR always goes against the default branch head (doc 09 step 5). The action is
   stored as soon as GitHub returns the PR; the `integration-coverage` label is best effort.
+
+## D26 — Sign-in, roles and hardening (2026-11-17)
+The user's choices for M11: sign-in is server-side OpenID Connect with an HttpOnly cookie session
+(the browser never handles tokens); the settings page is a read-only status page (masked values,
+"Test" buttons; values stay in env vars, nothing is stored in the database); the GitHub PAT stays
+(a GitHub App is out of v1, superseding D16's M11 note).
+- `Auth:Mode`: `Local` (default; every request is `local-admin` with Admin, for development and
+  compose) or `Oidc` (`Auth:Authority`, `Auth:ClientId`, `Auth:ClientSecret` from an env var,
+  `Auth:RoleClaim` default `roles`, `Auth:DefaultRole` default `Viewer`). The OIDC callback is
+  `/api/auth/callback`, so nginx's `/api/` proxy covers it. A user gets the highest known role
+  claimed; unknown values never elevate, and no role means the default.
+- Policies: Viewer reads everything (the fallback for any endpoint, and the scan hub); Member also
+  adds repositories, edits and drafts profiles, acknowledges LLM sharing, scans, cancels, and creates
+  Jira tickets and PRs; Admin also gets `/api/settings/*`. API and hub calls get 401/403, never a
+  login redirect. `/health` and `/api/auth/*` are anonymous.
+- Contract additions: `GET /api/me` (`{ name, roles }`), `GET /api/auth/login?returnUrl=` (local
+  paths only), `POST /api/auth/logout`.
+- LLM data sharing (doc 10): `POST /api/repositories/{id}/llm-sharing` (Member, idempotent, keeps
+  the first acknowledgement and who gave it); `POST …/scans` returns 409 "LLM data sharing not
+  acknowledged" until then. Repositories registered before M11 need it once. `RepositoryResponse`
+  and `RepositorySummary` carry `llmSharingAcknowledged`; `ActionResponse` carries `createdBy`.
+- Settings: `POST /api/settings/connections/{kind}/test` answers 200 with `{ ok, message }` whether or not
+  the connection works (the OpenAPI contract's 502 is reserved for the API itself failing); an unknown
+  kind is 404. Secrets shorter than 12 characters are masked as "••••" only.
+- Hardening after review: the cookie answers every challenge (only `/api/auth/login` challenges OIDC);
+  OIDC redirect URIs come from `App:PublicUrl`; `returnUrl` must be local and free of control
+  characters; unsafe `/api` and `/hubs` requests that browsers label `Sec-Fetch-Site: cross-site` or
+  `same-site` are refused (CSRF); sign-out ends the provider session only when its metadata has an
+  end-session endpoint; `CreatedBy` is the email (else subject, else name); compose binds its ports to
+  127.0.0.1 and the api warns when Local mode runs outside Development; logging levels (not sinks) come
+  from configuration, so nothing bypasses redaction; the failure metric's `reason` is a fixed category.

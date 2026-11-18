@@ -3,6 +3,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Finding, FindingKind } from '../../../core/api/report';
 import { RemediationAction } from '../../../core/api/api-types';
 import { ReportStore } from '../report-store';
+import { AuthService } from '../../../core/auth/auth';
 import { FixDialog, FixDialogData } from '../fix-dialog/fix-dialog';
 
 /** The kinds a single test can fix (D25); seams and risks stay Jira-only. */
@@ -20,11 +21,12 @@ const FIXABLE: readonly FindingKind[] = ['UncoveredEndpoint', 'WeakTest', 'False
 export class FixAction {
   private readonly store = inject(ReportStore);
   private readonly dialog = inject(MatDialog);
+  private readonly auth = inject(AuthService);
 
   readonly finding = input.required<Finding>();
 
   protected readonly pullRequest = computed(() => this.store.pullRequestFor(this.finding().stableKey));
-  protected readonly offered = computed(() => this.store.features().pullRequests && FIXABLE.includes(this.finding().kind));
+  protected readonly offered = computed(() => this.store.features().pullRequests && FIXABLE.includes(this.finding().kind) && this.auth.can('Member'));
 
   protected open(): void {
     const runId = this.store.report()?.meta.runId;

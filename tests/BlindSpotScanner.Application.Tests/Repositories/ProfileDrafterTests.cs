@@ -18,7 +18,7 @@ public class ProfileDrafterTests
 
     public ProfileDrafterTests()
     {
-        _repositories.Repositories.Add(new Repository { Id = _repositoryId, Owner = "example-org", Name = "bookstore", DefaultBranch = "main", HtmlUrl = "https://github.com/example-org/bookstore" });
+        _repositories.Repositories.Add(new Repository { Id = _repositoryId, Owner = "example-org", Name = "bookstore", DefaultBranch = "main", HtmlUrl = "https://github.com/example-org/bookstore", LlmSharingAcknowledgedAt = DateTimeOffset.UnixEpoch });
         _github.Files["Bookstore.slnx"] = "<Solution />";
         _github.Files["src/Bookstore.Api/Bookstore.Api.csproj"] = "<Project />";
         _github.Files["src/Bookstore.Api/Controllers/BooksController.cs"] = "class BooksController {}";
@@ -70,6 +70,19 @@ public class ProfileDrafterTests
         // Assert
         SentInput().GetProperty("sampleTests").EnumerateArray().Select(f => f.GetProperty("path").GetString()).Should().Equal(
             "tests/Bookstore.UnitTests/PriceTests.cs");
+    }
+
+    [Fact]
+    public async Task DraftAsync_NotAcknowledged_RefusesWithoutCallingTheLlm()
+    {
+        // Arrange (doc 10: no code goes to the LLM before LLM data sharing is accepted)
+        _repositories.Repositories.Single().LlmSharingAcknowledgedAt = null;
+
+        // Act
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        new { result.Status, Calls = _llm.Requests.Count }.Should().Be(new { Status = DraftProfileStatus.LlmSharingNotAcknowledged, Calls = 0 });
     }
 
     [Fact]

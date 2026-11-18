@@ -3,7 +3,9 @@
     <h1>Repositories</h1>
     <div class="muted">Each scan is kept, so trends and comparisons are always available.</div>
   </div>
-  <button type="button" class="btn primary" (click)="add()">Add repository</button>
+  @if (auth.can('Member')) {
+    <button type="button" class="btn primary" (click)="add()">Add repository</button>
+  }
 </div>
 
 @if (repositories(); as list) {

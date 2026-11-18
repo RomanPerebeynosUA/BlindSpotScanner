@@ -3,19 +3,23 @@ import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { problemInterceptor } from './problem-interceptor';
+import { BROWSER_LOCATION } from './auth/auth';
 
 describe('problemInterceptor', () => {
   let http: HttpClient;
   let backend: HttpTestingController;
   const open = vi.fn();
+  const location = { href: '', pathname: '/repos/r1', search: '' };
 
   beforeEach(() => {
     open.mockReset();
+    location.href = '';
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([problemInterceptor])),
         provideHttpClientTesting(),
         { provide: MatSnackBar, useValue: { open } },
+        { provide: BROWSER_LOCATION, useValue: location },
       ],
     });
     http = TestBed.inject(HttpClient);
@@ -46,5 +50,27 @@ describe('problemInterceptor', () => {
 
     // Assert
     expect(open.mock.calls[0][0]).toBe("Can't reach the server");
+  });
+
+  it('401 on an API call sends the browser to sign-in without a snackbar', () => {
+    // Arrange
+    http.get('/api/repositories').subscribe({ error: () => undefined });
+
+    // Act
+    backend.expectOne('/api/repositories').flush(null, { status: 401, statusText: 'Unauthorized' });
+
+    // Assert
+    expect([location.href, open.mock.calls.length]).toEqual(['/api/auth/login?returnUrl=%2Frepos%2Fr1', 0]);
+  });
+
+  it('401 on /api/me neither redirects nor shows a snackbar', () => {
+    // Arrange
+    http.get('/api/me').subscribe({ error: () => undefined });
+
+    // Act
+    backend.expectOne('/api/me').flush(null, { status: 401, statusText: 'Unauthorized' });
+
+    // Assert
+    expect([location.href, open.mock.calls.length]).toEqual(['', 0]);
   });
 });
