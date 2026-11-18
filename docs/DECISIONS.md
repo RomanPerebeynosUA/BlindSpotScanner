@@ -308,3 +308,17 @@ The user's choices for M11: sign-in is server-side OpenID Connect with an HttpOn
   end-session endpoint; `CreatedBy` is the email (else subject, else name); compose binds its ports to
   127.0.0.1 and the api warns when Local mode runs outside Development; logging levels (not sinks) come
   from configuration, so nothing bypasses redaction; the failure metric's `reason` is a fixed category.
+
+## D27 — Assertion depth per test, phase A (2026-11-18)
+The team accepted `docs/proposals/2026-11-18-assertion-depth.md` with these answers: dimension 5
+is computed by code from per-test assertion levels (points L0 1, L1 2, L2 4, L3 6, L4 8, L5 10,
+mean over tests with a known level, rounded half away from zero); a follow-up GET after a write is
+L4 with `readBack: "api"`, a direct database read is `"db"`; levels cover every integration test;
+the reader recognises xUnit, FluentAssertions, NUnit and Shouldly. A report schema change (1.0 → 1.1)
+sets `delta.scoreComparable: false` (score and dimension 5 only; endpoint deltas keep `comparable`).
+Phase A narrows the proposal: helpers are followed one level within the same file only (anything
+else that looks like an assertion helper makes the test `unknown`); `unknown` tests are not sent to
+the LLM yet (the first slice is code-only, so no new prompt); `testAssertions[]` has no
+`endpointIds`; the HTML export and fix PRs don't use the new data yet. P6's grading prompt (v1.1.0)
+no longer grades dimension 5, and an answer that still contains it is ignored, not re-asked.
+`PromptSetVersion` 1.1.0, report `schemaVersion` 1.1.

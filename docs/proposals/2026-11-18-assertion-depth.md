@@ -1,7 +1,6 @@
 # Proposal: assertion depth per test (2026-11-18)
 
-**Status:** Proposed. If accepted, it becomes the next entry in `docs/DECISIONS.md` (D27) and a new
-milestone (M12) in the implementation plan.
+**Status:** Accepted 2026-11-18 as D27; phase A is milestone M12.
 
 ## Problem
 

@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <None Include="..\..\BlindSpotScanner-Blueprint\examples\*.json" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\reports\*.json" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

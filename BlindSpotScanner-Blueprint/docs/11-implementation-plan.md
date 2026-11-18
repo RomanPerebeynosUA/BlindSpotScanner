@@ -79,6 +79,12 @@ per milestone.
   docs.
 - **AC:** a security checklist in doc 10 is verified by tests where possible.
 
+## M12 — Assertion depth (phase A)
+- Per-test assertion levels, fields sent vs. checked, NoAssertion / UncheckedFields /
+  ErrorWithoutStateCheck findings, computed dimension 5, `scoreComparable`, report table (D27).
+- **AC:** the bookstore fixture yields the levels in the M12 plan; the validator fails a tampered
+  dimension 5; both example reports assemble exactly.
+
 ## Definition of done (whole product)
 
 - [ ] A public C# sample repo scans end-to-end and produces a validated report with resolved

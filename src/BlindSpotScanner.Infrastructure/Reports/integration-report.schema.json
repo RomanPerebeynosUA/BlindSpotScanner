@@ -23,7 +23,7 @@
       "type": "object",
       "required": ["schemaVersion", "runId", "repo", "branch", "commitSha", "generatedAt", "modelId", "promptSetVersion", "profileVersion", "integrationMappedTo"],
       "properties": {
-        "schemaVersion": { "const": "1.0" },
+        "schemaVersion": { "enum": ["1.0", "1.1"] },
         "runId": { "type": "string", "format": "uuid" },
         "repo": { "type": "object", "required": ["owner", "name", "url"], "properties": { "owner": { "type": "string" }, "name": { "type": "string" }, "url": { "type": "string", "format": "uri" } } },
         "branch": { "type": "string" },
@@ -98,7 +98,7 @@
         "required": ["id", "kind", "severity", "stableKey", "headline", "evidence"],
         "properties": {
           "id": { "type": "string" },
-          "kind": { "enum": ["UncoveredEndpoint", "WeakTest", "FalsePositive", "SkippedTest", "UncoveredSeam", "Risk"] },
+          "kind": { "enum": ["UncoveredEndpoint", "WeakTest", "FalsePositive", "SkippedTest", "UncoveredSeam", "Risk", "NoAssertion", "UncheckedFields", "ErrorWithoutStateCheck"] },
           "severity": { "$ref": "#/$defs/severity" },
           "stableKey": { "type": "string" },
           "headline": { "type": "string" },
@@ -122,6 +122,25 @@
         }
       }
     },
+    "testAssertions": {
+      "type": "array",
+      "description": "Per-test assertion depth (docs/DECISIONS.md D27); absent before schema 1.1",
+      "items": {
+        "type": "object",
+        "required": ["test", "level", "levelSource", "errorPath", "sentFields", "checkedFields", "uncheckedFields", "fieldsResolved"],
+        "properties": {
+          "test": { "$ref": "#/$defs/citation" },
+          "level": { "type": ["integer", "null"], "minimum": 0, "maximum": 5 },
+          "levelSource": { "enum": ["code", "llm", "unknown"] },
+          "readBack": { "enum": ["api", "db"] },
+          "errorPath": { "type": "boolean" },
+          "sentFields": { "type": "array", "items": { "type": "string" } },
+          "checkedFields": { "type": "array", "items": { "type": "string" } },
+          "uncheckedFields": { "type": "array", "items": { "type": "string" } },
+          "fieldsResolved": { "type": "boolean" }
+        }
+      }
+    },
     "summary": {
       "type": "object",
       "required": ["endpoints", "controllers", "qualityScore", "weightAssessablePct", "scoreLabel", "integrationMappedTo", "verdict", "bullets"],
@@ -135,6 +154,16 @@
         "falsePositiveCount": { "type": "integer" },
         "skippedTestCount": { "type": "integer" },
         "uncoveredRealSeams": { "type": "integer" },
+        "assertionLevels": {
+          "type": "object",
+          "required": ["l0", "l1", "l2", "l3", "l4", "l5", "unknown"],
+          "properties": {
+            "l0": { "type": "integer", "minimum": 0 }, "l1": { "type": "integer", "minimum": 0 },
+            "l2": { "type": "integer", "minimum": 0 }, "l3": { "type": "integer", "minimum": 0 },
+            "l4": { "type": "integer", "minimum": 0 }, "l5": { "type": "integer", "minimum": 0 },
+            "unknown": { "type": "integer", "minimum": 0 }
+          }
+        },
         "verdict": { "enum": ["strong", "moderate", "partial", "weak"] },
         "bullets": { "type": "array", "items": { "type": "object", "required": ["label", "text"], "properties": { "label": { "type": "string" }, "text": { "type": "string" } } } },
         "previousRunId": { "type": ["string", "null"] }

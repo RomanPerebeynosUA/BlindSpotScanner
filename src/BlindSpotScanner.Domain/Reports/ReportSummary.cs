@@ -18,6 +18,10 @@ public sealed record ReportSummary
     public int? FalsePositiveCount { get; init; }
     public int? SkippedTestCount { get; init; }
     public int? UncoveredRealSeams { get; init; }
+
+    /// <summary>Absent in reports before schema 1.1.</summary>
+    public AssertionLevels? AssertionLevels { get; init; }
+
     public required Verdict Verdict { get; init; }
     public required IReadOnlyList<SummaryBullet> Bullets { get; init; }
 

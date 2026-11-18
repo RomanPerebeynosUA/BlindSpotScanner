@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using BlindSpotScanner.Domain.Enums;
 using BlindSpotScanner.Domain.Reports;
 using FluentAssertions;
 
@@ -132,5 +133,43 @@ public class ReportJsonSerializerTests
 
         // Assert
         act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void Deserialize_ReportWithoutTestAssertions_LoadsWithNulls()
+    {
+        // Arrange
+        var json = Fixture("sample-report-1.0.json");
+
+        // Act
+        var report = ReportJsonSerializer.Deserialize(json);
+
+        // Assert
+        new { report.TestAssertions, report.Summary.AssertionLevels, report.Delta!.ScoreComparable }
+            .Should().BeEquivalentTo(new { TestAssertions = (IReadOnlyList<TestAssertion>?)null, AssertionLevels = (AssertionLevels?)null, ScoreComparable = true });
+    }
+
+    [Fact]
+    public void Serialize_TestAssertion_WritesWireNames()
+    {
+        // Arrange
+        var row = new TestAssertion
+        {
+            Test = "tests/A.cs::A.B",
+            Level = null,
+            LevelSource = LevelSource.Unknown,
+            ReadBack = ReadBack.Api,
+            ErrorPath = false,
+            SentFields = [],
+            CheckedFields = [],
+            UncheckedFields = [],
+            FieldsResolved = true,
+        };
+
+        // Act
+        var json = JsonSerializer.Serialize(row, ReportJsonSerializer.Options);
+
+        // Assert
+        json.Should().ContainAll("\"level\":null", "\"levelSource\":\"unknown\"", "\"readBack\":\"api\"");
     }
 }

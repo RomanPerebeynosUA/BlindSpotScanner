@@ -91,6 +91,7 @@
     "baseGeneratedAt": "2026-11-01T09:00:00Z",
     "comparable": true,
     "comparability": [],
+    "scoreComparable": true,
     "metrics": [
       { "name": "qualityScore", "prev": 4.7, "curr": 5.1, "change": 0.4, "direction": "improved" },
       { "name": "endpoints.covered", "prev": 2, "curr": 3, "change": 1, "direction": "improved" },

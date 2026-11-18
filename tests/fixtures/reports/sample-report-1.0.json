@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "schemaVersion": "1.0",
+    "runId": "22222222-2222-4222-8222-222222222222",
+    "repo": { "owner": "example-org", "name": "bookstore-api", "url": "https://github.com/example-org/bookstore-api" },
+    "branch": "main",
+    "commitSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "generatedAt": "2026-11-15T09:00:00Z",
+    "modelId": "claude-sonnet-x",
+    "promptSetVersion": "1.0.0",
+    "profileVersion": 1,
+    "integrationMappedTo": "real-seam",
+    "costUsd": 0.91
+  },
+  "inventory": {
+    "controllerFiles": 2, "endpointsTotal": 5, "testFilesTotal": 10, "integrationTestFiles": 3,
+    "classification": { "integration": 3, "unit": 6, "other": 1 },
+    "readInFull": 3, "unverifiedReasons": []
+  },
+  "endpointCoverage": [
+    {
+      "controller": "BooksController", "sourcePath": "src/Bookstore.Api/Controllers/BooksController.cs", "routePrefix": "api/books",
+      "status": "weak",
+      "endpoints": [
+        { "method": "GET", "route": "api/books", "status": "covered", "verified": true, "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::List_returns_seeded_books"], "notes": "" },
+        { "method": "GET", "route": "api/books/{id}", "status": "weak", "verified": true, "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"], "falsePositive": true, "notes": "Asserts only 200 OK." },
+        { "method": "POST", "route": "api/books", "status": "covered", "verified": true, "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_persists_book"], "notes": "" }
+      ]
+    },
+    {
+      "controller": "OrdersController", "sourcePath": "src/Bookstore.Api/Controllers/OrdersController.cs", "routePrefix": "api/orders",
+      "status": "weak",
+      "endpoints": [
+        { "method": "POST", "route": "api/orders", "status": "covered", "verified": true, "evidence": ["tests/Bookstore.IntegrationTests/OrdersApiTests.cs::Place_order_persists_lines_and_total"], "notes": "Asserts persisted total and lines." },
+        { "method": "POST", "route": "api/orders/{id}/cancel", "status": "none", "verified": true, "evidence": [], "notes": "No integration test calls this route." }
+      ]
+    }
+  ],
+  "scorecard": [
+    { "id": 1, "dimension": "Integration-point coverage", "weight": 0.20, "score": 6, "scorable": true, "confidence": "High",
+      "justificationBullets": ["What is tested: HTTP pipeline and PostgreSQL via Testcontainers.", "What is missing: The payment gateway call is never crossed.", "Evidence: tests/Bookstore.IntegrationTests/OrdersApiTests.cs::Place_order_persists_lines_and_total", "Why this score: Two of three seams are real (band 5–6)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/OrdersApiTests.cs::Place_order_persists_lines_and_total"] },
+    { "id": 2, "dimension": "Critical-path coverage", "weight": 0.20, "score": 4, "scorable": true, "confidence": "Med",
+      "justificationBullets": ["What is tested: Catalogue and order placement.", "What is missing: Cancellation and refund journey.", "Evidence: tests/Bookstore.IntegrationTests/OrdersApiTests.cs::Place_order_persists_lines_and_total", "Why this score: Half the revenue journey runs end-to-end (band 3–4)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/OrdersApiTests.cs::Place_order_persists_lines_and_total"] },
+    { "id": 3, "dimension": "Failure & edge-path coverage", "weight": 0.15, "score": 3, "scorable": true, "confidence": "Med",
+      "justificationBullets": ["What is tested: One validation failure on create.", "What is missing: Timeouts, conflicts, rollback.", "Evidence: tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_rejects_missing_title", "Why this score: A single failure path (band 3–4)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_rejects_missing_title"] },
+    { "id": 4, "dimension": "Environmental fidelity", "weight": 0.15, "score": 7, "scorable": true, "confidence": "High",
+      "justificationBullets": ["What is tested: A real PostgreSQL container per test class.", "What is missing: The gateway is replaced by an in-memory fake.", "Evidence: tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync", "Why this score: Realistic DB, faked external dependency (band 7–8)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync"] },
+    { "id": 5, "dimension": "Assertion strength", "weight": 0.15, "score": 5, "scorable": true, "confidence": "High",
+      "justificationBullets": ["What is tested: Create and order placement assert persisted values.", "What is missing: Get-by-id asserts only the status code.", "Evidence: tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok", "Why this score: Mostly value assertions, one status-only (band 5–6)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"] },
+    { "id": 6, "dimension": "Determinism / reliability", "weight": 0.10, "score": null, "scorable": false, "confidence": "Low",
+      "justificationBullets": ["What is tested: Not assessable.", "What is missing: No CI run history was available.", "Evidence: none — insufficient input", "Why this score: N/A — insufficient input."],
+      "evidence": [] },
+    { "id": 7, "dimension": "Diagnosability / maintainability", "weight": 0.05, "score": 6, "scorable": true, "confidence": "Med",
+      "justificationBullets": ["What is tested: Shared factory and clear test names.", "What is missing: No custom failure messages.", "Evidence: tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync", "Why this score: Clean fixtures, average diagnostics (band 5–6)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync"] }
+  ],
+  "findings": [
+    { "id": "f2", "kind": "UncoveredEndpoint", "severity": "High", "stableKey": "uncovered-endpoint:POST api/orders/{}/cancel", "headline": "Cancelling an order has no integration test", "detail": ["POST api/orders/{id}/cancel"], "evidence": [] },
+    { "id": "f3", "kind": "FalsePositive", "severity": "Medium", "stableKey": "false-positive:tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok", "headline": "A book lookup test only checks that the request succeeded", "detail": ["Asserts 200 OK only; a wrong book would still pass."], "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"] },
+    { "id": "f4", "kind": "UncoveredSeam", "severity": "High", "stableKey": "uncovered-seam:payment-gateway", "headline": "The payment provider is never called for real in tests", "detail": ["All tests use an in-memory payment fake."], "evidence": ["tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync"] }
+  ],
+  "topRisks": [
+    { "rank": 1, "headline": "Nothing tests a real charge with the payment provider", "whyItMatters": "A change in how payments are sent could break checkout without any test noticing.", "severity": "High", "detail": ["The payment gateway seam is crossed by no test (coveredByNoneRealSeam = 1).", "ApiFactory replaces the gateway client with an in-memory fake."], "evidence": ["tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync"] },
+    { "rank": 2, "headline": "Some tests pass even when the wrong data comes back", "whyItMatters": "They give a false sense of safety for the book details page.", "severity": "Medium", "detail": ["Get_by_id_returns_ok asserts only the HTTP status."], "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"] },
+    { "rank": 3, "headline": "Order cancellation is not tested at all", "whyItMatters": "Customers might be unable to cancel, or be refunded wrongly, without warning.", "severity": "High", "detail": ["POST api/orders/{id}/cancel has no integration test."], "evidence": [] }
+  ],
+  "summary": {
+    "endpoints": { "total": 5, "covered": 3, "weak": 1, "skipped": 0, "none": 1, "unverified": 0 },
+    "controllers": { "total": 2, "covered": 0, "weak": 2, "skipped": 0, "none": 0, "unverified": 0 },
+    "qualityScore": 5.1, "weightAssessablePct": 90,
+    "scoreLabel": "5.1 / 10 across scored dimensions (90% of weight assessable)",
+    "integrationMappedTo": "real-seam",
+    "falsePositiveCount": 1, "skippedTestCount": 0, "uncoveredRealSeams": 1,
+    "verdict": "moderate",
+    "bullets": [
+      { "label": "Overall", "text": "Integration testing is moderate: 3 of 5 API operations are properly tested; 1 more lightly tested." },
+      { "label": "Coverage", "text": "1 operation(s) have no integration test; 0 could not be checked." },
+      { "label": "Test quality", "text": "Test quality scores 5.1 out of 10 (90% of the rubric could be assessed); 1 test(s) only check that the request succeeded." },
+      { "label": "Since last scan", "text": "Since 01 Nov 2026: score 4.7 → 5.1; 1 operation(s) newly covered, 0 regressed." }
+    ],
+    "previousRunId": "11111111-1111-4111-8111-111111111111"
+  },
+  "delta": {
+    "baseRunId": "11111111-1111-4111-8111-111111111111",
+    "baseCommitSha": "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567",
+    "baseGeneratedAt": "2026-11-01T09:00:00Z",
+    "comparable": true,
+    "comparability": [],
+    "metrics": [
+      { "name": "qualityScore", "prev": 4.7, "curr": 5.1, "change": 0.4, "direction": "improved" },
+      { "name": "endpoints.covered", "prev": 2, "curr": 3, "change": 1, "direction": "improved" },
+      { "name": "endpoints.weak", "prev": 1, "curr": 1, "change": 0, "direction": "unchanged" },
+      { "name": "endpoints.none", "prev": 2, "curr": 1, "change": -1, "direction": "improved" },
+      { "name": "endpoints.unverified", "prev": 0, "curr": 0, "change": 0, "direction": "unchanged" },
+      { "name": "falsePositiveCount", "prev": 1, "curr": 1, "change": 0, "direction": "unchanged" }
+    ],
+    "endpoints": { "newlyCovered": ["POST api/orders"], "regressed": [], "added": [], "removed": [], "confidenceChanged": [] },
+    "scorecard": [
+      { "dimension": "Critical-path coverage", "prev": 3, "curr": 4, "change": 1 },
+      { "dimension": "Assertion strength", "prev": 4, "curr": 5, "change": 1 }
+    ],
+    "findings": { "fixed": ["uncovered-endpoint:POST api/orders"], "new": ["uncovered-seam:payment-gateway"] },
+    "risks": {
+      "dropped": ["Nothing tests that orders are really placed and charged"],
+      "new": ["Nothing tests a real charge with the payment provider", "Order cancellation is not tested at all"]
+    }
+  },
+  "validation": { "passed": true, "method": "script", "violations": [], "citationsChecked": 8, "citationsResolved": 8 }
+}

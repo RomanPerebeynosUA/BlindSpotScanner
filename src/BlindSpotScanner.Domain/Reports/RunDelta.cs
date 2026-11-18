@@ -11,6 +11,13 @@ public sealed record RunDelta
     public required DateTimeOffset BaseGeneratedAt { get; init; }
     public required bool Comparable { get; init; }
     public required IReadOnlyList<string> Comparability { get; init; }
+
+    /// <summary>
+    /// False when the quality score and dimension 5 were measured differently (D27); endpoint deltas
+    /// follow <see cref="Comparable"/>. Absent in deltas stored before schema 1.1, which read as true.
+    /// </summary>
+    public bool ScoreComparable { get; init; } = true;
+
     public required IReadOnlyList<DeltaMetric> Metrics { get; init; }
     public required DeltaEndpoints Endpoints { get; init; }
     public required IReadOnlyList<DeltaScorecardItem> Scorecard { get; init; }

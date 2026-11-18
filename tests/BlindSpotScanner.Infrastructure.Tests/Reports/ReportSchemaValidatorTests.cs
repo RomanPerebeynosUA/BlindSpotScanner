@@ -110,6 +110,62 @@ public class ReportSchemaValidatorTests
         // Assert
         embedded.Should().Be(blueprint);
     }
+
+    private static JsonObject AssertionRow(int? level) => new()
+    {
+        ["test"] = "tests/Bookstore.IntegrationTests/BooksApiTests.cs::BooksApiTests.Get_by_id_returns_ok",
+        ["level"] = level,
+        ["levelSource"] = "code",
+        ["errorPath"] = false,
+        ["sentFields"] = new JsonArray(),
+        ["checkedFields"] = new JsonArray(),
+        ["uncheckedFields"] = new JsonArray(),
+        ["fieldsResolved"] = true,
+    };
+
+    [Fact]
+    public void Validate_SchemaVersion11WithTestAssertions_ReturnsNoErrors()
+    {
+        // Arrange
+        var node = Sample();
+        node["meta"]!["schemaVersion"] = "1.1";
+        node["testAssertions"] = new JsonArray(AssertionRow(1));
+        node["summary"]!["assertionLevels"] = new JsonObject { ["l0"] = 0, ["l1"] = 1, ["l2"] = 0, ["l3"] = 0, ["l4"] = 0, ["l5"] = 0, ["unknown"] = 0 };
+
+        // Act
+        var errors = _validator.Validate(node.ToJsonString());
+
+        // Assert
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_TestAssertionLevelSix_ReturnsError()
+    {
+        // Arrange
+        var node = Sample();
+        node["testAssertions"] = new JsonArray(AssertionRow(6));
+
+        // Act
+        var errors = _validator.Validate(node.ToJsonString());
+
+        // Assert
+        errors.Should().ContainMatch("*/testAssertions/0/level*");
+    }
+
+    [Fact]
+    public void Validate_NoAssertionFindingKind_ReturnsNoErrors()
+    {
+        // Arrange
+        var node = Sample();
+        node["findings"]![0]!["kind"] = "NoAssertion";
+
+        // Act
+        var errors = _validator.Validate(node.ToJsonString());
+
+        // Assert
+        errors.Should().BeEmpty();
+    }
 }
 
 public class ReportValidatorWithSchemaTests

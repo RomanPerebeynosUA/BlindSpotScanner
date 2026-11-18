@@ -14,6 +14,7 @@ public sealed record ReportDetail
     public required IReadOnlyList<ScoreDimension> Scorecard { get; init; }
     public required IReadOnlyList<ReportFinding> Findings { get; init; }
     public required IReadOnlyList<TopRisk> TopRisks { get; init; }
+    public IReadOnlyList<TestAssertion>? TestAssertions { get; init; }
 
     public static ReportDetail From(IntegrationReport report) => new()
     {
@@ -23,5 +24,6 @@ public sealed record ReportDetail
         Scorecard = report.Scorecard,
         Findings = report.Findings,
         TopRisks = report.TopRisks,
+        TestAssertions = report.TestAssertions,
     };
 }

@@ -12,6 +12,10 @@ public sealed record IntegrationReport
     public required IReadOnlyList<ScoreDimension> Scorecard { get; init; }
     public required IReadOnlyList<ReportFinding> Findings { get; init; }
     public required IReadOnlyList<TopRisk> TopRisks { get; init; }
+
+    /// <summary>Per-test assertion depth (D27); absent in reports before schema 1.1.</summary>
+    public IReadOnlyList<TestAssertion>? TestAssertions { get; init; }
+
     public required ReportSummary Summary { get; init; }
     /// <summary>Null on the first scan of a repository; always written (as in the examples).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]

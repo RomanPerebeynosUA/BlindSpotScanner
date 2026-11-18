@@ -8,4 +8,7 @@ public enum FindingKind
     SkippedTest,
     UncoveredSeam,
     Risk,
+    NoAssertion,
+    UncheckedFields,
+    ErrorWithoutStateCheck,
 }

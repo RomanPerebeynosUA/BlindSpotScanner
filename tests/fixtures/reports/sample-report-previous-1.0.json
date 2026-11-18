@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "schemaVersion": "1.0",
+    "runId": "11111111-1111-4111-8111-111111111111",
+    "repo": { "owner": "example-org", "name": "bookstore-api", "url": "https://github.com/example-org/bookstore-api" },
+    "branch": "main",
+    "commitSha": "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567",
+    "generatedAt": "2026-11-01T09:00:00Z",
+    "modelId": "claude-sonnet-x",
+    "promptSetVersion": "1.0.0",
+    "profileVersion": 1,
+    "integrationMappedTo": "real-seam",
+    "costUsd": 0.84
+  },
+  "inventory": {
+    "controllerFiles": 2, "endpointsTotal": 5, "testFilesTotal": 9, "integrationTestFiles": 2,
+    "classification": { "integration": 2, "unit": 6, "other": 1 },
+    "readInFull": 2, "unverifiedReasons": []
+  },
+  "endpointCoverage": [
+    {
+      "controller": "BooksController", "sourcePath": "src/Bookstore.Api/Controllers/BooksController.cs", "routePrefix": "api/books",
+      "status": "weak",
+      "endpoints": [
+        { "method": "GET", "route": "api/books", "status": "covered", "verified": true, "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::List_returns_seeded_books"], "notes": "" },
+        { "method": "GET", "route": "api/books/{id}", "status": "weak", "verified": true, "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"], "falsePositive": true, "notes": "Asserts only 200 OK." },
+        { "method": "POST", "route": "api/books", "status": "covered", "verified": true, "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_persists_book"], "notes": "" }
+      ]
+    },
+    {
+      "controller": "OrdersController", "sourcePath": "src/Bookstore.Api/Controllers/OrdersController.cs", "routePrefix": "api/orders",
+      "status": "none",
+      "endpoints": [
+        { "method": "POST", "route": "api/orders", "status": "none", "verified": true, "evidence": [], "notes": "No integration test calls this route." },
+        { "method": "POST", "route": "api/orders/{id}/cancel", "status": "none", "verified": true, "evidence": [], "notes": "No integration test calls this route." }
+      ]
+    }
+  ],
+  "scorecard": [
+    { "id": 1, "dimension": "Integration-point coverage", "weight": 0.20, "score": 6, "scorable": true, "confidence": "High",
+      "justificationBullets": ["What is tested: HTTP pipeline and PostgreSQL via Testcontainers.", "What is missing: The payment gateway call is never crossed.", "Evidence: tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_persists_book", "Why this score: Two of three seams are real (band 5–6)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_persists_book"] },
+    { "id": 2, "dimension": "Critical-path coverage", "weight": 0.20, "score": 3, "scorable": true, "confidence": "Med",
+      "justificationBullets": ["What is tested: Book catalogue create and read.", "What is missing: The ordering journey is untested.", "Evidence: tests/Bookstore.IntegrationTests/BooksApiTests.cs::List_returns_seeded_books", "Why this score: The main revenue journey is absent (band 3–4)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::List_returns_seeded_books"] },
+    { "id": 3, "dimension": "Failure & edge-path coverage", "weight": 0.15, "score": 3, "scorable": true, "confidence": "Med",
+      "justificationBullets": ["What is tested: One validation failure on create.", "What is missing: Timeouts, conflicts, rollback.", "Evidence: tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_rejects_missing_title", "Why this score: A single failure path (band 3–4)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Create_rejects_missing_title"] },
+    { "id": 4, "dimension": "Environmental fidelity", "weight": 0.15, "score": 7, "scorable": true, "confidence": "High",
+      "justificationBullets": ["What is tested: A real PostgreSQL container per test class.", "What is missing: The gateway is replaced by an in-memory fake.", "Evidence: tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync", "Why this score: Realistic DB, faked external dependency (band 7–8)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync"] },
+    { "id": 5, "dimension": "Assertion strength", "weight": 0.15, "score": 4, "scorable": true, "confidence": "High",
+      "justificationBullets": ["What is tested: Create asserts the persisted title.", "What is missing: Get-by-id asserts only the status code.", "Evidence: tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok", "Why this score: Mixed; one status-only test (band 3–4)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"] },
+    { "id": 6, "dimension": "Determinism / reliability", "weight": 0.10, "score": null, "scorable": false, "confidence": "Low",
+      "justificationBullets": ["What is tested: Not assessable.", "What is missing: No CI run history was available.", "Evidence: none — insufficient input", "Why this score: N/A — insufficient input."],
+      "evidence": [] },
+    { "id": 7, "dimension": "Diagnosability / maintainability", "weight": 0.05, "score": 6, "scorable": true, "confidence": "Med",
+      "justificationBullets": ["What is tested: Shared factory and clear test names.", "What is missing: No custom failure messages.", "Evidence: tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync", "Why this score: Clean fixtures, average diagnostics (band 5–6)."],
+      "evidence": ["tests/Bookstore.IntegrationTests/ApiFactory.cs::InitializeAsync"] }
+  ],
+  "findings": [
+    { "id": "f1", "kind": "UncoveredEndpoint", "severity": "High", "stableKey": "uncovered-endpoint:POST api/orders", "headline": "Placing an order has no integration test", "detail": ["POST api/orders"], "evidence": [] },
+    { "id": "f2", "kind": "UncoveredEndpoint", "severity": "High", "stableKey": "uncovered-endpoint:POST api/orders/{}/cancel", "headline": "Cancelling an order has no integration test", "detail": ["POST api/orders/{id}/cancel"], "evidence": [] },
+    { "id": "f3", "kind": "FalsePositive", "severity": "Medium", "stableKey": "false-positive:tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok", "headline": "A book lookup test only checks that the request succeeded", "detail": ["Asserts 200 OK only; a wrong book would still pass."], "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"] }
+  ],
+  "topRisks": [
+    { "rank": 1, "headline": "Nothing tests that orders are really placed and charged", "whyItMatters": "A broken checkout or payment call would reach customers without any test failing.", "severity": "High", "detail": ["POST api/orders and POST api/orders/{id}/cancel have no integration test.", "The payment gateway seam is crossed by no test (coveredByNoneRealSeam = 1)."], "evidence": [] },
+    { "rank": 2, "headline": "Some tests pass even when the wrong data comes back", "whyItMatters": "They give a false sense of safety for the book details page.", "severity": "Medium", "detail": ["Get_by_id_returns_ok asserts only the HTTP status."], "evidence": ["tests/Bookstore.IntegrationTests/BooksApiTests.cs::Get_by_id_returns_ok"] }
+  ],
+  "summary": {
+    "endpoints": { "total": 5, "covered": 2, "weak": 1, "skipped": 0, "none": 2, "unverified": 0 },
+    "controllers": { "total": 2, "covered": 0, "weak": 1, "skipped": 0, "none": 1, "unverified": 0 },
+    "qualityScore": 4.7, "weightAssessablePct": 90,
+    "scoreLabel": "4.7 / 10 across scored dimensions (90% of weight assessable)",
+    "integrationMappedTo": "real-seam",
+    "falsePositiveCount": 1, "skippedTestCount": 0, "uncoveredRealSeams": 0,
+    "verdict": "partial",
+    "bullets": [
+      { "label": "Overall", "text": "Integration testing is partial: 2 of 5 API operations are properly tested; 1 more lightly tested." },
+      { "label": "Coverage", "text": "2 operation(s) have no integration test; 0 could not be checked." },
+      { "label": "Test quality", "text": "Test quality scores 4.7 out of 10 (90% of the rubric could be assessed); 1 test(s) only check that the request succeeded." },
+      { "label": "Since last scan", "text": "First scan of this repository — no comparison yet." }
+    ],
+    "previousRunId": null
+  },
+  "delta": null,
+  "validation": { "passed": true, "method": "script", "violations": [], "citationsChecked": 6, "citationsResolved": 6 }
+}
