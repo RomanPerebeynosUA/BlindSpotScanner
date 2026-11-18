@@ -34,7 +34,7 @@ public class AssertionFindingsTests
             Kind = FindingKind.NoAssertion,
             Severity = Severity.High,
             StableKey = $"no-assertion:{Test}",
-            Headline = "A test checks nothing",
+            Headline = "Create_works checks nothing",
             Detail = new[] { $"{Test} passes whatever the code does." },
             Evidence = new[] { Test },
         });
@@ -53,7 +53,7 @@ public class AssertionFindingsTests
             Kind = FindingKind.UncheckedFields,
             Severity = Severity.Medium,
             StableKey = $"unchecked-fields:{Test}",
-            Headline = "A test sends fields it never checks",
+            Headline = "Create_works sends fields it never checks",
             Detail = new[] { "Sends: title, price", "Not checked: price" },
             Evidence = new[] { Test },
         });
@@ -72,7 +72,7 @@ public class AssertionFindingsTests
             Kind = FindingKind.ErrorWithoutStateCheck,
             Severity = Severity.Medium,
             StableKey = $"error-without-state-check:{Test}",
-            Headline = "An error test checks only the status code",
+            Headline = "Create_works checks only the error status",
             Detail = new[] { "Checks the error status but not the error body or that nothing was saved." },
             Evidence = new[] { Test },
         });

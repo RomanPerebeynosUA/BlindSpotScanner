@@ -11,20 +11,22 @@ public static class AssertionFindings
         var findings = new List<ReportFinding>();
         foreach (var test in tests)
         {
+            // The method name keeps headlines (and Jira summaries) apart when several tests share a problem.
+            var method = test.Test[(test.Test.LastIndexOf('.') + 1)..];
             if (test.Level == 0)
             {
-                findings.Add(Finding(test, FindingKind.NoAssertion, Severity.High, "no-assertion", "A test checks nothing", [$"{test.Test} passes whatever the code does."]));
+                findings.Add(Finding(test, FindingKind.NoAssertion, Severity.High, "no-assertion", $"{method} checks nothing", [$"{test.Test} passes whatever the code does."]));
             }
 
             if (!test.ErrorPath && test.FieldsResolved && test.UncheckedFields.Count > 0)
             {
-                findings.Add(Finding(test, FindingKind.UncheckedFields, Severity.Medium, "unchecked-fields", "A test sends fields it never checks",
+                findings.Add(Finding(test, FindingKind.UncheckedFields, Severity.Medium, "unchecked-fields", $"{method} sends fields it never checks",
                     [$"Sends: {string.Join(", ", test.SentFields)}", $"Not checked: {string.Join(", ", test.UncheckedFields)}"]));
             }
 
             if (test.ErrorPath && test.Level is 1 or 2)
             {
-                findings.Add(Finding(test, FindingKind.ErrorWithoutStateCheck, Severity.Medium, "error-without-state-check", "An error test checks only the status code",
+                findings.Add(Finding(test, FindingKind.ErrorWithoutStateCheck, Severity.Medium, "error-without-state-check", $"{method} checks only the error status",
                     ["Checks the error status but not the error body or that nothing was saved."]));
             }
         }

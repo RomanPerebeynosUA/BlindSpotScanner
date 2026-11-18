@@ -260,7 +260,7 @@
       "kind": "ErrorWithoutStateCheck",
       "severity": "Medium",
       "stableKey": "error-without-state-check:tests/Bookstore.IntegrationTests/BooksApiTests.cs::BooksApiTests.Create_rejects_missing_title",
-      "headline": "An error test checks only the status code",
+      "headline": "Create_rejects_missing_title checks only the error status",
       "detail": [
         "Checks the error status but not the error body or that nothing was saved."
       ],
@@ -273,7 +273,7 @@
       "kind": "UncheckedFields",
       "severity": "Medium",
       "stableKey": "unchecked-fields:tests/Bookstore.IntegrationTests/OrdersApiTests.cs::OrdersApiTests.Place_order_persists_lines_and_total",
-      "headline": "A test sends fields it never checks",
+      "headline": "Place_order_persists_lines_and_total sends fields it never checks",
       "detail": [
         "Sends: lines[].bookId, lines[].quantity",
         "Not checked: lines[].bookId, lines[].quantity"
@@ -287,7 +287,7 @@
       "kind": "NoAssertion",
       "severity": "High",
       "stableKey": "no-assertion:tests/Bookstore.UnitTests/StockQueryTests.cs::StockQueryTests.Low_stock_query_uses_index",
-      "headline": "A test checks nothing",
+      "headline": "Low_stock_query_uses_index checks nothing",
       "detail": [
         "tests/Bookstore.UnitTests/StockQueryTests.cs::StockQueryTests.Low_stock_query_uses_index passes whatever the code does."
       ],
