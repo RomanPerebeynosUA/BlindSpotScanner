@@ -70,9 +70,7 @@ public sealed class ScanPipeline(
             r => new PhaseReport(ScanPhases.Grade, r.grade.Usage, [.. r.assertions.Notes, .. r.grade.Notes], 0));
         var usage = classified.Usage.Add(mapped.Usage).Add(graded.Usage);
 
-        var detail = Detail(runId, run, profile, inventory, endpoints, classified, mapped.Value, graded.Value, usage, [.. endpoints.UnverifiedReasons, .. classified.Notes, .. mapped.Notes, .. assessed.Notes, .. graded.Notes])
-            with
-        { TestAssertions = assessed.Value };
+        var detail = Detail(runId, run, profile, inventory, endpoints, classified, mapped.Value, assessed.Value, graded.Value, usage, [.. endpoints.UnverifiedReasons, .. classified.Notes, .. mapped.Notes, .. assessed.Notes, .. graded.Notes]);
         var (report, violations) = await Phase(ScanPhases.Assemble, () => Task.FromResult(Assemble(detail, previous)), r => new PhaseReport(ScanPhases.Assemble, LlmUsage.None, r.Violations, 0));
         return new ScanOutcome(run, report, violations, usage);
     }
@@ -87,7 +85,7 @@ public sealed class ScanPipeline(
 
     private ReportDetail Detail(
         Guid runId, RunContext run, RepoProfile profile, RepositoryInventory inventory, EndpointInventory endpoints,
-        PhaseResult<TestClassification> classified, IReadOnlyList<ControllerCoverage> coverage, QualityGrade grade, LlmUsage usage, IReadOnlyList<string> unverifiedReasons)
+        PhaseResult<TestClassification> classified, IReadOnlyList<ControllerCoverage> coverage, IReadOnlyList<TestAssertion> assertions, QualityGrade grade, LlmUsage usage, IReadOnlyList<string> unverifiedReasons)
     {
         var tests = classified.Value;
         return new ReportDetail
@@ -126,6 +124,7 @@ public sealed class ScanPipeline(
             Scorecard = grade.Scorecard,
             Findings = grade.Findings,
             TopRisks = grade.TopRisks,
+            TestAssertions = assertions,
         };
     }
 }
