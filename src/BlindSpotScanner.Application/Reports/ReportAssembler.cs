@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Domain.Enums;
 using BlindSpotScanner.Domain.Reports;
 
@@ -13,6 +14,13 @@ public static class ReportAssembler
 {
     private const decimal LowConfidenceUnverifiedShare = 0.25m;
 
+    private const int AssertionStrength = 5;
+
+    private const string NotAssessed = "N/A — insufficient input";
+
+    /// <summary>D27 points per assertion level L0…L5.</summary>
+    private static readonly int[] LevelPoints = [1, 2, 4, 6, 8, 10];
+
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
     /// <summary>
@@ -24,7 +32,10 @@ public static class ReportAssembler
         var coverage = detail.EndpointCoverage.Select(c => c with { Status = Rollup(c.Endpoints) }).ToList();
         var risks = detail.TopRisks.Select((risk, index) => risk with { Rank = index + 1 }).ToList();
         var endpoints = Tally(coverage.SelectMany(c => c.Endpoints).Select(e => e.Status));
-        var (score, assessablePct) = Score(detail.Scorecard);
+        var scorecard = detail.TestAssertions is { } tests
+            ? detail.Scorecard.Select(d => d.Id == AssertionStrength ? DimensionFive(tests) : d).ToList()
+            : detail.Scorecard;
+        var (score, assessablePct) = Score(scorecard);
         var falsePositives = detail.Findings.Count(f => f.Kind == FindingKind.FalsePositive);
         var verdict = VerdictFor(endpoints);
         var mappedTo = WireName(detail.Meta.IntegrationMappedTo);
@@ -40,6 +51,7 @@ public static class ReportAssembler
             FalsePositiveCount = falsePositives,
             SkippedTestCount = detail.Findings.Count(f => f.Kind == FindingKind.SkippedTest),
             UncoveredRealSeams = detail.Findings.Count(f => f.Kind == FindingKind.UncoveredSeam),
+            AssertionLevels = detail.TestAssertions is { } rows ? Levels(rows) : null,
             Verdict = verdict,
             Bullets =
             [
@@ -55,9 +67,10 @@ public static class ReportAssembler
             Meta = detail.Meta,
             Inventory = detail.Inventory,
             EndpointCoverage = coverage,
-            Scorecard = detail.Scorecard,
+            Scorecard = scorecard,
             Findings = detail.Findings,
             TopRisks = risks,
+            TestAssertions = detail.TestAssertions,
             Summary = summary,
             Delta = null,
             Validation = new ReportValidation { Passed = false, Method = "script", Violations = [] },
@@ -102,6 +115,59 @@ public static class ReportAssembler
             Unverified = list.Count(s => s == CoverageStatus.Unverified),
         };
     }
+
+    /// <summary>D27: dimension 5 from the per-test levels, with the rubric's name and weight.</summary>
+    private static ScoreDimension DimensionFive(IReadOnlyList<TestAssertion> tests)
+    {
+        var (_, name, weight) = Rubric.Dimensions.Single(d => d.Id == AssertionStrength);
+        var known = tests.Where(t => t.Level is not null).ToList();
+        if (known.Count == 0)
+        {
+            return new ScoreDimension
+            {
+                Id = AssertionStrength,
+                Dimension = name,
+                Weight = weight,
+                Score = null,
+                Scorable = false,
+                Confidence = Confidence.Low,
+                JustificationBullets = [$"What is tested: {NotAssessed}", $"What is missing: {NotAssessed}", "Evidence: none", $"Why this score: {NotAssessed}"],
+                Evidence = [],
+            };
+        }
+
+        var mean = (decimal)known.Sum(t => LevelPoints[t.Level!.Value]) / known.Count;
+        var evidence = known.OrderBy(t => LevelPoints[t.Level!.Value]).ThenBy(t => t.Test, StringComparer.Ordinal).Take(3).Select(t => t.Test).ToList();
+        var unknown = tests.Count - known.Count;
+        return new ScoreDimension
+        {
+            Id = AssertionStrength,
+            Dimension = name,
+            Weight = weight,
+            Score = (int)Math.Round(mean, 0, MidpointRounding.AwayFromZero),
+            Scorable = true,
+            Confidence = unknown == 0 ? Confidence.High : Confidence.Med,
+            JustificationBullets =
+            [
+                string.Create(Invariant, $"What is tested: {known.Count(t => t.Level >= 3)} of {known.Count} integration tests check response values or saved state (L3 or higher)."),
+                string.Create(Invariant, $"What is missing: {known.Count(t => t.Level <= 2)} test(s) check only the status code or shape (L0–L2); {unknown} could not be classified."),
+                $"Evidence: {string.Join(", ", evidence)}",
+                string.Create(Invariant, $"Why this score: the mean of the per-test points (L0 1, L1 2, L2 4, L3 6, L4 8, L5 10) over {known.Count} test(s) is {mean:0.0}."),
+            ],
+            Evidence = evidence,
+        };
+    }
+
+    private static AssertionLevels Levels(IReadOnlyList<TestAssertion> tests) => new()
+    {
+        L0 = tests.Count(t => t.Level == 0),
+        L1 = tests.Count(t => t.Level == 1),
+        L2 = tests.Count(t => t.Level == 2),
+        L3 = tests.Count(t => t.Level == 3),
+        L4 = tests.Count(t => t.Level == 4),
+        L5 = tests.Count(t => t.Level == 5),
+        Unknown = tests.Count(t => t.Level is null),
+    };
 
     /// <summary>Doc 06 rollup: weighted mean over scorable dimensions, plus the assessable weight share.</summary>
     private static (decimal? Score, decimal AssessablePct) Score(IReadOnlyList<ScoreDimension> scorecard)

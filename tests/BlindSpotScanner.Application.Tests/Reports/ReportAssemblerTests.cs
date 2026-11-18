@@ -168,4 +168,150 @@ public class ReportAssemblerTests
             (2, "Some tests pass even when the wrong data comes back"),
             (3, "Nothing tests a real charge with the payment provider"));
     }
+
+    /// <summary>One row per level, named tests/A.cs::A.T0, T1, …</summary>
+    private static ReportDetail WithLevels(params int?[] levels) => CurrentDetail with
+    {
+        TestAssertions = levels.Select((level, i) => new TestAssertion
+        {
+            Test = $"tests/A.cs::A.T{i}",
+            Level = level,
+            LevelSource = level is null ? LevelSource.Unknown : LevelSource.Code,
+            ErrorPath = false,
+            SentFields = [],
+            CheckedFields = [],
+            UncheckedFields = [],
+            FieldsResolved = true,
+        }).ToList(),
+    };
+
+    private static ScoreDimension DimensionFive(IntegrationReport report) => report.Scorecard.Single(d => d.Id == 5);
+
+    [Fact]
+    public void Assemble_TestAssertions_ComputesDimensionFive()
+    {
+        // Arrange
+        var detail = WithLevels(1, 2, 4, 1, 3);
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).Should().BeEquivalentTo(new { Score = (int?)4, Scorable = true, Confidence = (Confidence?)Confidence.High, Weight = 0.15m });
+    }
+
+    [Fact]
+    public void Assemble_TestAssertions_WritesComputedBullets()
+    {
+        // Arrange
+        var detail = WithLevels(1, 2, 4, 1, 3);
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).JustificationBullets.Should().Equal(
+            "What is tested: 2 of 5 integration tests check response values or saved state (L3 or higher).",
+            "What is missing: 3 test(s) check only the status code or shape (L0–L2); 0 could not be classified.",
+            "Evidence: tests/A.cs::A.T0, tests/A.cs::A.T3, tests/A.cs::A.T1",
+            "Why this score: the mean of the per-test points (L0 1, L1 2, L2 4, L3 6, L4 8, L5 10) over 5 test(s) is 4.4.");
+    }
+
+    [Fact]
+    public void Assemble_HalfPointMean_RoundsAwayFromZero()
+    {
+        // Arrange
+        var detail = WithLevels(0, 1);
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).Score.Should().Be(2);
+    }
+
+    [Fact]
+    public void Assemble_TestAssertions_CountsAssertionLevels()
+    {
+        // Arrange
+        var detail = WithLevels(1, 2, null, 1);
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        report.Summary.AssertionLevels.Should().BeEquivalentTo(new AssertionLevels { L0 = 0, L1 = 2, L2 = 1, L3 = 0, L4 = 0, L5 = 0, Unknown = 1 });
+    }
+
+    [Fact]
+    public void Assemble_SomeUnknown_ConfidenceMed()
+    {
+        // Arrange
+        var detail = WithLevels(3, null);
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).Confidence.Should().Be(Confidence.Med);
+    }
+
+    [Fact]
+    public void Assemble_AllUnknown_DimensionFiveUnscorable()
+    {
+        // Arrange
+        var detail = WithLevels(null, null);
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).Should().BeEquivalentTo(new
+        {
+            Score = (int?)null,
+            Scorable = false,
+            Confidence = (Confidence?)Confidence.Low,
+            Evidence = Array.Empty<string>(),
+            JustificationBullets = new[] { "What is tested: N/A — insufficient input", "What is missing: N/A — insufficient input", "Evidence: none", "Why this score: N/A — insufficient input" },
+        });
+    }
+
+    [Fact]
+    public void Assemble_EmptyTestAssertions_DimensionFiveUnscorable()
+    {
+        // Arrange
+        var detail = WithLevels();
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).Scorable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Assemble_NoTestAssertions_KeepsDimensionFive()
+    {
+        // Arrange
+        var detail = CurrentDetail with { TestAssertions = null };
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).Should().BeEquivalentTo(detail.Scorecard.Single(d => d.Id == 5));
+    }
+
+    [Fact]
+    public void Assemble_EvidenceIsThreeWeakestByPointsThenCitation()
+    {
+        // Arrange
+        var detail = WithLevels(3, 1, 2, 1);
+
+        // Act
+        var report = ReportAssembler.Assemble(detail, previous: null);
+
+        // Assert
+        DimensionFive(report).Evidence.Should().Equal("tests/A.cs::A.T1", "tests/A.cs::A.T3", "tests/A.cs::A.T2");
+    }
 }

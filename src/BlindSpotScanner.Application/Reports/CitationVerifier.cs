@@ -22,6 +22,7 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
             .SelectMany(c => c.Endpoints)
             .Where(e => e.Status is CoverageStatus.Covered or CoverageStatus.Weak or CoverageStatus.Skipped)
             .SelectMany(e => e.Evidence)
+            .Concat((report.TestAssertions ?? []).Select(t => t.Test))
             .ToHashSet(StringComparer.Ordinal);
         var other = report.Scorecard.SelectMany(d => (d.Evidence ?? []).Concat(d.JustificationBullets.SelectMany(b => CitationInText().Matches(b).Select(m => m.Value))))
             .Concat(report.Findings.SelectMany(f => f.Evidence))

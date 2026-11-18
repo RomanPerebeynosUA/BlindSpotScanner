@@ -337,6 +337,102 @@ public class ReportValidatorTests
     {
         public IReadOnlyList<string> Validate(string reportJson) => violations;
     }
+
+    private static TestAssertion Row(int? level, LevelSource source, string[] sent, string[] checkedFields, string[] missing) => new()
+    {
+        Test = "tests/A.cs::A.T0",
+        Level = level,
+        LevelSource = source,
+        ErrorPath = false,
+        SentFields = sent,
+        CheckedFields = checkedFields,
+        UncheckedFields = missing,
+        FieldsResolved = true,
+    };
+
+    /// <summary>The current example with its dimension 5 and summary assembled from the given row.</summary>
+    private static IntegrationReport WithRow(TestAssertion row) =>
+        ReportAssembler.Assemble(ReportDetail.From(Fixtures.Current) with { TestAssertions = [row] }, Fixtures.Previous) with { Validation = Fixtures.Current.Validation };
+
+    [Fact]
+    public void Validate_AssembledTestAssertions_ReturnsNoViolations()
+    {
+        // Arrange
+        var report = WithRow(Row(3, LevelSource.Code, ["title"], ["Title"], []));
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_TamperedDimensionFiveScore_ReturnsViolation()
+    {
+        // Arrange
+        var report = WithRow(Row(3, LevelSource.Code, [], [], []));
+        report = report with { Scorecard = report.Scorecard.Select(d => d.Id == 5 ? d with { Score = 7 } : d).ToList() };
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("scorecard/4/score: expected 6, found 7");
+    }
+
+    [Fact]
+    public void Validate_TamperedAssertionLevels_ReturnsViolation()
+    {
+        // Arrange
+        var report = WithRow(Row(3, LevelSource.Code, [], [], []));
+        report = report with { Summary = report.Summary with { AssertionLevels = report.Summary.AssertionLevels! with { L3 = 9 } } };
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("summary/assertionLevels/l3: expected 1, found 9");
+    }
+
+    [Fact]
+    public void Validate_UncheckedFieldsMismatch_ReturnsViolation()
+    {
+        // Arrange
+        var report = WithRow(Row(3, LevelSource.Code, ["title", "price"], ["Title"], []));
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("testAssertions/0/uncheckedFields: expected [price], found []");
+    }
+
+    [Fact]
+    public void Validate_UnknownSourceWithLevel_ReturnsViolation()
+    {
+        // Arrange
+        var report = WithRow(Row(3, LevelSource.Unknown, [], [], []));
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("testAssertions/0: levelSource unknown must go with a null level");
+    }
+
+    [Fact]
+    public void Validate_MalformedTestCitation_ReturnsViolation()
+    {
+        // Arrange
+        var report = WithRow(Row(3, LevelSource.Code, [], [], []) with { Test = "not a citation" });
+
+        // Act
+        var violations = _validator.Validate(report, Fixtures.Previous);
+
+        // Assert
+        violations.Should().Contain("testAssertions/0/test: malformed citation 'not a citation'");
+    }
 }
 
 /// <summary>Adds one to a named summary number (the switch lives here, not in the test).</summary>

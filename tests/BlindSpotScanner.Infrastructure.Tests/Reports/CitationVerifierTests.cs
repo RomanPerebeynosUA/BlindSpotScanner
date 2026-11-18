@@ -143,4 +143,27 @@ public class CitationVerifierTests
             Fetched = false,
         });
     }
+
+    [Fact]
+    public async Task Verify_TestAssertionNamesMethodThatIsNotATest_Fails()
+    {
+        // Arrange
+        var row = new TestAssertion
+        {
+            Test = $"{Factory}::ApiFactory.InitializeAsync",
+            Level = 3,
+            LevelSource = LevelSource.Code,
+            ErrorPath = false,
+            SentFields = [],
+            CheckedFields = [],
+            UncheckedFields = [],
+            FieldsResolved = true,
+        };
+
+        // Act
+        var check = await Verify(Sample with { TestAssertions = [row] });
+
+        // Assert
+        check.Failures.Should().Equal($"{Factory}::ApiFactory.InitializeAsync: no test named ApiFactory.InitializeAsync");
+    }
 }

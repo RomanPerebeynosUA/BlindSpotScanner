@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using BlindSpotScanner.Application.Scanning;
 using BlindSpotScanner.Domain.Enums;
 using BlindSpotScanner.Domain.Reports;
 
@@ -30,6 +31,7 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
         // 2–4, 7, 8. Re-derive everything the assembler owns and compare it with what the report claims.
         var expected = ReportAssembler.Assemble(ReportDetail.From(report), previous);
         Diff(Node(expected.EndpointCoverage), Node(report.EndpointCoverage), "endpointCoverage", violations);
+        Diff(Node(expected.Scorecard), Node(report.Scorecard), "scorecard", violations);
         Diff(Node(expected.TopRisks), Node(report.TopRisks), "topRisks", violations);
         Diff(Node(expected.Summary), Node(report.Summary), "summary", violations);
         Diff(Node(expected.Delta), Node(report.Delta), "delta", violations);
@@ -41,6 +43,7 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
         CheckWeights(report.Scorecard, violations);
         CheckEvidence(report, violations);
         CheckRisks(report.TopRisks, violations);
+        CheckTestAssertions(report.TestAssertions ?? [], violations);
 
         // 9. Citation resolution is checked by the CitationVerifier at the pinned SHA (M6).
 
@@ -129,6 +132,41 @@ public sealed partial class ReportValidator(IReportSchemaValidator schema)
             if (dimension.Scorable && (dimension.JustificationBullets.Count < 3 || !dimension.JustificationBullets[2].Contains("::", StringComparison.Ordinal)))
             {
                 violations.Add($"scorecard/{i}/justificationBullets/2: the evidence bullet of a scored dimension has no citation");
+            }
+        }
+    }
+
+    /// <summary>D27: each row's own consistency (dimension 5 and the level counts are re-derived above).</summary>
+    private static void CheckTestAssertions(IReadOnlyList<TestAssertion> tests, List<string> violations)
+    {
+        for (var i = 0; i < tests.Count; i++)
+        {
+            var test = tests[i];
+            var path = $"testAssertions/{i}";
+            if (!Citation().IsMatch(test.Test))
+            {
+                violations.Add($"{path}/test: malformed citation '{test.Test}'");
+            }
+
+            if ((test.LevelSource == LevelSource.Unknown) != (test.Level is null))
+            {
+                violations.Add($"{path}: levelSource unknown must go with a null level");
+            }
+
+            if (!test.FieldsResolved)
+            {
+                if (test.SentFields.Count + test.CheckedFields.Count + test.UncheckedFields.Count > 0)
+                {
+                    violations.Add($"{path}: unresolved fields must leave the field lists empty");
+                }
+
+                continue;
+            }
+
+            var expected = TestAssertionRules.UncheckedFields(test.SentFields, test.CheckedFields);
+            if (!expected.SequenceEqual(test.UncheckedFields, StringComparer.Ordinal))
+            {
+                violations.Add($"{path}/uncheckedFields: expected [{string.Join(", ", expected)}], found [{string.Join(", ", test.UncheckedFields)}]");
             }
         }
     }
