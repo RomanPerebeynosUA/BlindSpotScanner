@@ -26,6 +26,22 @@ public sealed class ClaudeLlmClient : ILlmClient
     /// <summary>Relaxed escaping keeps quotes and code readable for the model; the text is a prompt, not HTML.</summary>
     private static readonly JsonSerializerOptions PromptJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+    /// <summary>
+    /// JSON Schema keywords structured outputs reject with a 400 (numeric, string-length and array-size
+    /// constraints). Like the Python and TypeScript SDKs, they are stripped from what is sent and still
+    /// enforced by the local check, which re-asks on a violation.
+    /// </summary>
+    private static readonly HashSet<string> UnsupportedKeywords = new(StringComparer.Ordinal)
+    {
+        "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "minItems", "maxItems", "uniqueItems",
+    };
+
+    /// <summary>Keywords whose value maps names to subschemas, so their keys are names, never keywords.</summary>
+    private static readonly HashSet<string> SchemaMaps = new(StringComparer.Ordinal) { "properties", "patternProperties", "$defs", "definitions" };
+
+    /// <summary>Keywords whose value is data, not a schema.</summary>
+    private static readonly HashSet<string> DataKeywords = new(StringComparer.Ordinal) { "enum", "const", "default", "examples" };
+
     private readonly PromptLibrary _prompts;
     private readonly LlmOptions _options;
     private readonly AnthropicClient _client;
@@ -42,8 +58,9 @@ public sealed class ClaudeLlmClient : ILlmClient
 
     public async Task<LlmResult> CompleteAsync(LlmRequest request, CancellationToken ct)
     {
+        // The full schema is checked here; the API gets it without the keywords structured outputs reject.
         var schema = JsonSchema.FromText(request.OutputSchemaJson);
-        var format = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(request.OutputSchemaJson)
+        var format = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(ApiSchema(request.OutputSchemaJson))
             ?? throw new ArgumentException("The output schema is empty.", nameof(request));
         var messages = new List<BetaMessageParam>
         {
@@ -125,6 +142,53 @@ public sealed class ClaudeLlmClient : ILlmClient
         }
 
         return validate?.Invoke(output) ?? [];
+    }
+
+    /// <summary>
+    /// The answer schema as sent to the API: <see cref="UnsupportedKeywords"/> removed wherever they are
+    /// keywords (not property names, not enum or const data).
+    /// </summary>
+    private static string ApiSchema(string schemaJson)
+    {
+        var root = JsonNode.Parse(schemaJson);
+        Strip(root);
+        return root?.ToJsonString() ?? "null";
+    }
+
+    private static void Strip(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject schema:
+                foreach (var keyword in schema.Select(p => p.Key).Where(UnsupportedKeywords.Contains).ToList())
+                {
+                    schema.Remove(keyword);
+                }
+
+                foreach (var (key, value) in schema)
+                {
+                    if (SchemaMaps.Contains(key) && value is JsonObject map)
+                    {
+                        foreach (var (_, subschema) in map)
+                        {
+                            Strip(subschema);
+                        }
+                    }
+                    else if (!DataKeywords.Contains(key))
+                    {
+                        Strip(value);
+                    }
+                }
+
+                break;
+            case JsonArray subschemas:
+                foreach (var subschema in subschemas)
+                {
+                    Strip(subschema);
+                }
+
+                break;
+        }
     }
 
     /// <summary>
