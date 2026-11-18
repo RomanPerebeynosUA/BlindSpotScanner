@@ -11,14 +11,6 @@ namespace BlindSpotScanner.Infrastructure.Extraction;
 /// </summary>
 public sealed class CSharpTestSyntaxReader : ITestSyntaxReader
 {
-    private static readonly HashSet<string> TestAttributes = new(StringComparer.Ordinal)
-    {
-        "TestCase", "TestCaseSource", "TestMethod", "DataTestMethod",
-    };
-
-    /// <summary>Derived test attributes keep their base name as a suffix ([SkippableFact], [IntegrationTheory], [Test]).</summary>
-    private static readonly string[] TestAttributeSuffixes = ["Fact", "Theory", "Test"];
-
     public TestFileFacts Read(string source)
     {
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
@@ -34,20 +26,13 @@ public sealed class CSharpTestSyntaxReader : ITestSyntaxReader
             .ToList();
         var baseTypes = classes.SelectMany(c => c.BaseList?.Types ?? default).Select(t => Tokens(t.Type)).ToList();
         var testMethods = methods
-            .Where(m => m.Method.AttributeLists.SelectMany(l => l.Attributes).Any(a => IsTestAttribute(SyntaxNames.Of(a))))
-            .Select(m => $"{QualifiedName(m.Class)}.{m.Method.Identifier.ValueText}")
+            .Where(m => SyntaxNames.IsTestMethod(m.Method))
+            .Select(m => $"{SyntaxNames.QualifiedName(m.Class)}.{m.Method.Identifier.ValueText}")
             .ToList();
 
-        var allMethods = methods.Select(m => $"{QualifiedName(m.Class)}.{m.Method.Identifier.ValueText}").ToList();
+        var allMethods = methods.Select(m => $"{SyntaxNames.QualifiedName(m.Class)}.{m.Method.Identifier.ValueText}").ToList();
         return new TestFileFacts(attributes, baseTypes, testMethods, allMethods);
     }
-
-    /// <summary>Nested classes keep their outer classes, so two nested classes with one name stay distinct.</summary>
-    private static string QualifiedName(ClassDeclarationSyntax type) =>
-        string.Join('.', type.AncestorsAndSelf().OfType<ClassDeclarationSyntax>().Reverse().Select(c => c.Identifier.ValueText));
-
-    private static bool IsTestAttribute(string name) =>
-        TestAttributes.Contains(name) || TestAttributeSuffixes.Any(suffix => name.EndsWith(suffix, StringComparison.Ordinal));
 
     private static string Normalize(AttributeSyntax attribute) =>
         SyntaxNames.Of(attribute) + (attribute.ArgumentList is { } arguments ? Tokens(arguments) : string.Empty);
