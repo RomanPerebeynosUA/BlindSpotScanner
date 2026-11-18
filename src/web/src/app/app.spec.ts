@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
 import { provideTestAuth } from '../testing/auth';
+import { AuthService } from './core/auth/auth';
 
 describe('App', () => {
   async function configure(role: 'Viewer' | 'Member' | 'Admin' | null = 'Admin') {
@@ -66,5 +67,22 @@ describe('App', () => {
     // Assert
     const el = fixture.nativeElement as HTMLElement;
     expect([el.querySelector('button.signin')?.textContent?.trim(), el.querySelector('router-outlet')]).toEqual(['Sign in', null]);
+  });
+
+  it('an unreachable server shows a retry, not Sign in', async () => {
+    // Arrange
+    TestBed.resetTestingModule();
+    await configure(null);
+    const auth = TestBed.inject(AuthService);
+    auth.me.set(undefined);
+    auth.unreachable.set(true);
+    const fixture = TestBed.createComponent(App);
+
+    // Act
+    await fixture.whenStable();
+
+    // Assert
+    const el = fixture.nativeElement as HTMLElement;
+    expect([el.textContent?.includes("Can't reach the server"), el.querySelector('button.retry') !== null, el.querySelector('button.signin')]).toEqual([true, true, null]);
   });
 });

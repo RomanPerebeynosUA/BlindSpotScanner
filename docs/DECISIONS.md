@@ -298,3 +298,13 @@ The user's choices for M11: sign-in is server-side OpenID Connect with an HttpOn
   the first acknowledgement and who gave it); `POST …/scans` returns 409 "LLM data sharing not
   acknowledged" until then. Repositories registered before M11 need it once. `RepositoryResponse`
   and `RepositorySummary` carry `llmSharingAcknowledged`; `ActionResponse` carries `createdBy`.
+- Settings: `POST /api/settings/connections/{kind}/test` answers 200 with `{ ok, message }` whether or not
+  the connection works (the OpenAPI contract's 502 is reserved for the API itself failing); an unknown
+  kind is 404. Secrets shorter than 12 characters are masked as "••••" only.
+- Hardening after review: the cookie answers every challenge (only `/api/auth/login` challenges OIDC);
+  OIDC redirect URIs come from `App:PublicUrl`; `returnUrl` must be local and free of control
+  characters; unsafe `/api` and `/hubs` requests that browsers label `Sec-Fetch-Site: cross-site` or
+  `same-site` are refused (CSRF); sign-out ends the provider session only when its metadata has an
+  end-session endpoint; `CreatedBy` is the email (else subject, else name); compose binds its ports to
+  127.0.0.1 and the api warns when Local mode runs outside Development; logging levels (not sinks) come
+  from configuration, so nothing bypasses redaction; the failure metric's `reason` is a fixed category.

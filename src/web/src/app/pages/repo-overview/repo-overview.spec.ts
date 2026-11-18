@@ -34,9 +34,9 @@ const acknowledgeLlmSharing = vi.fn(() => of(undefined));
 async function render(
   runs: RunHistoryItem[],
   startScan: () => Observable<{ runId: string }> = () => of({ runId: 'new' }),
-  options: { role?: 'Viewer' | 'Member'; acknowledged?: boolean; consent?: boolean } = {},
+  options: { role?: 'Viewer' | 'Member'; acknowledged?: boolean; consent?: boolean | 'pending'; loadRepository?: boolean } = {},
 ) {
-  dialogOpen.mockReset().mockReturnValue({ afterClosed: () => of(options.consent ?? false) });
+  dialogOpen.mockReset().mockReturnValue({ afterClosed: () => (options.consent === 'pending' ? NEVER : of(options.consent ?? false)) });
   const repo = { ...repository, llmSharingAcknowledged: options.acknowledged ?? true };
   TestBed.configureTestingModule({
     imports: [RepoOverview],
@@ -44,7 +44,7 @@ async function render(
       provideRouter([]),
       provideTestAuth(options.role ?? 'Member'),
       { provide: MatDialog, useValue: { open: dialogOpen } },
-      { provide: RepositoriesApi, useValue: { get: () => of(repo), runs: () => of(runs), startScan, acknowledgeLlmSharing } },
+      { provide: RepositoriesApi, useValue: { get: () => (options.loadRepository === false ? NEVER : of(repo)), runs: () => of(runs), startScan, acknowledgeLlmSharing } },
     ],
   });
   vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
@@ -186,5 +186,27 @@ describe('RepoOverview', () => {
 
     // Assert
     expect(startScan).not.toHaveBeenCalled();
+  });
+
+  it('a second click while the consent dialog is open opens no second dialog', async () => {
+    // Arrange
+    const { el } = await render([], undefined, { acknowledged: false, consent: 'pending' });
+    const scan = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Scan now')) as HTMLButtonElement;
+
+    // Act
+    scan.click();
+    scan.click();
+
+    // Assert
+    expect(dialogOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('Scan now waits until the repository is loaded', async () => {
+    // Act (without it, the consent check can't run)
+    const { el } = await render([], undefined, { loadRepository: false });
+
+    // Assert
+    const scan = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Scan now')) as HTMLButtonElement;
+    expect(scan.disabled).toBe(true);
   });
 });

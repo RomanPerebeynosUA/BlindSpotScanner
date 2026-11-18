@@ -52,4 +52,17 @@ describe('AuthService', () => {
     // Assert
     expect(location.href).toBe('/api/auth/login?returnUrl=%2Fruns%2Frun1%3Fx%3D1');
   });
+
+  it('load() with a server error marks the server unreachable, not signed out', async () => {
+    // Arrange
+    const auth = TestBed.inject(AuthService);
+    const loading = auth.load();
+
+    // Act
+    TestBed.inject(HttpTestingController).expectOne('/api/me').flush(null, { status: 502, statusText: 'Bad Gateway' });
+    await loading;
+
+    // Assert
+    expect([auth.me(), auth.unreachable()]).toEqual([undefined, true]);
+  });
 });

@@ -30,6 +30,8 @@ export class RepoOverview implements OnInit {
   protected readonly repository = signal<Repository | null>(null);
   protected readonly runs = signal<RunHistoryItem[] | null>(null);
   protected readonly starting = signal(false);
+  /** The consent dialog or its acknowledgement is in progress, so Scan now waits. */
+  protected readonly consenting = signal(false);
 
   /** The last 12 succeeded runs, oldest first (history arrives newest first), matching the repositories list's trend (D23). */
   private readonly succeeded = computed(() =>
@@ -47,7 +49,12 @@ export class RepoOverview implements OnInit {
 
   /** The first scan of a repository asks for LLM data-sharing consent (doc 10) and records it. */
   protected scanNow(): void {
+    if (this.starting() || this.consenting() || !this.repository()) {
+      return;
+    }
+
     if (this.repository()?.llmSharingAcknowledged === false) {
+      this.consenting.set(true);
       this.dialog
         .open<LlmSharingDialog, unknown, boolean>(LlmSharingDialog, { maxWidth: 'calc(100vw - 32px)', ariaLabelledBy: 'llm-title' })
         .afterClosed()
@@ -55,9 +62,15 @@ export class RepoOverview implements OnInit {
           filter((agreed) => agreed === true),
           switchMap(() => this.api.acknowledgeLlmSharing(this.id())),
         )
-        .subscribe(() => {
-          this.repository.update((r) => (r ? { ...r, llmSharingAcknowledged: true } : r));
-          this.start();
+        .subscribe({
+          next: () => {
+            this.consenting.set(false);
+            this.repository.update((r) => (r ? { ...r, llmSharingAcknowledged: true } : r));
+            this.start();
+          },
+          // Declined (the filter completes without a value) or the acknowledgement failed (the interceptor says why).
+          complete: () => this.consenting.set(false),
+          error: () => this.consenting.set(false),
         });
       return;
     }

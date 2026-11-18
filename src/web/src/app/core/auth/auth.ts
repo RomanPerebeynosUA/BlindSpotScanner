@@ -1,6 +1,6 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable, InjectionToken, signal } from '@angular/core';
-import { catchError, firstValueFrom, of } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 
 export type Role = 'Viewer' | 'Member' | 'Admin';
 
@@ -39,11 +39,23 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly location = inject(BROWSER_LOCATION);
 
-  /** undefined while loading, null when signed out. */
+  /** undefined while loading (or when the server can't be reached), null when signed out. */
   readonly me = signal<Me | null | undefined>(undefined);
 
-  load(): Promise<void> {
-    return firstValueFrom(this.http.get<Me>('/api/me').pipe(catchError(() => of(null)))).then((me) => this.me.set(me));
+  /** The server didn't answer /api/me (starting up, down): not the same as signed out. */
+  readonly unreachable = signal(false);
+
+  async load(): Promise<void> {
+    this.unreachable.set(false);
+    try {
+      this.me.set(await firstValueFrom(this.http.get<Me>('/api/me')));
+    } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse && error.status === 401) {
+        this.me.set(null);
+      } else {
+        this.unreachable.set(true);
+      }
+    }
   }
 
   can(role: Role): boolean {

@@ -10,7 +10,7 @@
     </nav>
   </div>
   @if (auth.can('Member')) {
-    <button type="button" class="btn primary" [disabled]="starting()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
+    <button type="button" class="btn primary" [disabled]="starting() || consenting() || !repository()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
   }
 </div>
 
