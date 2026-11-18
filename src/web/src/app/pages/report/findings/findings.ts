@@ -8,9 +8,12 @@ const GROUPS: readonly { kind: FindingKind; title: string }[] = [
   { kind: 'FalsePositive', title: 'False positives' },
   { kind: 'SkippedTest', title: 'Skipped tests' },
   { kind: 'UncoveredSeam', title: 'Uncovered seams' },
+  { kind: 'NoAssertion', title: 'Tests that check nothing' },
+  { kind: 'UncheckedFields', title: 'Unchecked fields' },
+  { kind: 'ErrorWithoutStateCheck', title: 'Error tests without state checks' },
 ];
 
-/** False positives, skipped tests and uncovered seams (doc 04 section 6); uncovered endpoints are in the coverage table. */
+/** False positives, skipped tests, uncovered seams and the assertion-depth findings (doc 04 section 6, D27); uncovered endpoints are in the coverage table. */
 @Component({
   selector: 'app-findings',
   imports: [EvidenceLink, JiraAction, FixAction],

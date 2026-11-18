@@ -14,6 +14,7 @@ import { SummaryCard } from './summary-card/summary-card';
 import { TopRisks } from './top-risks/top-risks';
 import { EndpointCoverage } from './endpoint-coverage/endpoint-coverage';
 import { Scorecard } from './scorecard/scorecard';
+import { TestAssertions } from './test-assertions/test-assertions';
 import { Findings } from './findings/findings';
 import { ActionsLog } from './actions-log/actions-log';
 
@@ -23,7 +24,7 @@ import { ActionsLog } from './actions-log/actions-log';
  */
 @Component({
   selector: 'app-report',
-  imports: [DatePipe, RouterLink, SummaryCard, TopRisks, EndpointCoverage, Scorecard, Findings, DeltaChanges, ActionsLog],
+  imports: [DatePipe, RouterLink, SummaryCard, TopRisks, EndpointCoverage, Scorecard, Findings, DeltaChanges, ActionsLog, TestAssertions],
   providers: [ReportStore],
   templateUrl: './report.html',
   styleUrl: './report.scss',

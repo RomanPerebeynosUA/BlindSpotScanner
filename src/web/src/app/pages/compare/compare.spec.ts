@@ -115,6 +115,15 @@ describe('Compare', () => {
     expect(first.querySelector('td.up')).not.toBeNull();
   });
 
+  it('quality score row is uncoloured when scoreComparable is false', async () => {
+    // Act
+    const el = await render(of(comparison((c) => (c.delta.scoreComparable = false))));
+
+    // Assert
+    const rows = [...el.querySelectorAll('.metrics tbody tr')] as HTMLElement[];
+    expect([rows[0].querySelector('td.up, td.down'), rows[1].querySelector('td.up, td.down')]).toEqual([null, expect.anything()]);
+  });
+
   it('metrics headers name each run by date and short commit', async () => {
     // Act
     const el = await render(of(comparison()));

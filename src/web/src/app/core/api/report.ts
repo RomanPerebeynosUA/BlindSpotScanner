@@ -5,7 +5,9 @@ export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
 export type Confidence = 'High' | 'Med' | 'Low';
 export type IntegrationMappedTo = 'real-seam' | 'e2e-mocked-data' | 'e2e-real-backend' | 'contract' | 'other';
 export type Verdict = 'strong' | 'moderate' | 'partial' | 'weak';
-export type FindingKind = 'UncoveredEndpoint' | 'WeakTest' | 'FalsePositive' | 'SkippedTest' | 'UncoveredSeam' | 'Risk';
+export type FindingKind =
+  | 'UncoveredEndpoint' | 'WeakTest' | 'FalsePositive' | 'SkippedTest' | 'UncoveredSeam' | 'Risk'
+  | 'NoAssertion' | 'UncheckedFields' | 'ErrorWithoutStateCheck';
 
 export const COVERAGE_STATUSES: readonly CoverageStatus[] = ['covered', 'weak', 'skipped', 'none', 'unverified'];
 
@@ -91,6 +93,30 @@ export interface TopRisk {
   evidence?: string[];
 }
 
+/** One integration test's assertion depth, computed by the backend (D27). */
+export interface TestAssertion {
+  test: string;
+  /** 0–5, or null when the level could not be decided. */
+  level: number | null;
+  levelSource: 'code' | 'llm' | 'unknown';
+  readBack?: 'api' | 'db';
+  errorPath: boolean;
+  sentFields: string[];
+  checkedFields: string[];
+  uncheckedFields: string[];
+  fieldsResolved: boolean;
+}
+
+export interface AssertionLevels {
+  l0: number;
+  l1: number;
+  l2: number;
+  l3: number;
+  l4: number;
+  l5: number;
+  unknown: number;
+}
+
 export interface ReportSummary {
   endpoints: StatusCounts;
   controllers: StatusCounts;
@@ -101,6 +127,8 @@ export interface ReportSummary {
   falsePositiveCount?: number;
   skippedTestCount?: number;
   uncoveredRealSeams?: number;
+  /** Integration tests per assertion level (D27); absent before report schema 1.1. */
+  assertionLevels?: AssertionLevels;
   verdict: Verdict;
   bullets: { label: string; text: string }[];
   previousRunId?: string | null;
@@ -130,6 +158,8 @@ export interface RunDelta {
   baseCommitSha: string;
   baseGeneratedAt: string;
   comparable: boolean;
+  /** False when the quality score and dimension 5 were measured differently (D27); absent in older deltas. */
+  scoreComparable?: boolean;
   comparability: string[];
   metrics: DeltaMetric[];
   endpoints: { newlyCovered: string[]; regressed: string[]; added: string[]; removed: string[]; confidenceChanged?: string[] };
@@ -145,6 +175,8 @@ export interface IntegrationReport {
   scorecard: ScorecardRow[];
   findings: Finding[];
   topRisks: TopRisk[];
+  /** Per-test assertion depth (D27); absent before report schema 1.1. */
+  testAssertions?: TestAssertion[];
   summary: ReportSummary;
   delta?: RunDelta | null;
   validation: Validation;

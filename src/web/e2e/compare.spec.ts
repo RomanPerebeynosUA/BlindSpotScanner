@@ -51,7 +51,7 @@ test('report_runPicker_opensPreviousRun', async ({ page }) => {
 
   // Assert
   await expect(page).toHaveURL(`/runs/${PREVIOUS_RUN_ID}`);
-  await expect(page.locator('.kpi').filter({ hasText: 'Quality score' }).locator('.val')).toHaveText(/4\.7\s*\/10/);
+  await expect(page.locator('.kpi').filter({ hasText: 'Quality score' }).locator('.val')).toHaveText(/4\.5\s*\/10/);
 });
 
 test('repositories_trend_drawsSparkline', async ({ page }) => {

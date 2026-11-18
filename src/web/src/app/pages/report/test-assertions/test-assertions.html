@@ -1,0 +1,24 @@
+@let l = levels();
+<div class="panel stack test-assertions">
+  <h2>Assertion depth</h2>
+  <p class="muted levels">
+    L0 {{ l.l0 }} · L1 {{ l.l1 }} · L2 {{ l.l2 }} · L3 {{ l.l3 }} · L4 {{ l.l4 }} · L5 {{ l.l5 }} · unknown {{ l.unknown }}
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Test</th><th>Level</th><th>Read back</th><th>Not checked</th></tr>
+      </thead>
+      <tbody>
+        @for (t of sorted(); track t.test) {
+          <tr>
+            <td><app-evidence-link [meta]="meta()" [citation]="t.test" /></td>
+            <td>{{ level(t) }}</td>
+            <td>{{ t.readBack ?? '—' }}</td>
+            <td>{{ unchecked(t) }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

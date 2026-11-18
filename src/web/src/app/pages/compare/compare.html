@@ -63,7 +63,8 @@
             <td>{{ label(m.name) }}</td>
             <td>{{ value(m.name, m.prev) }}</td>
             <td>{{ value(m.name, m.curr) }}</td>
-            <td [class]="tone(m.direction, d.comparable)">{{ change(m.name, m.change, m.direction, d.comparable) }}</td>
+            @let comparable = d.comparable && (m.name !== 'qualityScore' || d.scoreComparable !== false);
+            <td [class]="tone(m.direction, comparable)">{{ change(m.name, m.change, m.direction, comparable) }}</td>
           </tr>
         }
         @for (s of d.scorecard; track s.dimension) {

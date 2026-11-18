@@ -238,6 +238,40 @@ describe('Report', () => {
     expect([chip.textContent?.trim(), chip.classList.contains('up')]).toEqual(['▲ 0.4', true]);
   });
 
+  it('assertion table is hidden for a report without testAssertions', async () => {
+    // Act
+    const { el } = await render(withReport((r) => delete r.testAssertions));
+
+    // Assert
+    expect(el.querySelector('app-test-assertions')).toBeNull();
+  });
+
+  it('assertion table is shown for a report with testAssertions', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    expect(el.querySelectorAll('app-test-assertions tbody tr').length).toBe(6);
+  });
+
+  it('findings show the three new groups', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    const titles = [...el.querySelectorAll('.findings h3')].map((h) => h.textContent?.trim());
+    expect(titles).toEqual(expect.arrayContaining(['Tests that check nothing', 'Unchecked fields', 'Error tests without state checks']));
+  });
+
+  it('score chip is flat when scoreComparable is false but endpoint chips stay coloured', async () => {
+    // Act
+    const { el } = await render(withReport((r) => (r.delta!.scoreComparable = false)));
+
+    // Assert
+    const score = kpi(el, 'Quality score').querySelector('.delta') as HTMLElement;
+    expect([score.classList.contains('flat'), el.querySelectorAll('.kpi .delta.up, .kpi .delta.down').length > 0]).toEqual([true, true]);
+  });
+
   it('not comparable shows the banner and flat chips', async () => {
     // Act
     const { el } = await render(withReport((r) => {

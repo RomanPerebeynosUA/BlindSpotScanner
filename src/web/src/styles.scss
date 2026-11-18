@@ -75,6 +75,8 @@ th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spac
 td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 tr.ctrl td { background: var(--sunk); font-weight: 600; }
 .ev { font-family: var(--mono); font-size: .78rem; color: var(--accent); word-break: break-all; }
+/* Finding keys and details can be long citations without spaces (D27). */
+.changes li, .finding li { overflow-wrap: anywhere; }
 .bar { height: 8px; background: var(--sunk); border-radius: 99px; overflow: hidden; min-width: 80px; }
 .bar span { display: block; height: 100%; background: var(--accent); }
 .filters { display: flex; flex-wrap: wrap; gap: 6px; }

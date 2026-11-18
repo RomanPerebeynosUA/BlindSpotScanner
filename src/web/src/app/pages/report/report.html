@@ -47,6 +47,11 @@
   <app-top-risks [risks]="report.topRisks" [meta]="meta" />
   <app-endpoint-coverage [meta]="meta" />
   <app-scorecard [rows]="report.scorecard" [meta]="meta" [scoreLabel]="report.summary.scoreLabel" />
+  @if (report.testAssertions; as tests) {
+    @if (report.summary.assertionLevels; as levels) {
+      <app-test-assertions [tests]="tests" [levels]="levels" [meta]="meta" />
+    }
+  }
   <app-findings [findings]="report.findings" [meta]="meta" />
   <app-actions-log [actions]="store.actions()" />
 

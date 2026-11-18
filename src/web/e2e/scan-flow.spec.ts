@@ -43,7 +43,7 @@ test('liveProgress_thenCompletion_showsReport', async ({ page }) => {
   // Assert
   await expect(page).toHaveURL(`/runs/${RUN_ID}`);
   await expect(page.getByRole('heading', { name: 'example-org/bookstore-api' })).toBeVisible();
-  await expect(page.locator('.kpi').filter({ hasText: 'Quality score' }).locator('.val')).toHaveText(/5\.1\s*\/10/);
+  await expect(page.locator('.kpi').filter({ hasText: 'Quality score' }).locator('.val')).toHaveText(/4\.9\s*\/10/);
 });
 
 test('report_filterWeak_showsOnlyWeakEndpoint', async ({ page }) => {
