@@ -71,7 +71,8 @@ public sealed class ScanPipeline(
         var usage = classified.Usage.Add(mapped.Usage).Add(graded.Usage);
 
         var detail = Detail(runId, run, profile, inventory, endpoints, classified, mapped.Value, graded.Value, usage, [.. endpoints.UnverifiedReasons, .. classified.Notes, .. mapped.Notes, .. assessed.Notes, .. graded.Notes])
-            with { TestAssertions = assessed.Value };
+            with
+        { TestAssertions = assessed.Value };
         var (report, violations) = await Phase(ScanPhases.Assemble, () => Task.FromResult(Assemble(detail, previous)), r => new PhaseReport(ScanPhases.Assemble, LlmUsage.None, r.Violations, 0));
         return new ScanOutcome(run, report, violations, usage);
     }
