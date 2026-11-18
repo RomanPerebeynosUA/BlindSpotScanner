@@ -17,6 +17,8 @@ namespace BlindSpotScanner.Infrastructure.Settings;
 /// </summary>
 public sealed class ConnectionTester(HttpClient http, IOptions<GitHubOptions> github, IOptions<JiraOptions> jira, IOptions<LlmOptions> llm) : IConnectionSettings
 {
+    private const int MaxReasonLength = 200;
+
     private string? ClaudeKey => llm.Value.ApiKey ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
 
     public IReadOnlyList<ConnectionStatus> Statuses()
@@ -95,16 +97,23 @@ public sealed class ConnectionTester(HttpClient http, IOptions<GitHubOptions> gi
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{(llm.Value.BaseUrl ?? "https://api.anthropic.com").TrimEnd('/')}/v1/models");
         request.Headers.Add("x-api-key", ClaudeKey);
         request.Headers.Add("anthropic-version", "2023-06-01");
-        return await ReadAsync(request, "Claude", _ => "Connected to Claude.", ct);
+        return await ReadAsync(request, "Claude", _ => "Connected to Claude.", ct, ClaudeReason, ClaudeKey);
     }
 
-    /// <summary>Only the status code reaches the message; response bodies and request headers never do.</summary>
-    private async Task<ConnectionTestResult> ReadAsync(HttpRequestMessage request, string name, Func<JsonNode?, string> ok, CancellationToken ct)
+    /// <summary>
+    /// The status code reaches the message, plus the reason <paramref name="reason"/> reads from an error
+    /// body (never request headers). A reason that contains <paramref name="secret"/> is dropped (doc 10).
+    /// </summary>
+    private async Task<ConnectionTestResult> ReadAsync(
+        HttpRequestMessage request, string name, Func<JsonNode?, string> ok, CancellationToken ct,
+        Func<JsonNode?, string?>? reason = null, string? secret = null)
     {
         using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
         {
-            return new ConnectionTestResult(false, $"{name} answered {(int)response.StatusCode}; check the configured credentials.");
+            var why = reason is null ? null : reason(await TryParseAsync(response, ct));
+            var safe = why is not null && (secret is null || !why.Contains(secret, StringComparison.Ordinal)) ? $" ({why})" : string.Empty;
+            return new ConnectionTestResult(false, $"{name} answered {(int)response.StatusCode}{safe}; check the configured credentials.");
         }
 
         JsonNode? body;
@@ -118,6 +127,31 @@ public sealed class ConnectionTester(HttpClient http, IOptions<GitHubOptions> gi
         }
 
         return new ConnectionTestResult(true, ok(body));
+    }
+
+    private static async Task<JsonNode?> TryParseAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct));
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Claude's error body: <c>{"type":"error","error":{"type":"…","message":"…"}}</c>, at most 200 characters.</summary>
+    private static string? ClaudeReason(JsonNode? body)
+    {
+        if (body?["error"] is not JsonObject error || error["type"] is not JsonValue type || error["message"] is not JsonValue message
+            || !type.TryGetValue<string>(out var kind) || !message.TryGetValue<string>(out var text))
+        {
+            return null;
+        }
+
+        var reason = $"{kind}: {text}";
+        return reason.Length <= MaxReasonLength ? reason : reason[..MaxReasonLength] + "…";
     }
 
     private static string Name(string kind) => kind switch { "github" => "GitHub", "jira" => "Jira", _ => "Claude" };
