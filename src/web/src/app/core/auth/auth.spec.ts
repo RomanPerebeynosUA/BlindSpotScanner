@@ -13,7 +13,7 @@ describe('AuthService', () => {
 
   it('can() respects role order', () => {
     // Act
-    const member = { name: 'dev', roles: ['Member'] };
+    const member = { name: 'dev', roles: ['Member'], localMode: false };
 
     // Assert
     expect([hasRole(member, 'Viewer'), hasRole(member, 'Member'), hasRole(member, 'Admin'), hasRole(null, 'Viewer')]).toEqual([true, true, false, false]);
@@ -38,7 +38,7 @@ describe('AuthService', () => {
     const loading = auth.load();
 
     // Act
-    TestBed.inject(HttpTestingController).expectOne('/api/me').flush({ name: 'dev@example.com', roles: ['Member'] });
+    TestBed.inject(HttpTestingController).expectOne('/api/me').flush({ name: 'dev@example.com', roles: ['Member'], localMode: false });
     await loading;
 
     // Assert
