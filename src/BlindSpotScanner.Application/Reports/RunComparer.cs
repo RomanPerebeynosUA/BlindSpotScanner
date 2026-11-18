@@ -16,13 +16,16 @@ public static class RunComparer
     public static RunDelta Compare(IntegrationReport previous, IntegrationReport current)
     {
         var comparability = Comparability(previous, current);
+        var comparable = IsComparable(previous, current);
         return new RunDelta
         {
             BaseRunId = previous.Meta.RunId,
             BaseCommitSha = previous.Meta.CommitSha,
             BaseGeneratedAt = previous.Meta.GeneratedAt,
-            Comparable = IsComparable(previous, current),
+            Comparable = comparable,
             Comparability = comparability,
+            // D27: a schema change can change how assertion strength is measured.
+            ScoreComparable = comparable && previous.Meta.SchemaVersion == current.Meta.SchemaVersion,
             Metrics = Metrics(previous.Summary, current.Summary),
             Endpoints = Endpoints(previous, current),
             Scorecard = Scorecard(previous, current),
@@ -78,6 +81,7 @@ public static class RunComparer
         if (p.SchemaVersion != c.SchemaVersion)
         {
             reasons.Add("schema version changed");
+            reasons.Add($"assertion strength is measured differently (schema {p.SchemaVersion} → {c.SchemaVersion}): quality score and dimension 5 changes are not like-for-like");
         }
 
         if (p.ModelId != c.ModelId || p.PromptSetVersion != c.PromptSetVersion)
