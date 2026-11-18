@@ -82,6 +82,25 @@ public sealed class ConnectionTesterTests : IDisposable
     }
 
     [Fact]
+    public async Task TestLlm_WorkspaceConfigured_SendsWorkspaceHeader()
+    {
+        // Arrange (WireMock answers only a request that carries the workspace header)
+        _server.Given(Request.Create().WithPath("/v1/models").WithHeader("anthropic-workspace-id", "wrkspc_01abc").UsingGet())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new { data = Array.Empty<object>() }));
+        var tester = new ConnectionTester(
+            new HttpClient(),
+            Options.Create(new GitHubOptions()),
+            Options.Create(new JiraOptions()),
+            Options.Create(new LlmOptions { BaseUrl = _server.Url!, ApiKey = ClaudeKey, WorkspaceId = "wrkspc_01abc" }));
+
+        // Act
+        var result = await tester.TestAsync("llm", CancellationToken.None);
+
+        // Assert
+        result.Should().Be(new Application.Settings.ConnectionTestResult(true, "Connected to Claude."));
+    }
+
+    [Fact]
     public async Task Test_UnknownKind_ReturnsNull()
     {
         // Act

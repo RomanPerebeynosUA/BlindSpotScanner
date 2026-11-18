@@ -95,6 +95,11 @@ public sealed class ConnectionTester(HttpClient http, IOptions<GitHubOptions> gi
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{(llm.Value.BaseUrl ?? "https://api.anthropic.com").TrimEnd('/')}/v1/models");
         request.Headers.Add("x-api-key", ClaudeKey);
         request.Headers.Add("anthropic-version", "2023-06-01");
+        if (!string.IsNullOrWhiteSpace(llm.Value.WorkspaceId))
+        {
+            request.Headers.Add(LlmOptions.WorkspaceHeader, llm.Value.WorkspaceId);
+        }
+
         return await ReadAsync(request, "Claude", _ => "Connected to Claude.", ct);
     }
 

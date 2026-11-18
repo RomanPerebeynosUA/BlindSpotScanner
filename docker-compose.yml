@@ -21,6 +21,7 @@ services:
       ConnectionStrings__Postgres: "Host=db;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       GitHub__Token: ${GITHUB_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      Llm__WorkspaceId: ${ANTHROPIC_WORKSPACE_ID:-}
       Jira__BaseUrl: ${JIRA_BASE_URL:-}
       Jira__Email: ${JIRA_EMAIL:-}
       Jira__ApiToken: ${JIRA_API_TOKEN:-}
@@ -48,6 +49,7 @@ services:
       ConnectionStrings__Postgres: "Host=db;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       GitHub__Token: ${GITHUB_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      Llm__WorkspaceId: ${ANTHROPIC_WORKSPACE_ID:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       db:
