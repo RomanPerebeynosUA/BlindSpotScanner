@@ -26,7 +26,7 @@ public class ScanRunTests
 
         // Assert
         new { run.Score, run.WeightAssessablePct, run.EndpointsTotal, run.EndpointsCovered, run.EndpointsWeak, run.EndpointsNone, run.EndpointsUnverified }
-            .Should().BeEquivalentTo(new { Score = 5.1m, WeightAssessablePct = 90m, EndpointsTotal = 5, EndpointsCovered = 3, EndpointsWeak = 1, EndpointsNone = 1, EndpointsUnverified = 0 });
+            .Should().BeEquivalentTo(new { Score = 4.9m, WeightAssessablePct = 90m, EndpointsTotal = 5, EndpointsCovered = 3, EndpointsWeak = 1, EndpointsNone = 1, EndpointsUnverified = 0 });
     }
 
     [Fact]

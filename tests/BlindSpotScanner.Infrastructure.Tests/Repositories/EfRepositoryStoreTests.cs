@@ -72,7 +72,7 @@ public class EfRepositoryStoreTests(PostgresFixture db)
             FullName = $"example-org/{repository.Name}",
             DefaultBranch = "main",
             LastRunId = (Guid?)succeeded.Id,
-            LastScore = (decimal?)5.1m,
+            LastScore = (decimal?)4.9m,
             LastCoveredShare = (decimal?)(3m / 5m),
             LastScanAt = succeeded.GeneratedAt,
             ActiveRunId = (Guid?)queued.Id,
@@ -188,7 +188,7 @@ public class EfRepositoryStoreTests(PostgresFixture db)
         // Assert
         var trend = list.Single(r => r.Id == repository.Id).Trend;
         trend.Select(p => p.RunId).Should().Equal(ids.Skip(1));
-        trend[0].Should().BeEquivalentTo(new { Score = (decimal?)5.1m, CoveredShare = (decimal?)0.6m, GeneratedAt = start.AddDays(1) });
+        trend[0].Should().BeEquivalentTo(new { Score = (decimal?)4.9m, CoveredShare = (decimal?)0.6m, GeneratedAt = start.AddDays(1) });
     }
 
     [Fact]

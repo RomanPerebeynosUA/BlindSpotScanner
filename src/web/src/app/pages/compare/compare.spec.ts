@@ -14,8 +14,8 @@ const CURRENT = '22222222-2222-4222-8222-222222222222';
 
 const comparison = (change: (c: Comparison) => void = () => undefined): Comparison => {
   const c: Comparison = {
-    base: { runId: PREVIOUS, branch: 'main', commitSha: '0f1e2d3c4b5a69788796a5b4c3d2e1f001234567', generatedAt: '2026-11-01T09:00:00Z', score: 4.7 },
-    target: { runId: CURRENT, branch: 'main', commitSha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678', generatedAt: '2026-11-15T09:00:00Z', score: 5.1 },
+    base: { runId: PREVIOUS, branch: 'main', commitSha: '0f1e2d3c4b5a69788796a5b4c3d2e1f001234567', generatedAt: '2026-11-01T09:00:00Z', score: 4.5 },
+    target: { runId: CURRENT, branch: 'main', commitSha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678', generatedAt: '2026-11-15T09:00:00Z', score: 4.9 },
     swapped: false,
     adHoc: false,
     delta: sampleReport().delta as RunDelta,
@@ -111,7 +111,7 @@ describe('Compare', () => {
 
     // Assert
     const first = el.querySelector('.metrics tbody tr') as HTMLElement;
-    expect([...first.querySelectorAll('td')].map((td) => td.textContent?.trim())).toEqual(['Quality score', '4.7', '5.1', '▲ 0.4 improved']);
+    expect([...first.querySelectorAll('td')].map((td) => td.textContent?.trim())).toEqual(['Quality score', '4.5', '4.9', '▲ 0.4 improved']);
     expect(first.querySelector('td.up')).not.toBeNull();
   });
 

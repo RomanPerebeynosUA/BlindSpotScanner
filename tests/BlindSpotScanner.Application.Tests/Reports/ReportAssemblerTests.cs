@@ -69,7 +69,8 @@ public class ReportAssemblerTests
     {
         // Arrange
         var detail = CurrentDetail;
-        detail = detail with { Scorecard = detail.Scorecard.Select(d => d with { Scorable = false, Score = null }).ToList() };
+        // Without assertion rows dimension 5 is taken as authored, like every other dimension.
+        detail = detail with { Scorecard = detail.Scorecard.Select(d => d with { Scorable = false, Score = null }).ToList(), TestAssertions = null };
 
         // Act
         var summary = ReportAssembler.Assemble(detail, previous: null).Summary;
@@ -149,7 +150,7 @@ public class ReportAssemblerTests
 
         // Assert
         summary.ScoreLabel.Should().Be(
-            "5.1 / 10 across scored dimensions (90% of weight assessable) — not comparable to real-seam scores (e2e-mocked-data)");
+            "4.9 / 10 across scored dimensions (90% of weight assessable) — not comparable to real-seam scores (e2e-mocked-data)");
     }
 
     [Fact]

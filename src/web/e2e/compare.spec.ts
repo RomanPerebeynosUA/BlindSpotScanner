@@ -62,5 +62,5 @@ test('repositories_trend_drawsSparkline', async ({ page }) => {
   await page.goto('/');
 
   // Assert
-  await expect(page.locator('td.trend svg')).toHaveAttribute('aria-label', 'Score trend: 4.7 to 5.1');
+  await expect(page.locator('td.trend svg')).toHaveAttribute('aria-label', 'Score trend: 4.5 to 4.9');
 });

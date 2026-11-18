@@ -37,7 +37,7 @@ public class CitationVerifierTests
         var check = await Verify(Sample);
 
         // Assert
-        check.Should().BeEquivalentTo(new { Checked = 6, Resolved = 6, Failures = Array.Empty<string>() });
+        check.Should().BeEquivalentTo(new { Checked = 12, Resolved = 12, Failures = Array.Empty<string>() });
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class CitationVerifierTests
         await Verify(Sample, github);
 
         // Assert
-        github.Fetches.Should().Equal(Factory, Books, "tests/Bookstore.IntegrationTests/OrdersApiTests.cs");
+        github.Fetches.Should().Equal(Factory, Books, "tests/Bookstore.IntegrationTests/OrdersApiTests.cs", "tests/Bookstore.UnitTests/StockQueryTests.cs");
     }
 
     private sealed class CountingGitHub(IGitHubClient inner) : IGitHubClient

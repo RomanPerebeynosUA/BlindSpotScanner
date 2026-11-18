@@ -78,7 +78,7 @@ describe('Report', () => {
     const { el } = await render(withReport());
 
     // Assert
-    expect(kpi(el, 'Quality score').querySelector('.val')?.textContent?.replace(/\s+/g, '')).toBe('5.1/10');
+    expect(kpi(el, 'Quality score').querySelector('.val')?.textContent?.replace(/\s+/g, '')).toBe('4.9/10');
     expect(kpi(el, 'Quality score').querySelector('.sub')?.textContent?.trim()).toBe('90% of weight assessable');
     expect(kpi(el, 'Endpoints covered').querySelector('.val')?.textContent?.replace(/\s+/g, '')).toBe('3/5');
     expect(kpi(el, 'Untested').querySelector('.val')?.textContent?.trim()).toBe('1');
