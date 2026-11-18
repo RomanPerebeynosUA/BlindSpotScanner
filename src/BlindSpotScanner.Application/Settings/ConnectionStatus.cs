@@ -18,7 +18,10 @@ public interface IConnectionSettings
 
 public static class SecretMask
 {
-    /// <summary>"••••" plus the last 4 characters; secrets of 4 characters or fewer show only "••••"; empty is null.</summary>
+    /// <summary>Only secrets this long show their last 4 characters; shorter ones would give too much away.</summary>
+    public const int MinLengthToShowTail = 12;
+
+    /// <summary>"••••" plus the last 4 characters; secrets shorter than 12 characters show only "••••"; empty is null.</summary>
     public static string? Mask(string? secret) =>
-        string.IsNullOrWhiteSpace(secret) ? null : secret.Length <= 4 ? "••••" : "••••" + secret[^4..];
+        string.IsNullOrWhiteSpace(secret) ? null : secret.Length < MinLengthToShowTail ? "••••" : "••••" + secret[^4..];
 }

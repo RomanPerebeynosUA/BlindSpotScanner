@@ -37,6 +37,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<BlindSpotScannerDbContext>().Database.MigrateAsync();
 }
 
+app.UseCrossSiteGuard();
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -56,9 +56,15 @@ public sealed class RunsController(ScanRequests scans, Application.Repositories.
 
         var report = Domain.Reports.ReportJsonSerializer.Deserialize(json);
         var name = $"report-{report.Meta.Repo.Owner}-{report.Meta.Repo.Name}-{report.Meta.CommitSha[..Math.Min(7, report.Meta.CommitSha.Length)]}";
-        return kind == "json"
-            ? File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", $"{name}.json")
-            : File(System.Text.Encoding.UTF8.GetBytes(Application.Reports.ReportHtmlRenderer.Render(report)), "text/html", $"{name}.html");
+        if (kind == "json")
+        {
+            return File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", $"{name}.json");
+        }
+
+        // Opened in the browser to print. Report text is LLM-authored, so the page may not run or load anything.
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'";
+        return File(System.Text.Encoding.UTF8.GetBytes(Application.Reports.ReportHtmlRenderer.Render(report)), "text/html; charset=utf-8");
     }
 
     [HttpGet("steps")]

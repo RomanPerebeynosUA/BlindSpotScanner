@@ -27,6 +27,16 @@ public class SecretMaskTests
     }
 
     [Fact]
+    public void Mask_EightCharacterSecret_RevealsNothing()
+    {
+        // Act (showing 4 of 8 characters would give away half the secret)
+        var masked = SecretMask.Mask("abcd1234");
+
+        // Assert
+        masked.Should().Be("••••");
+    }
+
+    [Fact]
     public void Mask_Empty_ReturnsNull()
     {
         // Act

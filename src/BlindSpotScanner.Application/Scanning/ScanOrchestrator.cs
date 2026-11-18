@@ -96,7 +96,7 @@ public sealed class ScanOrchestrator(
         ScanTelemetry.Cost.Add((double)spentUsd);
         if (run.Status == RunStatus.Failed && run.FailureReasons is [var reason, ..])
         {
-            ScanTelemetry.Failures.Add(1, new KeyValuePair<string, object?>("reason", reason.Length > 60 ? reason[..60] : reason));
+            ScanTelemetry.Failures.Add(1, new KeyValuePair<string, object?>("reason", ScanTelemetry.FailureCategory(reason)));
         }
     }
 

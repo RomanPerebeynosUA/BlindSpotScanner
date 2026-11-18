@@ -22,10 +22,18 @@ public static class ScanTelemetry
 
     public static readonly Counter<double> Cost = Meter.CreateCounter<double>("bss.scan.cost", "USD", "LLM cost per scan");
 
-    /// <summary>Tagged <c>reason</c> (the first failure reason, at most 60 characters).</summary>
+    /// <summary>Tagged <c>reason</c>: a fixed category from <see cref="FailureCategory"/>.</summary>
     public static readonly Counter<long> Failures = Meter.CreateCounter<long>("bss.scan.failures", "{scan}", "Failed scans");
 
     private static long _gitHubRateLimitRemaining = -1;
+
+    /// <summary>A fixed tag for a failure reason (citation, validation, model-mismatch, profile, error), so the metric keeps a bounded number of series.</summary>
+    public static string FailureCategory(string reason) =>
+        reason.StartsWith("citation:", StringComparison.Ordinal) ? "citation"
+        : reason.StartsWith("validation:", StringComparison.Ordinal) ? "validation"
+        : reason.StartsWith("This worker runs", StringComparison.Ordinal) ? "model-mismatch"
+        : reason.StartsWith("Profile version", StringComparison.Ordinal) ? "profile"
+        : "error";
 
     static ScanTelemetry() =>
         Meter.CreateObservableGauge(

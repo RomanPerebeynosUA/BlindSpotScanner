@@ -65,6 +65,38 @@ public class AuthApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnly
     }
 
     [Fact]
+    public async Task StartScan_CrossSiteBrowserRequest_Returns403()
+    {
+        // Arrange (a form on another site can POST without a body; browsers label it Sec-Fetch-Site)
+        var repositoryId = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient(Roles.Member);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/repositories/{repositoryId}/scans");
+        request.Headers.Add("Sec-Fetch-Site", "cross-site");
+
+        // Act
+        using var response = await client.SendAsync(request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task StartScan_SameOriginBrowserRequest_Returns202()
+    {
+        // Arrange
+        var repositoryId = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient(Roles.Member);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/repositories/{repositoryId}/scans");
+        request.Headers.Add("Sec-Fetch-Site", "same-origin");
+
+        // Act
+        using var response = await client.SendAsync(request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
     public async Task GetRepositories_Viewer_Returns200()
     {
         // Arrange
@@ -159,6 +191,20 @@ public class AuthApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnly
 
 public class RoleClaimsTests
 {
+    [Fact]
+    public void CreatedBy_PrefersEmailOverDisplayName()
+    {
+        // Arrange (two people can share a display name; the audit trail needs who it was)
+        var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim("name", "Dev Example"), new System.Security.Claims.Claim("email", "dev@example.com"), new System.Security.Claims.Claim("sub", "u-123")], "Test"));
+
+        // Act
+        var createdBy = HttpCurrentUser.IdOf(user);
+
+        // Assert
+        createdBy.Should().Be("dev@example.com");
+    }
+
     [Fact]
     public void LocalModeWarning_OutsideDevelopment_WarnsThatEveryoneIsAdmin()
     {
