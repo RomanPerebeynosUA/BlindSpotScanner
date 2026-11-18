@@ -322,3 +322,12 @@ the LLM yet (the first slice is code-only, so no new prompt); `testAssertions[]`
 `endpointIds`; the HTML export and fix PRs don't use the new data yet. P6's grading prompt (v1.1.0)
 no longer grades dimension 5, and an answer that still contains it is ignored, not re-asked.
 `PromptSetVersion` 1.1.0, report `schemaVersion` 1.1.
+
+## D28 — Claude workspace header for organization keys (2026-11-18)
+An organization API key that isn't scoped to one workspace is rejected by Claude (400: "must include
+the anthropic-workspace-id header"). `Llm:WorkspaceId` (env `Llm__WorkspaceId`, set from
+`ANTHROPIC_WORKSPACE_ID` in compose) is sent as `anthropic-workspace-id` on every Claude call: by the
+scan client through the SDK's `ClientOptions.ExtraHeaders`, and by the Settings connection test. Unset or
+empty sends no header, so workspace-scoped keys work unchanged. Compose maps the variable to
+`Llm__WorkspaceId` rather than passing `ANTHROPIC_WORKSPACE_ID` through, because the SDK reads that name
+for Workload Identity Federation.

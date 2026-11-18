@@ -28,16 +28,19 @@ public sealed class ClaudeLlmClient : ILlmClient
 
     private readonly PromptLibrary _prompts;
     private readonly LlmOptions _options;
-    private readonly AnthropicClient _client;
+    private readonly IAnthropicClient _client;
 
     public ClaudeLlmClient(PromptLibrary prompts, IOptions<LlmOptions> options)
     {
         _prompts = prompts;
         _options = options.Value;
         var apiKey = _options.ApiKey ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
-        _client = _options.BaseUrl is { } baseUrl
+        var client = _options.BaseUrl is { } baseUrl
             ? new AnthropicClient { ApiKey = apiKey, BaseUrl = baseUrl }
             : new AnthropicClient { ApiKey = apiKey };
+        _client = string.IsNullOrWhiteSpace(_options.WorkspaceId)
+            ? client
+            : client.WithOptions(o => o with { ExtraHeaders = new Dictionary<string, string> { [LlmOptions.WorkspaceHeader] = _options.WorkspaceId } });
     }
 
     public async Task<LlmResult> CompleteAsync(LlmRequest request, CancellationToken ct)
