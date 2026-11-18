@@ -1,4 +1,4 @@
-# Task: grade integration-test quality — v1.0.0
+# Task: grade integration-test quality — v1.1.0
 
 **Input:**
 ```json
@@ -9,8 +9,9 @@
   "coverageSummaryForContext": { "endpointsTotal": 0, "none": ["POST api/orders/{id}/cancel"] } }
 ```
 
-Score each of the 7 dimensions (1–10, or `scorable:false` with `score:null` when the input is
-insufficient). **Do not guess a number.** Use the rubric and band anchors in doc 06 (they are
+Score dimensions 1–4, 6 and 7 (1–10, or `scorable:false` with `score:null` when the input is
+insufficient). Do not return dimension 5 (Assertion strength): code computes it from per-test
+assertion levels (D27). **Do not guess a number.** Use the rubric and band anchors in doc 06 (they are
 embedded at runtime).
 
 Use `integrationMappedTo` to decide how honestly to score dimension #1. If the value is not

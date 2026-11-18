@@ -117,6 +117,27 @@ public class JiraTicketsTests
         draft.Priority.Should().Be("Highest");
     }
 
+    [Theory]
+    [InlineData(FindingKind.NoAssertion, "The test asserts the response values and the persisted state.")]
+    [InlineData(FindingKind.UncheckedFields, "The test asserts every field it sends, in the response or the saved data.")]
+    [InlineData(FindingKind.ErrorWithoutStateCheck, "The test asserts the error body and that nothing was saved.")]
+    public async Task PreviewAsync_AssertionFinding_HasSpecificAcceptanceCriterion(FindingKind kind, string criterion)
+    {
+        // Arrange
+        var report = Fixtures.Current;
+        var run = AddRun(report with
+        {
+            Meta = report.Meta with { RunId = Guid.NewGuid() },
+            Findings = [.. report.Findings.Select(f => f.Id == "f2" ? f with { Kind = kind } : f)],
+        });
+
+        // Act
+        var draft = (await Tickets.PreviewAsync(run, "f2", CancellationToken.None)).Value!;
+
+        // Assert
+        draft.Description.Should().Contain($"## Acceptance criteria\n- {criterion}\n");
+    }
+
     [Fact]
     public async Task PreviewAsync_StoredTicket_ReturnsExisting()
     {

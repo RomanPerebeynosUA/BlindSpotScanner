@@ -10,7 +10,7 @@ public sealed class LlmOptions
     /// <summary>The default cost cap of one scan (a scan request may set its own).</summary>
     public decimal MaxCostUsdPerScan { get; set; } = 5.0m;
 
-    public string PromptSetVersion { get; set; } = "1.0.0";
+    public string PromptSetVersion { get; set; } = "1.1.0";
 
     public decimal InputUsdPerMTok { get; set; } = 2.00m;
 

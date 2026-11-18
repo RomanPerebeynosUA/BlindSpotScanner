@@ -34,7 +34,7 @@ public class ScanPipelineTests
     {
         var repo = FixtureRepository.Bookstore();
         var pipeline = new ScanPipeline(
-            repo, repo, new AspNetCoreEndpointExtractor(), new CSharpTestSyntaxReader(), llm,
+            repo, repo, new AspNetCoreEndpointExtractor(), new CSharpTestSyntaxReader(), new CSharpAssertionReader(), llm,
             new ReportValidator(new ReportSchemaValidator()),
             new FakeTimeProvider(new DateTimeOffset(2026, 11, 17, 12, 0, 0, TimeSpan.Zero)),
             new ScanPipelineOptions("claude-sonnet-5-5", "1.0.0", 200_000));
@@ -70,7 +70,7 @@ public class ScanPipelineTests
     [Fact]
     public async Task Pipeline_LlmAlwaysFails_ReportStillValid()
     {
-        // Act
+        // Act (dimension 5 needs no LLM, so the score is the code-computed 4.0 over 15% of the weight)
         var outcome = await ScanAsync(new FailingLlmClient());
 
         // Assert
@@ -79,7 +79,7 @@ public class ScanPipelineTests
             outcome.Violations,
             Unverified = outcome.Report.Summary.Endpoints.Unverified,
             outcome.Report.Summary.QualityScore,
-        }.Should().BeEquivalentTo(new { Violations = Array.Empty<string>(), Unverified = 6, QualityScore = (decimal?)null });
+        }.Should().BeEquivalentTo(new { Violations = Array.Empty<string>(), Unverified = 6, QualityScore = (decimal?)4.0m });
     }
 
     [Fact]
@@ -135,5 +135,55 @@ public class ScanPipelineTests
     {
         public Task<LlmResult> CompleteAsync(LlmRequest request, CancellationToken ct) =>
             Task.FromResult(new LlmResult(null, ["the answer is not valid JSON"], CannedLlmClient.CallUsage, FromCache: false));
+    }
+
+    [Fact]
+    public async Task Pipeline_CannedLlm_AssessesEveryIntegrationTest()
+    {
+        // Act
+        var outcome = await ScanAsync(new CannedLlmClient());
+
+        // Assert (DbFixture.cs matches **/*Fixture.cs, so it is not an integration test; StockQueryTests has the Integration trait)
+        outcome.Report.TestAssertions!.Select(t => (t.Test, t.Level)).Should().Equal(
+            ("tests/Bookstore.IntegrationTests/BooksApiTests.cs::BooksApiTests.List_returns_seeded_books", (int?)2),
+            ("tests/Bookstore.IntegrationTests/BooksApiTests.cs::BooksApiTests.Get_by_id_returns_ok", (int?)1),
+            ("tests/Bookstore.IntegrationTests/BooksApiTests.cs::BooksApiTests.Create_persists_book", (int?)4),
+            ("tests/Bookstore.IntegrationTests/BooksApiTests.cs::BooksApiTests.Create_rejects_missing_title", (int?)1),
+            ("tests/Bookstore.IntegrationTests/OrdersApiTests.cs::OrdersApiTests.Place_order_persists_lines_and_total", (int?)3),
+            ("tests/Bookstore.UnitTests/StockQueryTests.cs::StockQueryTests.Low_stock_query_uses_index", (int?)0));
+    }
+
+    [Fact]
+    public async Task Pipeline_CannedLlm_ComputesDimensionFive()
+    {
+        // Act
+        var outcome = await ScanAsync(new CannedLlmClient());
+
+        // Assert
+        outcome.Report.Scorecard.Single(d => d.Id == 5).Score.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task Pipeline_CannedLlm_AddsAssertionFindings()
+    {
+        // Act
+        var outcome = await ScanAsync(new CannedLlmClient());
+
+        // Assert
+        outcome.Report.Findings.Select(f => f.StableKey).Should().Contain(
+        [
+            "unchecked-fields:tests/Bookstore.IntegrationTests/OrdersApiTests.cs::OrdersApiTests.Place_order_persists_lines_and_total",
+            "error-without-state-check:tests/Bookstore.IntegrationTests/BooksApiTests.cs::BooksApiTests.Create_rejects_missing_title",
+        ]);
+    }
+
+    [Fact]
+    public async Task Pipeline_CannedLlm_WritesSchemaOneOne()
+    {
+        // Act
+        var outcome = await ScanAsync(new CannedLlmClient());
+
+        // Assert
+        outcome.Report.Meta.SchemaVersion.Should().Be("1.1");
     }
 }

@@ -37,7 +37,7 @@ public class LiveScanTests
         var github = new GitHubClient(new HttpClient(new GitHubRateLimitHandler(TimeProvider.System, gitHubOptions) { InnerHandler = new HttpClientHandler() }), gitHubOptions);
         var llmOptions = Options.Create(new LlmOptions());
         var pipeline = new ScanPipeline(
-            github, new DirectBlobReader(github), new AspNetCoreEndpointExtractor(), new CSharpTestSyntaxReader(),
+            github, new DirectBlobReader(github), new AspNetCoreEndpointExtractor(), new CSharpTestSyntaxReader(), new CSharpAssertionReader(),
             new ClaudeLlmClient(new PromptLibrary(), llmOptions), new ReportValidator(new ReportSchemaValidator()), TimeProvider.System,
             new ScanPipelineOptions(llmOptions.Value.Model, llmOptions.Value.PromptSetVersion, 200_000));
 

@@ -79,7 +79,7 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
         await using var context = db.CreateContext();
         var repo = FixtureRepository.Bookstore();
         var gh = github ?? repo;
-        var pipelines = new ScanPipelineFactory(gh, repo, new AspNetCoreEndpointExtractor(), new CSharpTestSyntaxReader(),
+        var pipelines = new ScanPipelineFactory(gh, repo, new AspNetCoreEndpointExtractor(), new CSharpTestSyntaxReader(), new CSharpAssertionReader(),
             new ReportValidator(new ReportSchemaValidator()), _time, new ScanPipelineOptions("claude-sonnet-5-5", "1.0.0", 200_000));
         var orchestrator = new ScanOrchestrator(new EfScanStore(context), events ?? new RecordingEvents(), () => llm ?? new CannedLlmClient(), pipelines,
             new CitationVerifier(gh, new CSharpTestSyntaxReader()), _time, logger ?? NullLogger<ScanOrchestrator>.Instance);
@@ -182,8 +182,9 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
             Status = RunStatus.Succeeded,
             CommitSha = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
             Steps = 8,
-            CitationsChecked = (int?)4,
-            CitationsResolved = (int?)4,
+            // 4 from the canned grades plus the 6 integration tests' assertion rows (D27).
+            CitationsChecked = (int?)10,
+            CitationsResolved = (int?)10,
         });
     }
 

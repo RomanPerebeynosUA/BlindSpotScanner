@@ -181,6 +181,9 @@ public sealed class JiraTickets(IScanRequestStore runs, IRemediationStore store,
         FindingKind.WeakTest or FindingKind.FalsePositive => "The test asserts response values and persisted state, not only the status code.",
         FindingKind.SkippedTest => "The test runs (is not skipped) and passes in CI.",
         FindingKind.UncoveredSeam => "At least one integration test crosses this seam for real instead of a fake.",
+        FindingKind.NoAssertion => "The test asserts the response values and the persisted state.",
+        FindingKind.UncheckedFields => "The test asserts every field it sends, in the response or the saved data.",
+        FindingKind.ErrorWithoutStateCheck => "The test asserts the error body and that nothing was saved.",
         _ => "The risk is covered by an integration test or accepted with a written reason.",
     };
 }

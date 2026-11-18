@@ -9,17 +9,17 @@ public class PromptLibraryTests
     private readonly PromptLibrary _prompts = new();
 
     [Theory]
-    [InlineData(Prompts.ClassifyTests)]
-    [InlineData(Prompts.MapCoverage)]
-    [InlineData(Prompts.GradeQuality)]
-    [InlineData(Prompts.DraftProfile)]
-    public void Task_KnownPrompts_LoadWithVersion(string name)
+    [InlineData(Prompts.ClassifyTests, "1.0.0")]
+    [InlineData(Prompts.MapCoverage, "1.0.0")]
+    [InlineData(Prompts.GradeQuality, "1.1.0")]
+    [InlineData(Prompts.DraftProfile, "1.0.0")]
+    public void Task_KnownPrompts_LoadWithVersion(string name, string version)
     {
         // Act
         var loaded = new { Version = _prompts.Version(name), StartsAsTask = _prompts.Task(name).StartsWith("# Task:", StringComparison.Ordinal) };
 
         // Assert
-        loaded.Should().BeEquivalentTo(new { Version = "1.0.0", StartsAsTask = true });
+        loaded.Should().BeEquivalentTo(new { Version = version, StartsAsTask = true });
     }
 
     [Fact]

@@ -53,8 +53,11 @@ public class GradeQualityPhaseTests
     private static string Answer(string? risks = null, string? findings = null, int dimensions = 7) =>
         $$"""{"scorecard":[{{string.Join(',', Enumerable.Range(1, dimensions).Select(Dimension))}}],"findings":[{{findings}}],"topRisks":[{{risks}}]}""";
 
-    private static Task<PhaseResult<QualityGrade>> Grade(FakeLlmClient llm, TestClassification? tests = null) =>
-        new GradeQualityPhase(llm, Blobs).GradeAsync(Run, tests ?? Tests, Coverage, Profile, 200_000, CancellationToken.None);
+    private static Task<PhaseResult<QualityGrade>> Grade(FakeLlmClient llm, TestClassification? tests = null, IReadOnlyList<TestAssertion>? assertions = null) =>
+        new GradeQualityPhase(llm, Blobs).GradeAsync(Run, tests ?? Tests, Coverage, Profile, assertions ?? [], 200_000, CancellationToken.None);
+
+    private static string AnswerWithout(int id) =>
+        $$"""{"scorecard":[{{string.Join(',', Enumerable.Range(1, 7).Where(d => d != id).Select(Dimension))}}],"findings":[],"topRisks":[]}""";
 
     [Fact]
     public async Task Grade_ValidAnswer_UsesRubricNamesAndWeights()
@@ -66,7 +69,7 @@ public class GradeQualityPhaseTests
         var result = await Grade(llm);
 
         // Assert
-        result.Value.Scorecard.Select(d => (d.Id, d.Dimension, d.Weight, d.Score)).Should().Equal(Rubric.Dimensions.Select(d => (d.Id, d.Name, d.Weight, (int?)6)));
+        result.Value.Scorecard.Select(d => (d.Id, d.Dimension, d.Weight, d.Score)).Should().Equal(Rubric.Dimensions.Select(d => (d.Id, d.Name, d.Weight, d.Id == 5 ? null : (int?)6)));
     }
 
     [Fact]
@@ -199,5 +202,57 @@ public class GradeQualityPhaseTests
 
         // Assert
         errors.Should().Equal("topRisks/0/detail: needs 1 to 8 bullets");
+    }
+
+    [Fact]
+    public async Task Grade_Validator_AcceptsAnswerWithoutDimensionFive()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer()));
+        await Grade(llm);
+        using var answer = JsonDocument.Parse(AnswerWithout(5));
+
+        // Act
+        var errors = llm.Requests.Single().Validate!(answer.RootElement);
+
+        // Assert
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Grade_AnswerWithDimensionFive_IgnoresIt()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer()));
+
+        // Act
+        var result = await Grade(llm);
+
+        // Assert
+        result.Value.Scorecard.Single(d => d.Id == 5).Should().BeEquivalentTo(new { Score = (int?)null, Scorable = false });
+    }
+
+    [Fact]
+    public async Task Grade_AssertionFindings_NumberedAfterUncoveredEndpoints()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer()));
+        var row = new TestAssertion
+        {
+            Test = $"{BooksTests}::BooksApiTests.List_returns_seeded_books",
+            Level = 0,
+            LevelSource = LevelSource.Code,
+            ErrorPath = false,
+            SentFields = [],
+            CheckedFields = [],
+            UncheckedFields = [],
+            FieldsResolved = true,
+        };
+
+        // Act
+        var result = await Grade(llm, assertions: [row]);
+
+        // Assert
+        result.Value.Findings.Select(f => (f.Id, f.Kind)).Should().Equal(("f1", FindingKind.UncoveredEndpoint), ("f2", FindingKind.NoAssertion));
     }
 }

@@ -30,6 +30,11 @@ The endpoint-level counts are the headline. The controller rollup is secondary.
 | 6 | Determinism / reliability | Isolation, data cleanup, no sleeps or ordering dependence, flakiness signals | 0.10 |
 | 7 | Diagnosability / maintainability | Clear failure messages, shared fixtures, teardown | 0.05 |
 
+Dimension 5 is computed by code, not graded by the LLM (D27): each integration test gets an
+assertion level L0–L5 (nothing, status only, shape only, response values, saved state read back,
+side effects), and the score is the mean of the points L0 1, L1 2, L2 4, L3 6, L4 8, L5 10 over the
+tests with a known level, rounded half away from zero.
+
 Do not double-count:
 - #1 is *breadth* (did the test cross the seam)
 - #4 is *fidelity* (how real the dependency was)
@@ -51,7 +56,7 @@ resp.StatusCode.Should().Be(HttpStatusCode.OK);
 (await db.Orders.CountAsync()).Should().Be(1);
 ```
 
-This scores **4**: a row was written, but its values are never asserted. A 7+ asserts that the
+This scores **4** (L2: the count is a shape check): a row was written, but its values are never asserted. A 7+ asserts that the
 persisted fields match the request.
 
 ## Rollup (computed in `ReportAssembler`, never by the LLM)

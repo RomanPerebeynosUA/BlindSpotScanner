@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddHttpClient<IJiraClient, JiraClient>().ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<IEndpointExtractor, AspNetCoreEndpointExtractor>();
         services.AddSingleton<ITestSyntaxReader, CSharpTestSyntaxReader>();
+        services.AddSingleton<ITestAssertionReader, CSharpAssertionReader>();
         services.AddSingleton<IFixGuard, FixGuard>();
 
         services.AddSingleton<PromptLibrary>();
@@ -74,6 +75,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<IBlobReader>(),
                 sp.GetRequiredService<IEndpointExtractor>(),
                 sp.GetRequiredService<ITestSyntaxReader>(),
+                sp.GetRequiredService<ITestAssertionReader>(),
                 sp.GetRequiredService<ReportValidator>(),
                 sp.GetRequiredService<TimeProvider>(),
                 new ScanPipelineOptions(llm.Model, llm.PromptSetVersion, scan.MaxFileBytes));

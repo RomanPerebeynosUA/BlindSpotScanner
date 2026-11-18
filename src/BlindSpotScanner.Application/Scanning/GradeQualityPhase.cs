@@ -24,17 +24,20 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
 {
     private const string NotAssessed = "N/A — insufficient input";
     private const int MaxRisks = 5;
+    private const int AssertionStrength = 5;
 
     public async Task<PhaseResult<QualityGrade>> GradeAsync(
-        RunContext run, TestClassification tests, IReadOnlyList<ControllerCoverage> coverage, RepoProfile profile, int maxFileBytes, CancellationToken ct)
+        RunContext run, TestClassification tests, IReadOnlyList<ControllerCoverage> coverage, RepoProfile profile,
+        IReadOnlyList<TestAssertion> assertions, int maxFileBytes, CancellationToken ct)
     {
         var notes = new List<string>();
-        var uncovered = UncoveredEndpointFindings(coverage);
+        // Code-derived findings come first: uncovered endpoints, then assertion depth (D27).
+        var codeFindings = Numbered(UncoveredEndpointFindings(coverage).Concat(AssertionFindings.From(assertions)));
         var testFiles = await ReadAsync(run, tests.IntegrationTests, maxFileBytes, notes, ct);
         if (testFiles.Count == 0)
         {
             notes.Add("quality not graded: no integration tests could be read");
-            return new PhaseResult<QualityGrade>(new QualityGrade(Unscorable(), uncovered, []), LlmUsage.None, notes);
+            return new PhaseResult<QualityGrade>(new QualityGrade(Unscorable(), codeFindings, []), LlmUsage.None, notes);
         }
 
         var fixtures = await ReadAsync(run, Fixtures(tests, profile), maxFileBytes, notes, ct);
@@ -59,10 +62,10 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
         if (result.Output is not { } output)
         {
             notes.Add($"quality grading failed ({result.Errors.FirstOrDefault() ?? "no answer"})");
-            return new PhaseResult<QualityGrade>(new QualityGrade(Unscorable(), uncovered, []), result.Usage, notes);
+            return new PhaseResult<QualityGrade>(new QualityGrade(Unscorable(), codeFindings, []), result.Usage, notes);
         }
 
-        var findings = uncovered.Concat(output.GetProperty("findings").EnumerateArray().Select(LlmFinding))
+        var findings = codeFindings.Concat(output.GetProperty("findings").EnumerateArray().Select(LlmFinding))
             .Select((f, i) => f with { Id = $"f{i + 1}" })
             .ToList();
         var risks = output.GetProperty("topRisks").EnumerateArray().Select(Risk).ToList();
@@ -105,7 +108,8 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
     {
         var errors = new List<string>();
         var dimensions = output.GetProperty("scorecard").EnumerateArray().ToList();
-        foreach (var (id, _, _) in Rubric.Dimensions)
+        // D27: dimension 5 is computed by code, so an answer's dimension 5 is neither required nor read.
+        foreach (var (id, _, _) in Rubric.Dimensions.Where(d => d.Id != AssertionStrength))
         {
             if (dimensions.Count(d => d.GetProperty("id").GetInt32() == id) != 1)
             {
@@ -113,7 +117,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
             }
         }
 
-        foreach (var dimension in dimensions)
+        foreach (var dimension in dimensions.Where(d => d.GetProperty("id").GetInt32() != AssertionStrength))
         {
             var id = dimension.GetProperty("id").GetInt32();
             if (Rubric.Dimensions.All(d => d.Id != id))
@@ -172,9 +176,14 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
 
     private static List<ScoreDimension> Scorecard(JsonElement output)
     {
-        var byId = output.GetProperty("scorecard").EnumerateArray().ToDictionary(d => d.GetProperty("id").GetInt32());
+        var byId = output.GetProperty("scorecard").EnumerateArray().Where(d => d.GetProperty("id").GetInt32() != AssertionStrength).ToDictionary(d => d.GetProperty("id").GetInt32());
         return Rubric.Dimensions.Select(r =>
         {
+            if (r.Id == AssertionStrength)
+            {
+                return Unscorable(r);
+            }
+
             var d = byId[r.Id];
             var scorable = d.GetProperty("scorable").GetBoolean();
             return new ScoreDimension
@@ -191,7 +200,10 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
         }).ToList();
     }
 
-    private static List<ScoreDimension> Unscorable() => Rubric.Dimensions.Select(r => new ScoreDimension
+    private static List<ScoreDimension> Unscorable() => Rubric.Dimensions.Select(Unscorable).ToList();
+
+    /// <summary>N/A for one dimension; dimension 5's placeholder is replaced by ReportAssembler (D27).</summary>
+    private static ScoreDimension Unscorable((int Id, string Name, decimal Weight) r) => new()
     {
         Id = r.Id,
         Dimension = r.Name,
@@ -201,7 +213,9 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
         Confidence = Confidence.Low,
         JustificationBullets = [$"What is tested: {NotAssessed}", $"What is missing: {NotAssessed}", "Evidence: none", $"Why this score: {NotAssessed}"],
         Evidence = [],
-    }).ToList();
+    };
+
+    private static List<ReportFinding> Numbered(IEnumerable<ReportFinding> findings) => findings.Select((f, i) => f with { Id = $"f{i + 1}" }).ToList();
 
     private static List<ReportFinding> UncoveredEndpointFindings(IReadOnlyList<ControllerCoverage> coverage) =>
         coverage.SelectMany(c => c.Endpoints).Where(e => e.Status == CoverageStatus.None).Select(e =>
@@ -219,7 +233,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
                 Detail = [display],
                 Evidence = [],
             };
-        }).Select((f, i) => f with { Id = $"f{i + 1}" }).ToList();
+        }).ToList();
 
     private static ReportFinding LlmFinding(JsonElement f)
     {

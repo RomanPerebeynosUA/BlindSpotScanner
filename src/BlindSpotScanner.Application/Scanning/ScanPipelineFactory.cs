@@ -10,6 +10,7 @@ public sealed class ScanPipelineFactory(
     IBlobReader blobs,
     IEndpointExtractor extractor,
     ITestSyntaxReader reader,
+    ITestAssertionReader assertionReader,
     ReportValidator validator,
     TimeProvider time,
     ScanPipelineOptions options)
@@ -17,5 +18,5 @@ public sealed class ScanPipelineFactory(
     /// <summary>The model and prompt set this worker's pipelines use.</summary>
     public ScanPipelineOptions Options => options;
 
-    public ScanPipeline Create(ILlmClient llm) => new(github, blobs, extractor, reader, llm, validator, time, options);
+    public ScanPipeline Create(ILlmClient llm) => new(github, blobs, extractor, reader, assertionReader, llm, validator, time, options);
 }
