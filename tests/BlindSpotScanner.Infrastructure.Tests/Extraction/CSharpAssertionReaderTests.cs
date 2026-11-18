@@ -339,4 +339,112 @@ public class CSharpAssertionReaderTests
             new { TestMethod = "OrdersApiTests.Place_order_persists_lines_and_total", Level = (int?)3, ReadBack = (ReadBack?)null, ErrorPath = false },
             new { TestMethod = "DbFixture.Container_starts", Level = (int?)0, ReadBack = (ReadBack?)null, ErrorPath = false });
     }
+
+    [Fact]
+    public void Read_AnonymousPayload_CollectsSentFields()
+    {
+        // Arrange
+        const string body = """
+            var response = await _client.PostAsJsonAsync("api/books", new { title = "Dune", price = 9.5m });
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            """;
+
+        // Act
+        var facts = Single(body);
+
+        // Assert
+        facts.SentFields.Should().Equal("title", "price");
+    }
+
+    [Fact]
+    public void Read_NestedCollectionPayload_UsesBracketPaths()
+    {
+        // Arrange
+        var source = Bookstore("tests/Bookstore.IntegrationTests/OrdersApiTests.cs");
+
+        // Act
+        var facts = Reader.Read(source).Single();
+
+        // Assert
+        facts.SentFields.Should().Equal("lines[].bookId", "lines[].quantity");
+    }
+
+    [Fact]
+    public void Read_PayloadFromBuilder_IsUnresolved()
+    {
+        // Arrange
+        const string body = """
+            var response = await _client.PostAsJsonAsync("api/books", BookBuilder.Valid());
+            var created = await response.Content.ReadFromJsonAsync<Book>();
+            Assert.Equal("Dune", created!.Title);
+            """;
+
+        // Act
+        var facts = Single(body);
+
+        // Assert
+        new { facts.FieldsResolved, facts.SentFields, facts.CheckedFields }
+            .Should().BeEquivalentTo(new { FieldsResolved = false, SentFields = Array.Empty<string>(), CheckedFields = Array.Empty<string>() });
+    }
+
+    [Fact]
+    public void Read_PayloadThroughLocal_IsResolved()
+    {
+        // Arrange
+        const string body = """
+            var request = new { title = "Dune" };
+            var response = await _client.PostAsJsonAsync("api/books", request);
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            """;
+
+        // Act
+        var facts = Single(body);
+
+        // Assert
+        facts.SentFields.Should().Equal("title");
+    }
+
+    [Fact]
+    public void Read_CheckedFields_SkipCountAndLength()
+    {
+        // Arrange
+        var source = Bookstore("tests/Bookstore.IntegrationTests/OrdersApiTests.cs");
+
+        // Act
+        var facts = Reader.Read(source).Single();
+
+        // Assert
+        facts.CheckedFields.Should().Equal("Lines", "Total");
+    }
+
+    [Fact]
+    public void Read_EquivalentToRequest_ChecksAllSentFields()
+    {
+        // Arrange
+        const string body = """
+            var request = new { title = "Dune", price = 9.5m };
+            var response = await _client.PostAsJsonAsync("api/books", request);
+            var created = await response.Content.ReadFromJsonAsync<Book>();
+            created.Should().BeEquivalentTo(request);
+            """;
+
+        // Act
+        var facts = Single(body);
+
+        // Assert
+        facts.CheckedFields.Should().Contain(["title", "price"]);
+    }
+
+    [Fact]
+    public void Read_BookstoreCreatePersistsBook_ChecksTitle()
+    {
+        // Arrange
+        var source = Bookstore("tests/Bookstore.IntegrationTests/BooksApiTests.cs");
+
+        // Act
+        var facts = Reader.Read(source).Single(f => f.TestMethod == "BooksApiTests.Create_persists_book");
+
+        // Assert
+        new { facts.SentFields, facts.CheckedFields }.Should().BeEquivalentTo(new { SentFields = new[] { "title" }, CheckedFields = new[] { "Title" } });
+    }
 }

@@ -59,6 +59,12 @@ public sealed class CSharpAssertionReader : ITestAssertionReader
 
     private static readonly string[] HelperPrefixes = ["Assert", "Verify", "Expect", "Check", "Should"];
 
+    private static readonly HashSet<string> JsonWrites = new(StringComparer.Ordinal) { "PostAsJsonAsync", "PutAsJsonAsync", "PatchAsJsonAsync" };
+
+    private static readonly HashSet<string> ContentWrites = new(StringComparer.Ordinal) { "PostAsync", "PutAsync", "PatchAsync" };
+
+    private static readonly HashSet<string> NotFields = new(StringComparer.Ordinal) { "Count", "Length" };
+
     public IReadOnlyList<TestAssertionFacts> Read(string source)
     {
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
@@ -94,6 +100,8 @@ public sealed class CSharpAssertionReader : ITestAssertionReader
             .GroupBy(v => v.Identifier.ValueText)
             .ToDictionary(g => g.Key, g => g.First().Initializer!.Value, StringComparer.Ordinal);
 
+        var (sent, payloads, resolved) = SentFields(scope, locals);
+        var checkedFields = new List<string>();
         var levels = new List<(int Level, ReadBack? ReadBack)>();
         var errorPath = false;
         foreach (var call in scope.SelectMany(s => s.DescendantNodes().OfType<InvocationExpressionSyntax>()))
@@ -103,6 +111,10 @@ public sealed class CSharpAssertionReader : ITestAssertionReader
                 var classified = Classify(assertion, locals, firstWrite);
                 levels.Add(classified);
                 errorPath |= classified.Level == 1 && IsClientError(call, assertion.Matcher);
+                if (classified.Level != 1)
+                {
+                    checkedFields.AddRange(CheckedNames(assertion, call, payloads));
+                }
             }
             else if (IsUnresolvedHelper(call, helpers))
             {
@@ -113,7 +125,157 @@ public sealed class CSharpAssertionReader : ITestAssertionReader
         int? level = unresolved ? null : levels.Count == 0 ? 0 : levels.Max(l => l.Level);
         var readBacks = levels.Where(l => l.ReadBack is not null).Select(l => l.ReadBack!.Value).ToList();
         ReadBack? readBack = level is null || readBacks.Count == 0 ? null : readBacks.Contains(ReadBack.Db) ? ReadBack.Db : ReadBack.Api;
-        return new TestAssertionFacts(name, level, readBack, errorPath, [], [], FieldsResolved: true);
+        return resolved
+            ? new TestAssertionFacts(name, level, readBack, errorPath, sent, checkedFields.Distinct(StringComparer.Ordinal).ToList(), FieldsResolved: true)
+            : new TestAssertionFacts(name, level, readBack, errorPath, [], [], FieldsResolved: false);
+    }
+
+    /// <summary>
+    /// The leaf paths of every write's body, and each body local's fields (for equivalence checks).
+    /// A body the reader can't follow (a builder, a field, a method result) makes the fields unresolved.
+    /// </summary>
+    private static (List<string> Sent, Dictionary<string, List<string>> Payloads, bool Resolved) SentFields(
+        IReadOnlyList<SyntaxNode> scope, IReadOnlyDictionary<string, ExpressionSyntax> locals)
+    {
+        var sent = new List<string>();
+        var payloads = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var call in scope.SelectMany(s => s.DescendantNodes().OfType<InvocationExpressionSyntax>()))
+        {
+            var name = Name(call);
+            var args = call.ArgumentList.Arguments;
+            ExpressionSyntax? body = (JsonWrites.Contains(name) || ContentWrites.Contains(name)) && args.Count > 1 ? Unwrap(args[1].Expression) : null;
+            if (body is null)
+            {
+                continue;
+            }
+
+            if (ContentWrites.Contains(name))
+            {
+                body = body is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "JsonContent" }, Name.Identifier.ValueText: "Create" } } create
+                    && create.ArgumentList.Arguments.Count > 0
+                    ? Unwrap(create.ArgumentList.Arguments[0].Expression)
+                    : null;
+            }
+
+            var local = body is IdentifierNameSyntax id ? id.Identifier.ValueText : null;
+            if (local is not null)
+            {
+                body = locals.TryGetValue(local, out var init) ? Unwrap(init) : null;
+            }
+
+            if (body is null || !IsObject(body))
+            {
+                return ([], payloads, false);
+            }
+
+            var fields = new List<string>();
+            CollectLeaves(body, prefix: string.Empty, fields);
+            if (local is not null)
+            {
+                payloads[local] = fields;
+            }
+
+            sent.AddRange(fields);
+        }
+
+        return (sent.Distinct(StringComparer.Ordinal).ToList(), payloads, true);
+    }
+
+    private static bool IsObject(ExpressionSyntax expression) =>
+        expression is AnonymousObjectCreationExpressionSyntax
+        || (expression is BaseObjectCreationExpressionSyntax { Initializer: { } init } && init.IsKind(SyntaxKind.ObjectInitializerExpression));
+
+    private static void CollectLeaves(ExpressionSyntax value, string prefix, List<string> leaves)
+    {
+        foreach (var (name, member) in Members(value))
+        {
+            var path = prefix + name;
+            var inner = Unwrap(member);
+            if (IsObject(inner))
+            {
+                CollectLeaves(inner, path + ".", leaves);
+            }
+            else if (Elements(inner) is { } elements && elements.Any(IsObject))
+            {
+                foreach (var element in elements.Where(IsObject))
+                {
+                    CollectLeaves(element, path + "[].", leaves);
+                }
+            }
+            else if (!leaves.Contains(path))
+            {
+                leaves.Add(path);
+            }
+        }
+    }
+
+    private static IEnumerable<(string Name, ExpressionSyntax Value)> Members(ExpressionSyntax value) => value switch
+    {
+        AnonymousObjectCreationExpressionSyntax anonymous => anonymous.Initializers.Select(m => (m.NameEquals?.Name.Identifier.ValueText ?? InferredName(m.Expression), m.Expression)),
+        BaseObjectCreationExpressionSyntax { Initializer: { } init } => init.Expressions.OfType<AssignmentExpressionSyntax>()
+            .Where(a => a.Left is IdentifierNameSyntax)
+            .Select(a => (((IdentifierNameSyntax)a.Left).Identifier.ValueText, a.Right)),
+        _ => [],
+    };
+
+    private static string InferredName(ExpressionSyntax expression) => expression switch
+    {
+        IdentifierNameSyntax id => id.Identifier.ValueText,
+        MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+        _ => Tokens(expression),
+    };
+
+    private static List<ExpressionSyntax>? Elements(ExpressionSyntax value) => value switch
+    {
+        ImplicitArrayCreationExpressionSyntax array => [.. array.Initializer.Expressions],
+        ArrayCreationExpressionSyntax { Initializer: { } init } => [.. init.Expressions],
+        CollectionExpressionSyntax collection => collection.Elements.OfType<ExpressionElementSyntax>().Select(e => e.Expression).ToList(),
+        BaseObjectCreationExpressionSyntax { Initializer: { } init } when init.IsKind(SyntaxKind.CollectionInitializerExpression) => [.. init.Expressions],
+        _ => null,
+    };
+
+    /// <summary>
+    /// The members read along the actual's access chain (<c>order!.Lines.Count</c> → Lines), plus the
+    /// members of an anonymous expectation, plus every field of a body local compared by equivalence.
+    /// </summary>
+    private static IEnumerable<string> CheckedNames(AssertionCall assertion, InvocationExpressionSyntax call, IReadOnlyDictionary<string, List<string>> payloads)
+    {
+        var names = new List<string>();
+        var node = assertion.Actual is null ? null : Unwrap(assertion.Actual);
+        while (node is not null)
+        {
+            switch (node)
+            {
+                case MemberAccessExpressionSyntax member:
+                    names.Add(member.Name.Identifier.ValueText);
+                    node = Unwrap(member.Expression);
+                    break;
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax method }:
+                    node = Unwrap(method.Expression);
+                    break;
+                case ElementAccessExpressionSyntax element:
+                    node = Unwrap(element.Expression);
+                    break;
+                default:
+                    node = null;
+                    break;
+            }
+        }
+
+        names.Reverse();
+        foreach (var argument in call.ArgumentList.Arguments.Select(a => Unwrap(a.Expression)))
+        {
+            if (argument is AnonymousObjectCreationExpressionSyntax expectation)
+            {
+                names.AddRange(Members(expectation).Select(m => m.Name));
+            }
+            else if (argument is IdentifierNameSyntax id && payloads.TryGetValue(id.Identifier.ValueText, out var fields))
+            {
+                names.AddRange(fields);
+            }
+        }
+
+        return names.Where(n => !NotFields.Contains(n));
     }
 
     /// <param name="Actual">The value under test (null for EnsureSuccessStatusCode, which checks its receiver's status).</param>
