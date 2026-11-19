@@ -1,6 +1,11 @@
 # Production seams from code — design
 
-Date: 2026-11-19 · Status: draft for approval
+Date: 2026-11-19 · Status: approved; implemented as recorded in D34
+
+> Refined during planning (see D34): detection is a method on the existing `IEndpointExtractor`
+> (no new port); seam names are kebab-case keys and the provider is not detected; the report gains
+> `inventory.productionSeams`; a startup file that "can't be read" is not a case (P3 reads without a
+> size limit), so only a missing startup file makes seams unverified.
 
 ## Intent
 

@@ -146,7 +146,7 @@ only when the repository has no integration tests at all, otherwise `unverified`
 path, over `Scan:MaxFileBytes`) and P2 reported nothing unverified.
 Evidence that doesn't name a test method of a sent file makes the endpoint `unverified`. P6 takes
 dimension names and weights from code; without an answer all 7 dimensions are unscorable.
-`productionSeams` is sent empty (the seams are in the profile Markdown). A refusal is not re-asked
+`productionSeams` carries the seams detected in startup code (D34). A refusal is not re-asked
 (it comes after the whole fallback chain declined). Cost sums `usage.iterations` when present (all
 attempts, priced at the configured rates). The cache key hashes the full system and task prompt
 texts, so an edit without a version bump is a miss. P5 re-asks on missing, duplicate or unknown
@@ -368,3 +368,33 @@ name a method or class of a file the model was given is dropped, and the phase n
 finding itself is kept; nothing unverifiable reaches the report, and `CitationVerifier` remains the
 final gate. For demo scans the model is switched to Sonnet 5.5 in the user's `.env` (D29 keeps Haiku
 as the default).
+
+## D34 — Seams come from startup code (2026-11-19)
+A quality-owner review found the weakest claim in the report: the uncovered-seam finding (usually
+`topRisks[0]`) and dimension #1 rested on a seam list the model inferred, because P6 got
+`productionSeams: []`. Seams are now detected the way endpoints are (principle 3), from the
+startup files only (option B of `docs/superpowers/specs/2026-11-19-production-seams-design.md`;
+reading every production file was rejected for its GitHub rate-limit cost):
+- P2 lists `**/Program.cs`, `**/Startup.cs` and `**/*ServiceCollectionExtensions.cs` (fixed
+  patterns, after the fixed excludes, never a file under the profile's test globs).
+- P3 reads them and `IEndpointExtractor.DetectSeams` finds registrations from C# syntax (comments
+  never count): `AddDbContext`/`AddDbContextPool`/`AddDbContextFactory<T>` (Database),
+  `AddHttpClient<T>`/`<TI, TImpl>`/`("name")` (OutboundHttp), MassTransit, RabbitMQ
+  `ConnectionFactory`, Kafka `ProducerBuilder`/`ConsumerBuilder`, `ServiceBusClient`
+  (MessageBroker), `BlobServiceClient`, `AmazonS3Client`, `AddAWSService<IAmazonS3>` (BlobStorage),
+  `AddStackExchangeRedisCache`, `ConnectionMultiplexer.Connect` (Cache). The database provider is
+  not detected; the context name identifies the seam.
+- A seam's name is a kebab-case key: the type without its `Context`/`Client` suffix
+  (`PaymentGatewayClient` → `payment-gateway`), a named client's name, or the technology
+  (`masstransit`, `redis`). Detection was added to the existing extractor port rather than a new one.
+- No startup file → seams are unverified (null, not empty), with the reason "seams not detected: no
+  Program.cs, Startup.cs or *ServiceCollectionExtensions.cs found". Startup files without
+  registrations → an empty, measured list.
+- The report gains optional `inventory.productionSeams` (`kind`, `name`, `source`), added to the
+  contract and both examples. `summary.uncoveredRealSeams` is omitted when seams are unverified.
+- P6 (`grade-quality.md` v1.1.0) gets `productionSeams` and `productionSeamsVerified`. An
+  `UncoveredSeam` finding whose `subject` isn't a detected seam name, or any when seams are
+  unverified, is dropped and noted (not re-asked, as D33). Its evidence still cites test-side code:
+  a top-level `Program.cs` declares no class or method to cite; the source path goes in `detail`.
+- The prompt set is 1.1.0, so runs before and after are marked not comparable (the seam measurement
+  changed).
