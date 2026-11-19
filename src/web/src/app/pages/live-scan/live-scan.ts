@@ -1,7 +1,7 @@
 import { AuthService } from '../../core/auth/auth';
 import { Component, computed, DestroyRef, effect, inject, input, OnInit, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RunsApi } from '../../core/api/runs-api';
@@ -27,7 +27,7 @@ const POLL_MS = 5000;
 /** `/runs/:runId/live`: the phase stepper, activity log and Cancel (doc 04). */
 @Component({
   selector: 'app-live-scan',
-  imports: [DatePipe],
+  imports: [DatePipe, RouterLink],
   templateUrl: './live-scan.html',
   styleUrl: './live-scan.scss',
 })
@@ -46,6 +46,8 @@ export class LiveScan implements OnInit {
   protected readonly outcome = signal<RunStatusBody | null>(null);
   protected readonly cancelling = signal(false);
   protected readonly loadError = signal<string | null>(null);
+  /** The run's repository, for the link back to its scans. */
+  protected readonly repositoryId = signal<string | null>(null);
 
   protected readonly events = computed(() => this.watch()?.events() ?? []);
   protected readonly pct = computed(() => this.events().at(-1)?.pct ?? 0);
@@ -64,6 +66,11 @@ export class LiveScan implements OnInit {
   }
 
   ngOnInit(): void {
+    // No link when the repository can't be read; the page itself still loads.
+    this.runs.repository(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (repository) => this.repositoryId.set(repository.id),
+      error: () => undefined,
+    });
     // Every read ends with the page: a late answer must not start watching or navigate after the user left.
     this.runs.get(this.runId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (body) => {

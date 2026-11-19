@@ -105,6 +105,15 @@ describe('ProfileEditor', () => {
     input.dispatchEvent(new Event('input'));
   }
 
+  it('links back to all repositories', async () => {
+    // Act
+    const { el } = await render();
+
+    // Assert
+    const back = el.querySelector('a.back') as HTMLAnchorElement;
+    expect({ text: back.textContent?.trim(), href: back.getAttribute('href') }).toEqual({ text: 'All repositories', href: '/' });
+  });
+
   it('loads latest profile into the form', async () => {
     // Act
     const { el } = await render();
