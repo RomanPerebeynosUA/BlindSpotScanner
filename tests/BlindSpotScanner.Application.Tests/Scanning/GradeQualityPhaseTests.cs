@@ -191,23 +191,31 @@ public class GradeQualityPhaseTests
         $$"""{"kind":"FalsePositive","severity":"Medium","subject":"{{BooksTests}}::List_returns_seeded_books","headline":"Only checks the status","detail":["200 only"],"evidence":["{{evidence}}"]}""";
 
     [Fact]
-    public async Task Grade_Validator_RejectsMalformedFindingEvidence()
+    public async Task Grade_MalformedFindingEvidence_IsDroppedNotReasked()
     {
+        // Arrange (eShopOnWeb: Haiku cited a whole test file on every attempt)
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(findings: Finding("src/Web/AuthClient.cs"))));
+
         // Act
-        var errors = await ValidateWith(Answer(findings: Finding("src/Web/AuthClient.cs")));
+        var result = await Grade(llm);
 
         // Assert
-        errors.Should().Contain("findings/0/evidence/0: malformed citation 'src/Web/AuthClient.cs'");
+        var finding = result.Value.Findings.Single(f => f.Kind == FindingKind.FalsePositive);
+        new { finding.Evidence, Note = result.Notes.Any(n => n.Contains("src/Web/AuthClient.cs", StringComparison.Ordinal)) }.Should().BeEquivalentTo(new
+        {
+            Evidence = Array.Empty<string>(),
+            Note = true,
+        });
     }
 
     [Fact]
-    public async Task Grade_Validator_RejectsMalformedRiskEvidence()
+    public async Task Grade_Validator_AcceptsMalformedRiskEvidence()
     {
-        // Act
+        // Act (dropped when the answer is applied, so it never costs a re-ask)
         var errors = await ValidateWith(Answer(risks: Risk().Replace("\"evidence\":[]", "\"evidence\":[\"src/Web/AuthClient.cs\"]", StringComparison.Ordinal)));
 
         // Assert
-        errors.Should().Contain("topRisks/0/evidence/0: malformed citation 'src/Web/AuthClient.cs'");
+        errors.Should().BeEmpty();
     }
 
     [Fact]
@@ -221,13 +229,16 @@ public class GradeQualityPhaseTests
     }
 
     [Fact]
-    public async Task Grade_Validator_RejectsCitedFileNotGiven()
+    public async Task Grade_FindingEvidenceInFileNotGiven_IsDropped()
     {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(findings: Finding("src/Web/AuthClient.cs::SendAsync"))));
+
         // Act
-        var errors = await ValidateWith(Answer(findings: Finding("src/Web/AuthClient.cs::SendAsync")));
+        var result = await Grade(llm);
 
         // Assert
-        errors.Should().Contain("findings/0: src/Web/AuthClient.cs::SendAsync is not a method in the test or fixture files you were given");
+        result.Value.Findings.Single(f => f.Kind == FindingKind.FalsePositive).Evidence.Should().BeEmpty();
     }
 
     [Fact]

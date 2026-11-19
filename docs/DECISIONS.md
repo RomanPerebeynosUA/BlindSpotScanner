@@ -358,3 +358,13 @@ are evidence too"); coverage evidence must still name a test method. In P6, a ci
 one file the model was given ends with (after a `/`) is completed to that file's path before it is
 checked and before it reaches the report; an ambiguous or unknown path is left as is and re-asked.
 `CitationVerifier` stays the final gate at the pinned commit.
+
+## D33 — Unverifiable finding and risk evidence is dropped, not re-asked (2026-11-19)
+After D32 an eShopOnWeb Haiku scan still lost its quality grade: a finding cited a whole file
+(`…/AuthenticateEndpoint.cs`, no `::Name`) on all three attempts. Scorecard citations stay strict
+(re-asked, D30), because every scored dimension needs resolvable evidence. Finding and risk evidence is
+no longer part of P6's re-ask check: when the answer is applied, an entry that is malformed or doesn't
+name a method or class of a file the model was given is dropped, and the phase notes say which. The
+finding itself is kept; nothing unverifiable reaches the report, and `CitationVerifier` remains the
+final gate. For demo scans the model is switched to Sonnet 5.5 in the user's `.env` (D29 keeps Haiku
+as the default).
