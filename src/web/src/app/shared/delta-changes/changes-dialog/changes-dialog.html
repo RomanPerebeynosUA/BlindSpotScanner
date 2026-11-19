@@ -1,0 +1,16 @@
+<div class="dialog">
+  <h2 id="changes-title">{{ data.title }} ({{ data.items.length }})</h2>
+  <ul>
+    @for (item of data.items; track $index) {
+      <li>
+        @if (item.label) {
+          <span class="muted">{{ item.label + ": " }}</span>
+        }
+        <span [class.mono]="item.mono">{{ item.text }}</span>
+      </li>
+    }
+  </ul>
+  <div class="row actions">
+    <button type="button" class="btn primary" mat-dialog-close>Close</button>
+  </div>
+</div>

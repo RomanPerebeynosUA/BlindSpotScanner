@@ -1,0 +1,10 @@
+.change { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.change h3 { margin: 0; }
+.change ul { margin: 0; padding-left: 18px; }
+/* One line per item: the dialog shows the full text. */
+.change li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.change.has-items { cursor: pointer; }
+.change.has-items:hover { border-color: var(--accent); }
+.more { align-self: flex-start; margin-top: auto; }
+/* The button's hit area covers the card, so a click anywhere on it opens the details; the keyboard uses the button. */
+.more::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }

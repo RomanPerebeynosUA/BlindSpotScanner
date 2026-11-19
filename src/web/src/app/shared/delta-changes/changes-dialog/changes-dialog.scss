@@ -1,0 +1,5 @@
+.dialog { background: var(--surface); color: var(--fg); padding: 20px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; width: 100%; }
+h2 { margin: 0; }
+ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+li { overflow-wrap: anywhere; }
+.actions { justify-content: flex-end; }
