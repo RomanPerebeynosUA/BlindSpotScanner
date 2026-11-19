@@ -39,7 +39,8 @@ Also return the findings and the top risks.
     (say "tests that only check the request succeeded" instead of "status-only assertions")
   - the specifics go in `detail[]` (1–8 bullets)
   - the evidence goes in `evidence[]`
-  - put the most important uncovered real seam first
+  - put the most important `UncoveredSeam` you reported first; never raise a risk about a seam you
+    did not report as an `UncoveredSeam`
 
 **Output schema:**
 ```json
