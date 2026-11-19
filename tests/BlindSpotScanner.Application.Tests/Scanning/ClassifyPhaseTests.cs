@@ -28,7 +28,7 @@ public class ClassifyPhaseTests
     /// <summary>Classifies one file whose syntax reader returns the given facts.</summary>
     private static async Task<ClassifiedTestFile> ClassifyOne(string path, string[]? attributes = null, string[]? baseTypes = null, string[]? tests = null)
     {
-        var facts = new TestFileFacts(attributes ?? [], baseTypes ?? [], tests ?? OneTest, tests ?? OneTest);
+        var facts = new TestFileFacts(attributes ?? [], baseTypes ?? [], tests ?? OneTest, tests ?? OneTest, ["BooksApiTests"]);
         var phase = new ClassifyPhase(
             new FakeBlobReader(new Dictionary<string, string> { ["sha"] = "source" }),
             new FakeTestSyntaxReader(new Dictionary<string, TestFileFacts> { ["source"] = facts }));

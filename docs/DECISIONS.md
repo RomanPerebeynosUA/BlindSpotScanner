@@ -348,3 +348,13 @@ are re-asked once in a second call with `zeroMatchPatterns`, and any still match
 open question. The editor fills every field from the draft and shows per-pattern match counts, with a
 "Check patterns" button (`POST …/profile/matches`) to recount after edits; a save with a malformed
 pattern is refused (400).
+
+## D32 — Fixture classes are evidence; short cited paths are completed (2026-11-19)
+Two live Haiku scans lost their quality grade on citations that pointed at real evidence: an
+eShopOnWeb fixture class (`WebTestFixture.cs::TestApplication`, a `WebApplicationFactory`) and a
+TodoApp test cited without its folder (`TodoApiTests.cs::GetTodosWithoutDbUser`). Scorecard, finding
+and risk citations may now name a class declared in the cited file as well as a method (D21's "fixtures
+are evidence too"); coverage evidence must still name a test method. In P6, a cited path that exactly
+one file the model was given ends with (after a `/`) is completed to that file's path before it is
+checked and before it reaches the report; an ambiguous or unknown path is left as is and re-asked.
+`CitationVerifier` stays the final gate at the pinned commit.

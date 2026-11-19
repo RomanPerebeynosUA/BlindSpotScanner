@@ -75,6 +75,25 @@ public class CSharpTestSyntaxReaderTests
         facts.TestMethods.Should().Equal("BooksApiTests.A", "BooksApiTests.B");
     }
 
+
+    [Fact]
+    public void Read_Classes_ListsTopLevelAndNested()
+    {
+        // Arrange (eShopOnWeb's WebTestFixture.cs declares the fixture class TestApplication)
+        const string source = """
+            public class TestApplication : WebApplicationFactory<Program>
+            {
+                private sealed class Handler { }
+            }
+            """;
+
+        // Act
+        var facts = new CSharpTestSyntaxReader().Read(source);
+
+        // Assert
+        facts.Classes.Should().Equal("TestApplication", "TestApplication.Handler");
+    }
+
     [Fact]
     public void Read_CommentedOutAttribute_IsIgnored()
     {
