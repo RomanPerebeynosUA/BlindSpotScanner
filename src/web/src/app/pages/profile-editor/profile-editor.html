@@ -54,7 +54,25 @@
       <label>
         {{ f.label }} <span class="hint">one per line</span>
         <textarea [name]="f.key" rows="3" [value]="lists()[f.key]" [readOnly]="readOnly()" (input)="setList(f.key, $event)"></textarea>
+        @if (matchesFor(f.key).length > 0) {
+          <ul class="matches">
+            @for (m of matchesFor(f.key); track $index) {
+              <li [class.zero]="m.files === 0">{{ m.pattern }} — {{ m.files }} {{ m.files === 1 ? 'file' : 'files' }}</li>
+            }
+          </ul>
+        }
       </label>
+    }
+    <div class="row">
+      <button type="button" class="btn sm check" [disabled]="checking()" (click)="checkPatterns()">{{ checking() ? 'Checking…' : 'Check patterns' }}</button>
+      <span class="hint">Counts the files each pattern matches on the default branch.</span>
+    </div>
+    @if (patternErrors().length > 0) {
+      <ul class="pattern-errors" role="alert">
+        @for (e of patternErrors(); track $index) {
+          <li>{{ e }}</li>
+        }
+      </ul>
     }
   </div>
 

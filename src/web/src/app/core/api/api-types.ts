@@ -88,9 +88,27 @@ export interface Profile {
 
 export type ProfileInput = Omit<Profile, 'version'>;
 
+/** The typed classification rules (D18) an AI draft proposes (D29). */
+export type ProfileRules = Omit<ProfileInput, 'markdown'>;
+
+/** How many repository files one glob matches; `field` is the rule's key, e.g. `minimalApiGlobs`. */
+export interface PatternMatch {
+  field: string;
+  pattern: string;
+  files: number;
+}
+
 export interface ProfileDraft {
   markdown: string;
   openQuestions: string[];
+  rules: ProfileRules;
+  matches: PatternMatch[];
+}
+
+/** POST …/profile/matches: counts per glob, plus syntax errors. */
+export interface PatternCheck {
+  matches: PatternMatch[];
+  errors: string[];
 }
 
 /** GET /api/runs/{id} for a run without a report. */
