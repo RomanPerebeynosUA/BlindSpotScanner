@@ -57,7 +57,7 @@ public class MapCoveragePhaseTests
     private static async Task<IReadOnlyList<EndpointResult>> MapBooks(FakeLlmClient llm, IReadOnlyList<string>? inventoryReasons = null)
     {
         var result = await new MapCoveragePhase(llm, Blobs).MapAsync(
-            Run, new EndpointInventory([Books], []), Tests, new RepositoryInventory([], [], inventoryReasons ?? []), Profile, 200_000, CancellationToken.None);
+            Run, new EndpointInventory([Books], []), Tests, new RepositoryInventory([], [], [], inventoryReasons ?? []), Profile, 200_000, CancellationToken.None);
         return result.Value.Single().Endpoints;
     }
 
@@ -160,7 +160,7 @@ public class MapCoveragePhaseTests
 
         // Act
         var result = await new MapCoveragePhase(llm, Blobs).MapAsync(
-            Run, new EndpointInventory([Orders], []), Tests, new RepositoryInventory([], [], []), Profile, 200_000, CancellationToken.None);
+            Run, new EndpointInventory([Orders], []), Tests, new RepositoryInventory([], [], [], []), Profile, 200_000, CancellationToken.None);
 
         // Assert
         new { Requests = llm.Requests.Count, Statuses = result.Value.Single().Endpoints.Select(e => e.Status) }.Should().BeEquivalentTo(new
@@ -205,7 +205,7 @@ public class MapCoveragePhaseTests
 
         // Act
         var result = await new MapCoveragePhase(llm, Blobs).MapAsync(
-            Run, new EndpointInventory([Books], []), new TestClassification([]), new RepositoryInventory([], [], []), Profile, 200_000, CancellationToken.None);
+            Run, new EndpointInventory([Books], []), new TestClassification([]), new RepositoryInventory([], [], [], []), Profile, 200_000, CancellationToken.None);
 
         // Assert
         result.Value.Single().Endpoints.Select(e => e.Status).Should().Equal(CoverageStatus.None, CoverageStatus.None);
@@ -220,7 +220,7 @@ public class MapCoveragePhaseTests
 
         // Act
         await new MapCoveragePhase(llm, Blobs).MapAsync(
-            Run, new EndpointInventory([Books], []), tests, new RepositoryInventory([], [], []), Profile, 200_000, CancellationToken.None);
+            Run, new EndpointInventory([Books], []), tests, new RepositoryInventory([], [], [], []), Profile, 200_000, CancellationToken.None);
 
         // Assert
         llm.Requests.Should().ContainSingle().Which.InputJson.Should().Contain("CatalogTests.cs");
@@ -235,7 +235,7 @@ public class MapCoveragePhaseTests
 
         // Act
         await new MapCoveragePhase(llm, Blobs).MapAsync(
-            Run, new EndpointInventory([root], []), Tests, new RepositoryInventory([], [], []), Profile, 200_000, CancellationToken.None);
+            Run, new EndpointInventory([root], []), Tests, new RepositoryInventory([], [], [], []), Profile, 200_000, CancellationToken.None);
 
         // Assert
         new { Books = llm.Requests.Single().InputJson.Contains(BooksTests, StringComparison.Ordinal), Health = llm.Requests.Single().InputJson.Contains(HealthTests, StringComparison.Ordinal) }

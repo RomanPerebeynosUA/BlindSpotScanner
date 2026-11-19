@@ -83,4 +83,14 @@ public class BookstoreFixtureTests
             Ambiguous = new[] { "tests/Bookstore.UnitTests/PriceTests.cs" },
         }, options => options.WithStrictOrdering());
     }
+
+    [Fact]
+    public async Task Bookstore_StartupCode_DetectsDatabaseAndPaymentSeams()
+    {
+        // Act
+        var (endpoints, _) = await ScanAsync();
+
+        // Assert
+        endpoints.Seams!.Select(s => s.Name).Should().Equal("bookstore-db", "payment-gateway");
+    }
 }

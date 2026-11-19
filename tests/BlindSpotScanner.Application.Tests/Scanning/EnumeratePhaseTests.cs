@@ -53,6 +53,33 @@ public class EnumeratePhaseTests
     }
 
     [Fact]
+    public async Task Enumerate_StartupFiles_AreListed()
+    {
+        // Arrange
+        var phase = new EnumeratePhase(Repo([.. Bookstore, "src/Api/Startup.cs", "src/Api/Infrastructure/PaymentsServiceCollectionExtensions.cs"]));
+
+        // Act
+        var inventory = await phase.EnumerateAsync(Run, Profile, CancellationToken.None);
+
+        // Assert
+        inventory.StartupFiles.Select(f => f.Path).Should().Equal(
+            "src/Api/Infrastructure/PaymentsServiceCollectionExtensions.cs", "src/Api/Program.cs", "src/Api/Startup.cs");
+    }
+
+    [Fact]
+    public async Task Enumerate_StartupFileUnderTestGlob_IsExcluded()
+    {
+        // Arrange
+        var phase = new EnumeratePhase(Repo([.. Bookstore, "tests/Api.IntegrationTests/Program.cs"]));
+
+        // Act
+        var inventory = await phase.EnumerateAsync(Run, Profile, CancellationToken.None);
+
+        // Assert
+        inventory.StartupFiles.Select(f => f.Path).Should().Equal("src/Api/Program.cs");
+    }
+
+    [Fact]
     public async Task Enumerate_ControllerUnderTestFolder_IsNotDenominator()
     {
         // Arrange

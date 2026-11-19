@@ -17,6 +17,9 @@ public sealed class EnumeratePhase(IGitHubClient github)
         "**/Generated/**", "**/generated/**", "**/*.Designer.cs", "**/*.g.cs",
     ];
 
+    /// <summary>Production startup files, where seams are registered (D34).</summary>
+    private static readonly string[] StartupPatterns = ["**/Program.cs", "**/Startup.cs", "**/*ServiceCollectionExtensions.cs"];
+
     private static readonly Microsoft.Extensions.FileSystemGlobbing.Matcher ExcludedPaths = CreateExcludedPaths();
 
     /// <summary>Whether a path is vendored, generated or build output (the fixed excludes, D17).</summary>
@@ -35,10 +38,12 @@ public sealed class EnumeratePhase(IGitHubClient github)
         var candidates = Match(blobs.Keys, ["**/*"], DefaultExcludes);
         var testPaths = Match(candidates, profile.TestGlobs, []);
         var controllerPaths = Match(candidates, [.. profile.ControllerGlobs, .. profile.MinimalApiGlobs], []).Except(testPaths);
+        var startupPaths = Match(candidates, StartupPatterns, []).Except(testPaths);
 
         return new RepositoryInventory(
             Files(controllerPaths, blobs),
             Files(testPaths, blobs),
+            Files(startupPaths, blobs),
             unverifiedReasons);
     }
 
