@@ -19,7 +19,9 @@ paths:
     get: { summary: Current profile, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: OK } } }
     put: { summary: Save new profile version, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: OK } } }
   /repositories/{repoId}/profile/draft:
-    post: { summary: AI-draft a profile, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: Draft markdown + open questions } } }
+    post: { summary: AI-draft a profile, parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: Draft markdown + open questions + rules + pattern match counts } } }
+  /repositories/{repoId}/profile/matches:
+    post: { summary: Count the files each profile glob matches (default branch head), parameters: [ { $ref: '#/components/parameters/repoId' } ], responses: { '200': { description: 'matches [{field, pattern, files}] + syntax errors' }, '404': { description: Unknown repository }, '502': { description: GitHub unavailable } } }
   /repositories/{repoId}/scans:
     post:
       summary: Start a scan (async)
