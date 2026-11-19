@@ -18,8 +18,9 @@ public sealed record QualityGrade(IReadOnlyList<ScoreDimension> Scorecard, IRead
 /// P6 (doc 05, prompts/grade-quality.md): one LLM call grades the 7 rubric dimensions from the full
 /// integration tests and their fixtures. Dimension names and weights come from <see cref="Rubric"/>.
 /// Without tests or without an answer, every dimension is unscorable (principle 5: N/A, not a guess).
-/// Uncovered-endpoint findings are derived from P5 in code. Every citation in the answer must name
-/// a method declared in a file the model was given, else the answer is re-asked (principle 1).
+/// Uncovered-endpoint findings are derived from P5 in code. Every scorecard citation must name a
+/// method or class declared in a file the model was given, else the answer is re-asked (principle 1);
+/// finding and risk evidence that does not resolve is dropped and noted instead (D33).
 /// </summary>
 public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs, ITestSyntaxReader reader)
 {
@@ -65,10 +66,26 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
         }
 
         string Full(string citation) => Complete(citation, declared);
-        var findings = uncovered.Concat(output.GetProperty("findings").EnumerateArray().Select(f => LlmFinding(f, Full)))
+
+        // D33: finding and risk evidence that can't be verified is dropped (and noted), not re-asked.
+        List<string> Kept(string where, IEnumerable<string> evidence) => evidence.Select(e => (Given: e, Full: Full(e)))
+            .Where(e =>
+            {
+                var kept = Citation().IsMatch(e.Full) && Resolves(e.Full, declared);
+                if (!kept)
+                {
+                    notes.Add($"{where}: dropped evidence '{e.Given}' (not a method or class of a file the model was given)");
+                }
+
+                return kept;
+            })
+            .Select(e => e.Full)
+            .ToList();
+
+        var findings = uncovered.Concat(output.GetProperty("findings").EnumerateArray().Select(f => LlmFinding(f, Kept)))
             .Select((f, i) => f with { Id = $"f{i + 1}" })
             .ToList();
-        var risks = output.GetProperty("topRisks").EnumerateArray().Select(r => Risk(r, Full)).ToList();
+        var risks = output.GetProperty("topRisks").EnumerateArray().Select(r => Risk(r, Kept)).ToList();
         return new PhaseResult<QualityGrade>(new QualityGrade(Scorecard(output, Full), findings, risks), result.Usage, notes);
     }
 
@@ -149,12 +166,6 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             CheckCitations(errors, $"scorecard/{id}", Strings(dimension.GetProperty("evidence")), Strings(bullets), declared);
         }
 
-        var findings = output.GetProperty("findings").EnumerateArray().ToList();
-        for (var i = 0; i < findings.Count; i++)
-        {
-            CheckCitations(errors, $"findings/{i}", Strings(findings[i].GetProperty("evidence")), [], declared);
-        }
-
         // Report schema limits: at most 5 risks, each with 1 to 8 detail bullets.
         var risks = output.GetProperty("topRisks").EnumerateArray().ToList();
         if (risks.Count > MaxRisks)
@@ -169,8 +180,6 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             {
                 errors.Add($"topRisks/{i}/detail: needs 1 to 8 bullets");
             }
-
-            CheckCitations(errors, $"topRisks/{i}", Strings(risks[i].GetProperty("evidence")), [], declared);
         }
 
         return errors;
@@ -196,8 +205,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
         var cited = evidence.Where(e => Citation().IsMatch(e)).Concat(texts.SelectMany(CitationVerifier.CitationsIn)).Distinct(StringComparer.Ordinal);
         foreach (var citation in cited)
         {
-            var (path, name) = CitationVerifier.Split(Complete(citation, declared));
-            if (!declared.TryGetValue(path, out var methods) || !CitationVerifier.Declares(methods, name))
+            if (!Resolves(Complete(citation, declared), declared))
             {
                 errors.Add($"{where}: {citation} is not a method in the test or fixture files you were given");
             }
@@ -209,6 +217,12 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
     /// A cited path missing its folders (<c>TodoApiTests.cs::GetTodos</c>) is completed when exactly one
     /// file the model was given ends with it (D32); anything else is returned unchanged.
     /// </summary>
+    private static bool Resolves(string citation, IReadOnlyDictionary<string, IReadOnlyList<string>> declared)
+    {
+        var (path, name) = CitationVerifier.Split(citation);
+        return declared.TryGetValue(path, out var names) && CitationVerifier.Declares(names, name);
+    }
+
     private static string Complete(string citation, IReadOnlyDictionary<string, IReadOnlyList<string>> declared)
     {
         var (path, name) = CitationVerifier.Split(citation);
@@ -272,7 +286,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             };
         }).Select((f, i) => f with { Id = $"f{i + 1}" }).ToList();
 
-    private static ReportFinding LlmFinding(JsonElement f, Func<string, string> full)
+    private static ReportFinding LlmFinding(JsonElement f, Func<string, IEnumerable<string>, List<string>> kept)
     {
         var kind = Enum.Parse<FindingKind>(f.GetProperty("kind").GetString()!);
         return new ReportFinding
@@ -283,18 +297,18 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             StableKey = $"{KebabWord().Replace(kind.ToString(), "$1-$2").ToLowerInvariant()}:{f.GetProperty("subject").GetString()}",
             Headline = f.GetProperty("headline").GetString()!,
             Detail = Strings(f.GetProperty("detail")),
-            Evidence = Strings(f.GetProperty("evidence")).Select(full).ToList(),
+            Evidence = kept($"finding '{f.GetProperty("headline").GetString()}'", Strings(f.GetProperty("evidence"))),
         };
     }
 
-    private static TopRisk Risk(JsonElement r, Func<string, string> full) => new()
+    private static TopRisk Risk(JsonElement r, Func<string, IEnumerable<string>, List<string>> kept) => new()
     {
         Rank = 0, // ReportAssembler numbers the risks.
         Headline = r.GetProperty("headline").GetString()!,
         WhyItMatters = r.GetProperty("whyItMatters").GetString()!,
         Severity = Enum.Parse<Severity>(r.GetProperty("severity").GetString()!),
         Detail = Strings(r.GetProperty("detail")),
-        Evidence = Strings(r.GetProperty("evidence")).Select(full).ToList(),
+        Evidence = kept($"risk '{r.GetProperty("headline").GetString()}'", Strings(r.GetProperty("evidence"))),
     };
 
     private static List<string> Strings(JsonElement array) => array.EnumerateArray().Select(e => e.GetString()!).ToList();
