@@ -39,6 +39,8 @@ export class Report {
 
   protected readonly outcome = signal<RunStatusBody | null>(null);
   protected readonly notFound = signal(false);
+  /** The run's repository, for the link back to its scans. */
+  protected readonly repositoryId = signal<string | null>(null);
   protected readonly commitUrl = commitUrl;
 
   /** The repository's succeeded runs, newest first (for the run picker). */
@@ -74,6 +76,7 @@ export class Report {
         switchMap((runId) =>
           this.runs.repository(runId).pipe(
             // The run picker's history and the repository's tickets (D24); a failed list just stays empty.
+            tap((repository) => this.repositoryId.set(repository.id)),
             switchMap((repository) =>
               forkJoin({
                 history: this.repositories.runs(repository.id).pipe(catchError(() => of<RunHistoryItem[]>([]))),

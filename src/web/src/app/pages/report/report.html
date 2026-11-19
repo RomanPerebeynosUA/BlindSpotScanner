@@ -1,3 +1,6 @@
+@if (repositoryId(); as repoId) {
+  <a class="back" [routerLink]="['/repos', repoId]"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>All scans</a>
+}
 @if (store.report(); as report) {
   @let meta = report.meta;
   <div class="head">

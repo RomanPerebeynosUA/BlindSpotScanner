@@ -73,6 +73,15 @@ describe('Report', () => {
 
   const click = (el: HTMLElement, selector: string) => (el.querySelector(selector) as HTMLButtonElement).click();
 
+  it('links back to the repository scans', async () => {
+    // Act
+    const { el } = await render(withReport());
+
+    // Assert
+    const back = el.querySelector('a.back') as HTMLAnchorElement;
+    expect({ text: back.textContent?.trim(), href: back.getAttribute('href') }).toEqual({ text: 'All scans', href: '/repos/repo1' });
+  });
+
   it('kpis come from the summary', async () => {
     // Act
     const { el } = await render(withReport());

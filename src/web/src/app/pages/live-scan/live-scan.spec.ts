@@ -1,7 +1,7 @@
 import { provideTestAuth } from '../../../testing/auth';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { of, Observable, NEVER, Subject, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RunsApi } from '../../core/api/runs-api';
@@ -41,11 +41,12 @@ describe('LiveScan', () => {
       imports: [LiveScan],
       providers: [
         provideTestAuth(),
-        { provide: Router, useValue: { navigate } },
-        { provide: RunsApi, useValue: { get: () => get(), steps: () => of(steps), cancel } },
+        provideRouter([]),
+        { provide: RunsApi, useValue: { get: () => get(), steps: () => of(steps), cancel, repository: () => of({ id: 'repo1' }) } },
         { provide: ScanProgressService, useValue: { watch: () => ({ events, completed, stop }) } },
       ],
     });
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(navigate);
     const fixture = TestBed.createComponent(LiveScan);
     fixture.componentRef.setInput('runId', 'run1');
     fixture.detectChanges();
@@ -62,6 +63,15 @@ describe('LiveScan', () => {
 
   const state = (el: HTMLElement, phase: string) => el.querySelector(`.step[data-phase="${phase}"]`)?.getAttribute('data-state');
   const progress = (phase: string, pct: number, message: string): ScanProgress => ({ runId: 'run1', phase, pct, message, at: new Date(2026, 10, 17, 14, 2, 1) });
+
+  it('links back to the repository scans', async () => {
+    // Act
+    const { el } = await render();
+
+    // Assert
+    const back = el.querySelector('a.back') as HTMLAnchorElement;
+    expect({ text: back.textContent?.trim(), href: back.getAttribute('href') }).toEqual({ text: 'All scans', href: '/repos/repo1' });
+  });
 
   it('seeds the stepper from steps', async () => {
     // Arrange
@@ -178,11 +188,12 @@ describe('LiveScan', () => {
       imports: [LiveScan],
       providers: [
         provideTestAuth(),
-        { provide: Router, useValue: { navigate } },
-        { provide: RunsApi, useValue: { get: () => get(), steps: () => of(steps), cancel } },
+        provideRouter([]),
+        { provide: RunsApi, useValue: { get: () => get(), steps: () => of(steps), cancel, repository: () => of({ id: 'repo1' }) } },
         { provide: ScanProgressService, useValue: { watch } },
       ],
     });
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(navigate);
     const fixture = TestBed.createComponent(LiveScan);
     fixture.componentRef.setInput('runId', 'run1');
     fixture.detectChanges();
