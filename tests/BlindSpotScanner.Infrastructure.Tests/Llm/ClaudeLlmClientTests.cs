@@ -21,7 +21,8 @@ public sealed class ClaudeLlmClientTests : IDisposable
 
     public void Dispose() => _server.Stop();
 
-    private ClaudeLlmClient CreateClient() => new(new PromptLibrary(), Options.Create(new LlmOptions { ApiKey = "test-key", BaseUrl = _server.Url }));
+    private ClaudeLlmClient CreateClient(string model = "claude-sonnet-5-5") =>
+        new(new PromptLibrary(), Options.Create(new LlmOptions { Model = model, InputUsdPerMTok = 2.00m, OutputUsdPerMTok = 10.00m, ApiKey = "test-key", BaseUrl = _server.Url }));
 
     private static LlmRequest Call(string input = """{"q":1}""", Func<JsonElement, IReadOnlyList<string>>? validate = null) =>
         new(Prompts.ClassifyTests, input, Schema, validate);
@@ -92,6 +93,27 @@ public sealed class ClaudeLlmClientTests : IDisposable
             Format = body.RootElement.GetProperty("output_config").GetProperty("format").GetProperty("type").GetString(),
             Fallbacks = body.RootElement.GetProperty("fallbacks").ToString(),
         }.Should().BeEquivalentTo(new { Model = "claude-sonnet-5-5", System = true, Format = "json_schema", Fallbacks = "default" });
+    }
+
+
+    [Fact]
+    public async Task Complete_HaikuModel_SendsNoFallback()
+    {
+        // Arrange
+        RespondInOrder(Reply("""{"answer":"x"}"""));
+
+        // Act
+        await CreateClient("claude-haiku-5-5").CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        var entry = _server.LogEntries.Single().RequestMessage!;
+        using var body = JsonDocument.Parse(entry.Body!);
+        new
+        {
+            Model = body.RootElement.GetProperty("model").GetString(),
+            HasFallbacks = body.RootElement.TryGetProperty("fallbacks", out _),
+            FallbackBeta = entry.Headers!.TryGetValue("anthropic-beta", out var betas) && betas.Any(b => b.Contains("server-side-fallback", StringComparison.Ordinal)),
+        }.Should().BeEquivalentTo(new { Model = "claude-haiku-5-5", HasFallbacks = false, FallbackBeta = false });
     }
 
     [Fact]

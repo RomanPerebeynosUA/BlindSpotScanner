@@ -308,3 +308,12 @@ The user's choices for M11: sign-in is server-side OpenID Connect with an HttpOn
   end-session endpoint; `CreatedBy` is the email (else subject, else name); compose binds its ports to
   127.0.0.1 and the api warns when Local mode runs outside Development; logging levels (not sinks) come
   from configuration, so nothing bypasses redaction; the failure metric's `reason` is a fixed category.
+
+## D27 — Haiku 5.5 as the default scan model (2026-11-19)
+The user's choice: scans default to `claude-haiku-5-5` (USD 0.10 / 0.50 per million tokens, prompts
+up to 100K tokens) to keep the Sparkathon demo cheap; D20's Sonnet 5.5 stays a one-line switch.
+Compose passes `LLM_MODEL`, `LLM_INPUT_USD_PER_MTOK` and `LLM_OUTPUT_USD_PER_MTOK` to both the api
+(which queues a run with its model) and the worker (which refuses a run queued for another model).
+Haiku has no server-side refusal fallback, so `ClaudeLlmClient` sends the fallback beta and
+`fallbacks` only for non-Haiku models. Answer quality is still guarded by the schema check,
+`CitationVerifier` and `ReportValidator`; borderline covered/weak grading is the known trade-off.
