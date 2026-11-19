@@ -56,6 +56,36 @@ public sealed class ClaudeLlmClientTests : IDisposable
 
     private List<string> RequestBodies() => _server.LogEntries.Select(e => e.RequestMessage!.Body!).ToList();
 
+    private List<string?> WorkspaceHeaders() =>
+        _server.LogEntries.Select(e => e.RequestMessage!.Headers!.TryGetValue("anthropic-workspace-id", out var v) ? string.Join(",", v) : null).ToList();
+
+    [Fact]
+    public async Task Complete_WorkspaceConfigured_SendsWorkspaceHeader()
+    {
+        // Arrange
+        RespondInOrder(Reply("""{"answer":"x"}"""));
+        var client = new ClaudeLlmClient(new PromptLibrary(), Options.Create(new LlmOptions { ApiKey = "test-key", BaseUrl = _server.Url, WorkspaceId = "wrkspc_01abc" }));
+
+        // Act
+        await client.CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        WorkspaceHeaders().Should().Equal("wrkspc_01abc");
+    }
+
+    [Fact]
+    public async Task Complete_NoWorkspace_SendsNoWorkspaceHeader()
+    {
+        // Arrange
+        RespondInOrder(Reply("""{"answer":"x"}"""));
+
+        // Act
+        await CreateClient().CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        WorkspaceHeaders().Should().Equal((string?)null);
+    }
+
     /// <summary>A schema with keywords structured outputs reject, and a property that happens to be named like one.</summary>
     private const string ConstrainedSchema = """
         {"type":"object","additionalProperties":false,"required":["minLength","files"],
