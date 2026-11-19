@@ -19,7 +19,9 @@ public sealed record PatternMatch(string Field, string Pattern, int Files);
 
 /// <summary>
 /// Checks a profile's glob patterns (D29): each entry must be one pattern, and its match count is
-/// taken over the same files a scan enumerates (tree blobs minus the fixed excludes, case-sensitive).
+/// taken over the files a scan applies it to (tree blobs minus the fixed excludes, case-sensitive):
+/// test globs over every file, controller and minimal API globs over non-test files (the scan drops
+/// tests from the denominator), integration and never-integration globs over test files only.
 /// Attribute and base-type entries are names, not globs, so they are neither checked nor counted.
 /// </summary>
 public static class ProfilePatterns
@@ -32,9 +34,18 @@ public static class ProfilePatterns
 
     public static IReadOnlyList<PatternMatch> Count(IEnumerable<string> treePaths, ProfileRules rules)
     {
-        var paths = treePaths.Where(p => !EnumeratePhase.IsExcluded(p)).ToList();
+        var all = treePaths.Where(p => !EnumeratePhase.IsExcluded(p)).ToList();
+        var testMatcher = new Matcher(StringComparison.Ordinal);
+        testMatcher.AddIncludePatterns(rules.TestGlobs);
+        var tests = testMatcher.Match(all).Files.Select(f => f.Path).ToList();
+        var production = all.Except(tests, StringComparer.Ordinal).ToList();
         return Globs(rules)
-            .SelectMany(g => g.Patterns.Select(p => new PatternMatch(g.Field, p, Files(paths, p))))
+            .SelectMany(g => g.Patterns.Select(p => new PatternMatch(g.Field, p, Files(g.Field switch
+            {
+                "controllerGlobs" or "minimalApiGlobs" => production,
+                "integrationGlobs" or "notIntegrationGlobs" => tests,
+                _ => all,
+            }, p))))
             .ToList();
     }
 

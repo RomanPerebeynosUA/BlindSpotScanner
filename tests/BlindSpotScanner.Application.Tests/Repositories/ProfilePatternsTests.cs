@@ -85,4 +85,25 @@ public class ProfilePatternsTests
         // Assert
         matches.Select(m => m.Field).Should().Equal("testGlobs", "minimalApiGlobs", "notIntegrationGlobs");
     }
+
+
+    [Fact]
+    public void Count_EndpointPatternMatchingOnlyTests_CountsZero()
+    {
+        // Act (the scan drops test files from the endpoint denominator)
+        var matches = ProfilePatterns.Count(TodoTree, Rules(testGlobs: ["Todo.Api.Tests/**"], minimalApiGlobs: ["**/*Tests.cs"]));
+
+        // Assert
+        matches.Single(m => m.Field == "minimalApiGlobs").Files.Should().Be(0);
+    }
+
+    [Fact]
+    public void Count_IntegrationPatternOutsideTests_CountsZero()
+    {
+        // Act (integration rules only ever classify test files)
+        var matches = ProfilePatterns.Count(TodoTree, new ProfileRules("real-seam", ["Todo.Api.Tests/**"], [], [], ["Todo.Api/**"], [], [], []));
+
+        // Assert
+        matches.Single(m => m.Field == "integrationGlobs").Files.Should().Be(0);
+    }
 }
