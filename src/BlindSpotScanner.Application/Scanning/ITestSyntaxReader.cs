@@ -10,4 +10,5 @@ public interface ITestSyntaxReader
 /// <param name="BaseTypes">Base-list entries of every class, whitespace removed, e.g. <c>IClassFixture&lt;ApiFactory&gt;</c>.</param>
 /// <param name="TestMethods">Test methods as <c>Class.Method</c>, in source order.</param>
 /// <param name="Methods">Every method as <c>Class.Method</c>, in source order (citations may name fixtures and helpers).</param>
-public sealed record TestFileFacts(IReadOnlyList<string> Attributes, IReadOnlyList<string> BaseTypes, IReadOnlyList<string> TestMethods, IReadOnlyList<string> Methods);
+/// <param name="Classes">Every class, nested ones as <c>Outer.Inner</c>, in source order (a fixture class is evidence too, D32).</param>
+public sealed record TestFileFacts(IReadOnlyList<string> Attributes, IReadOnlyList<string> BaseTypes, IReadOnlyList<string> TestMethods, IReadOnlyList<string> Methods, IReadOnlyList<string> Classes);

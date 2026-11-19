@@ -29,7 +29,7 @@ public class GradeQualityPhaseTests
 
     private static readonly FakeTestSyntaxReader Reader = new(new Dictionary<string, TestFileFacts>
     {
-        ["public class BooksApiTests { }"] = new([], [], ["BooksApiTests.List_returns_seeded_books"], ["BooksApiTests.List_returns_seeded_books"]),
+        ["public class BooksApiTests { }"] = new([], [], ["BooksApiTests.List_returns_seeded_books"], ["BooksApiTests.List_returns_seeded_books"], ["BooksApiTests"]),
     });
 
     private static readonly TestClassification Tests = new(
@@ -238,6 +238,37 @@ public class GradeQualityPhaseTests
 
         // Assert
         errors.Should().Contain($"scorecard/1: {BooksTests}::Ghost_test is not a method in the test or fixture files you were given");
+    }
+
+
+    [Fact]
+    public async Task Grade_Validator_AcceptsClassDeclaredInGivenFile()
+    {
+        // Act (a fixture class is evidence too: eShopOnWeb's TestApplication)
+        var errors = await ValidateWith(Answer().Replace($"\"evidence\":[\"{BooksTests}::List_returns_seeded_books\"]}}", $"\"evidence\":[\"{BooksTests}::BooksApiTests\"]}}", StringComparison.Ordinal));
+
+        // Assert
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Grade_ShortPathCitation_IsCompletedInTheScorecard()
+    {
+        // Arrange (TodoApp: Haiku cited "TodoApiTests.cs::…" without its folder)
+        var shortPath = Answer().Replace(BooksTests, "BooksApiTests.cs", StringComparison.Ordinal);
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(shortPath));
+
+        // Act
+        var result = await Grade(llm);
+
+        // Assert
+        var first = result.Value.Scorecard[0];
+        new { Errors = llm.Requests.Single().Validate!(JsonDocument.Parse(shortPath).RootElement), first.Evidence, Bullet = first.JustificationBullets[2] }.Should().BeEquivalentTo(new
+        {
+            Errors = Array.Empty<string>(),
+            Evidence = new[] { $"{BooksTests}::List_returns_seeded_books" },
+            Bullet = $"Evidence: {BooksTests}::List_returns_seeded_books",
+        });
     }
 
     [Fact]

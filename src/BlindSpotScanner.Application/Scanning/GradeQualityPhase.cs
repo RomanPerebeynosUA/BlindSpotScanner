@@ -64,11 +64,12 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             return new PhaseResult<QualityGrade>(new QualityGrade(Unscorable(), uncovered, []), result.Usage, notes);
         }
 
-        var findings = uncovered.Concat(output.GetProperty("findings").EnumerateArray().Select(LlmFinding))
+        string Full(string citation) => Complete(citation, declared);
+        var findings = uncovered.Concat(output.GetProperty("findings").EnumerateArray().Select(f => LlmFinding(f, Full)))
             .Select((f, i) => f with { Id = $"f{i + 1}" })
             .ToList();
-        var risks = output.GetProperty("topRisks").EnumerateArray().Select(Risk).ToList();
-        return new PhaseResult<QualityGrade>(new QualityGrade(Scorecard(output), findings, risks), result.Usage, notes);
+        var risks = output.GetProperty("topRisks").EnumerateArray().Select(r => Risk(r, Full)).ToList();
+        return new PhaseResult<QualityGrade>(new QualityGrade(Scorecard(output, Full), findings, risks), result.Usage, notes);
     }
 
     private async Task<List<object>> ReadAsync(RunContext run, IEnumerable<ClassifiedTestFile> files, int maxFileBytes, List<string> notes, Dictionary<string, IReadOnlyList<string>> declared, CancellationToken ct)
@@ -90,7 +91,8 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             }
 
             read.Add(new { path = file.Path, content });
-            declared[file.Path] = reader.Read(content).Methods;
+            var facts = reader.Read(content);
+            declared[file.Path] = [.. facts.Methods, .. facts.Classes];
         }
 
         return read;
@@ -194,7 +196,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
         var cited = evidence.Where(e => Citation().IsMatch(e)).Concat(texts.SelectMany(CitationVerifier.CitationsIn)).Distinct(StringComparer.Ordinal);
         foreach (var citation in cited)
         {
-            var (path, name) = CitationVerifier.Split(citation);
+            var (path, name) = CitationVerifier.Split(Complete(citation, declared));
             if (!declared.TryGetValue(path, out var methods) || !CitationVerifier.Declares(methods, name))
             {
                 errors.Add($"{where}: {citation} is not a method in the test or fixture files you were given");
@@ -202,7 +204,24 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
         }
     }
 
-    private static List<ScoreDimension> Scorecard(JsonElement output)
+
+    /// <summary>
+    /// A cited path missing its folders (<c>TodoApiTests.cs::GetTodos</c>) is completed when exactly one
+    /// file the model was given ends with it (D32); anything else is returned unchanged.
+    /// </summary>
+    private static string Complete(string citation, IReadOnlyDictionary<string, IReadOnlyList<string>> declared)
+    {
+        var (path, name) = CitationVerifier.Split(citation);
+        if (declared.ContainsKey(path))
+        {
+            return citation;
+        }
+
+        var matches = declared.Keys.Where(k => k.EndsWith("/" + path, StringComparison.Ordinal)).Take(2).ToList();
+        return matches.Count == 1 ? $"{matches[0]}::{name}" : citation;
+    }
+
+    private static List<ScoreDimension> Scorecard(JsonElement output, Func<string, string> full)
     {
         var byId = output.GetProperty("scorecard").EnumerateArray().ToDictionary(d => d.GetProperty("id").GetInt32());
         return Rubric.Dimensions.Select(r =>
@@ -217,8 +236,8 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
                 Score = scorable ? d.GetProperty("score").GetInt32() : null,
                 Scorable = scorable,
                 Confidence = Enum.Parse<Confidence>(d.GetProperty("confidence").GetString()!),
-                JustificationBullets = Strings(d.GetProperty("justificationBullets")),
-                Evidence = Strings(d.GetProperty("evidence")),
+                JustificationBullets = Strings(d.GetProperty("justificationBullets")).Select(b => CitationVerifier.RewriteCitations(b, full)).ToList(),
+                Evidence = Strings(d.GetProperty("evidence")).Select(full).ToList(),
             };
         }).ToList();
     }
@@ -253,7 +272,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             };
         }).Select((f, i) => f with { Id = $"f{i + 1}" }).ToList();
 
-    private static ReportFinding LlmFinding(JsonElement f)
+    private static ReportFinding LlmFinding(JsonElement f, Func<string, string> full)
     {
         var kind = Enum.Parse<FindingKind>(f.GetProperty("kind").GetString()!);
         return new ReportFinding
@@ -264,18 +283,18 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             StableKey = $"{KebabWord().Replace(kind.ToString(), "$1-$2").ToLowerInvariant()}:{f.GetProperty("subject").GetString()}",
             Headline = f.GetProperty("headline").GetString()!,
             Detail = Strings(f.GetProperty("detail")),
-            Evidence = Strings(f.GetProperty("evidence")),
+            Evidence = Strings(f.GetProperty("evidence")).Select(full).ToList(),
         };
     }
 
-    private static TopRisk Risk(JsonElement r) => new()
+    private static TopRisk Risk(JsonElement r, Func<string, string> full) => new()
     {
         Rank = 0, // ReportAssembler numbers the risks.
         Headline = r.GetProperty("headline").GetString()!,
         WhyItMatters = r.GetProperty("whyItMatters").GetString()!,
         Severity = Enum.Parse<Severity>(r.GetProperty("severity").GetString()!),
         Detail = Strings(r.GetProperty("detail")),
-        Evidence = Strings(r.GetProperty("evidence")),
+        Evidence = Strings(r.GetProperty("evidence")).Select(full).ToList(),
     };
 
     private static List<string> Strings(JsonElement array) => array.EnumerateArray().Select(e => e.GetString()!).ToList();

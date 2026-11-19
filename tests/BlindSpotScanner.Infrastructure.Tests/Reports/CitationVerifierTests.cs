@@ -70,6 +70,27 @@ public class CitationVerifierTests
         check.Failures.Should().BeEmpty();
     }
 
+
+    [Fact]
+    public async Task Verify_FixtureClassInScorecard_IsAccepted()
+    {
+        // Act
+        var check = await Verify(WithFirstDimensionEvidence($"{Factory}::ApiFactory"));
+
+        // Assert
+        check.Failures.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Verify_ClassAsCoverageEvidence_IsRejected()
+    {
+        // Act
+        var check = await Verify(WithFirstEndpointEvidence($"{Factory}::ApiFactory"));
+
+        // Assert
+        check.Failures.Should().Equal($"{Factory}::ApiFactory: no test named ApiFactory");
+    }
+
     [Fact]
     public async Task Verify_HelperMethodAsCoverageEvidence_IsRejected()
     {
@@ -92,7 +113,7 @@ public class CitationVerifierTests
         var check = await Verify(report);
 
         // Assert
-        check.Failures.Should().Equal($"{Books}::Ghost_test: no method named Ghost_test");
+        check.Failures.Should().Equal($"{Books}::Ghost_test: no method or class named Ghost_test");
     }
 
 

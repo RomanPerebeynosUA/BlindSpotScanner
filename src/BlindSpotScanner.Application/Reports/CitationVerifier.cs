@@ -12,7 +12,8 @@ public sealed record CitationCheck(int Checked, int Resolved, IReadOnlyList<stri
 /// <summary>
 /// Principle 1: re-reads every cited file at the report's pinned commit and confirms the cited name
 /// is declared there. Coverage evidence must name a test method; other citations (scorecard,
-/// findings, risks, evidence bullets) may name any method, since fixtures are evidence too (D21).
+/// findings, risks, evidence bullets) may name any method or class, since fixtures are evidence too
+/// (D21, D32).
 /// </summary>
 public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxReader reader)
 {
@@ -48,9 +49,9 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
             {
                 failures.Add($"{citation}: file not found at {report.Meta.CommitSha[..Math.Min(7, report.Meta.CommitSha.Length)]}");
             }
-            else if (!Declares(test ? facts.TestMethods : facts.Methods, name))
+            else if (!Declares(test ? facts.TestMethods : [.. facts.Methods, .. facts.Classes], name))
             {
-                failures.Add($"{citation}: no {(test ? "test" : "method")} named {name}");
+                failures.Add($"{citation}: no {(test ? "test" : "method or class")} named {name}");
             }
         }
 
@@ -65,7 +66,10 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
     /// <summary>The citations written inside a free-text bullet.</summary>
     internal static IEnumerable<string> CitationsIn(string text) => CitationInText().Matches(text).Select(m => m.Value);
 
-    /// <summary>A cited name resolves to a declared method by its simple or (partly) qualified name.</summary>
+    /// <summary>Rewrites each citation inside a free-text bullet.</summary>
+    internal static string RewriteCitations(string text, Func<string, string> map) => CitationInText().Replace(text, m => map(m.Value));
+
+    /// <summary>A cited name resolves to a declared method or class by its simple or (partly) qualified name.</summary>
     internal static bool Declares(IEnumerable<string> methods, string name) =>
         methods.Any(m => m == name || m.EndsWith("." + name, StringComparison.Ordinal));
 
