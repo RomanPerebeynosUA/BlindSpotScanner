@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using BlindSpotScanner.Api.Auth;
 using FluentAssertions;
 
 namespace BlindSpotScanner.Api.IntegrationTests;
@@ -159,6 +160,84 @@ public class ProfilesApiTests(QueueOnlyApiFactory factory) : IClassFixture<Queue
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("markdown").GetString().Should().Contain("(drafted)");
         body.GetProperty("openQuestions").EnumerateArray().Single().GetString().Should().Be("Is the payment gateway a real seam?");
+    }
+
+
+    [Fact]
+    public async Task Post_Draft_ReturnsRulesWithMatchCounts()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient();
+
+        // Act
+        using var response = await client.PostAsync($"/api/repositories/{id}/profile/draft", null);
+
+        // Assert
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var controllers = body.GetProperty("matches").EnumerateArray().Single(m => m.GetProperty("field").GetString() == "controllerGlobs");
+        new
+        {
+            Rule = body.GetProperty("rules").GetProperty("controllerGlobs")[0].GetString(),
+            Files = controllers.GetProperty("files").GetInt32(),
+        }.Should().BeEquivalentTo(new { Rule = "src/**/Controllers/*Controller.cs", Files = 2 });
+    }
+
+    [Fact]
+    public async Task Post_Matches_Returns200WithCounts()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient();
+
+        // Act
+        using var response = await client.PostAsJsonAsync($"/api/repositories/{id}/profile/matches", new { testGlobs = new[] { "tests/*.IntegrationTests/*Tests.cs" } });
+
+        // Assert
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        new
+        {
+            response.StatusCode,
+            Files = body.GetProperty("matches")[0].GetProperty("files").GetInt32(),
+            Errors = body.GetProperty("errors").GetArrayLength(),
+        }.Should().BeEquivalentTo(new { StatusCode = HttpStatusCode.OK, Files = 2, Errors = 0 });
+    }
+
+    [Fact]
+    public async Task Post_Matches_AsViewer_Returns200()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient(Roles.Viewer);
+
+        // Act
+        using var response = await client.PostAsJsonAsync($"/api/repositories/{id}/profile/matches", new { testGlobs = new[] { "tests/**" } });
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Put_Profile_MalformedPattern_Returns400WithError()
+    {
+        // Arrange
+        var id = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient();
+
+        // Act
+        using var response = await client.PutAsJsonAsync($"/api/repositories/{id}/profile", Body(1, testGlobs: ["tests/** (all tests)"]));
+
+        // Assert
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        new
+        {
+            response.StatusCode,
+            Error = body.GetProperty("errors").GetProperty("profile")[0].GetString(),
+        }.Should().BeEquivalentTo(new
+        {
+            StatusCode = HttpStatusCode.BadRequest,
+            Error = "testGlobs: 'tests/** (all tests)' is not one pattern; put one pattern per line with no spaces or commas",
+        });
     }
 
     [Fact]

@@ -22,9 +22,9 @@ public sealed record SaveProfileRequest(
 
 [ApiController]
 [Route("api/repositories/{repoId:guid}/profile")]
-public sealed class ProfilesController(ProfileService profiles, ProfileDrafter drafter) : ControllerBase
+public sealed class ProfilesController(ProfileService profiles, ProfileDrafter drafter, ProfilePatternChecker patterns) : ControllerBase
 {
-    /// <summary>An AI draft of the profile Markdown (a preview: nothing is saved, D22).</summary>
+    /// <summary>An AI draft of the profile Markdown and rules, with match counts (a preview: nothing is saved, D22, D31).</summary>
     [Authorize(Policy = Roles.Member)]
     [HttpPost("draft")]
     public async Task<IActionResult> Draft(Guid repoId, CancellationToken ct)
@@ -40,6 +40,22 @@ public sealed class ProfilesController(ProfileService profiles, ProfileDrafter d
 
             // The LLM's errors can quote its answer, so they are not echoed.
             _ => Problem("The AI could not draft a profile. Try again, or edit the profile by hand.", statusCode: StatusCodes.Status502BadGateway, title: "Draft failed"),
+        };
+    }
+
+    /// <summary>How many default-branch files each glob matches; a read, so every role may ask (D31).</summary>
+    [HttpPost("matches")]
+    public async Task<IActionResult> Matches(Guid repoId, [FromBody] SaveProfileRequest request, CancellationToken ct)
+    {
+        var rules = new ProfileRules(
+            request.IntegrationMappedTo ?? string.Empty, request.TestGlobs ?? [], request.ControllerGlobs ?? [], request.MinimalApiGlobs ?? [],
+            request.IntegrationGlobs ?? [], request.IntegrationAttributes ?? [], request.IntegrationBaseTypes ?? [], request.NotIntegrationGlobs ?? []);
+        var result = await patterns.CheckAsync(repoId, rules, ct);
+        return result.Status switch
+        {
+            PatternCheckStatus.Checked => Ok(new { matches = result.Matches, errors = result.Errors }),
+            PatternCheckStatus.RepositoryNotFound => NotFound(),
+            _ => Problem(result.Errors[0], statusCode: StatusCodes.Status502BadGateway, title: "GitHub is unavailable"),
         };
     }
 

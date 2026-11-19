@@ -11,7 +11,7 @@ import { RouterLink } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { marked } from 'marked';
 import { RepositoriesApi } from '../../core/api/repositories-api';
-import { Profile, ProfileInput } from '../../core/api/api-types';
+import { PatternMatch, Profile, ProfileInput, ProfileRules } from '../../core/api/api-types';
 import { IntegrationMappedTo } from '../../core/api/report';
 
 type ListField = Exclude<keyof ProfileInput, 'markdown' | 'integrationMappedTo'>;
@@ -32,7 +32,8 @@ const lines = (text: string): string[] => text.split('\n').map((l) => l.trim()).
 
 /**
  * `/repos/:id/profile`: the typed classification rules (D18) and the Markdown, with preview, version
- * history and an AI draft. Every save is a new version; a draft is never saved by itself (D22).
+ * history and an AI draft that fills the rules and shows how many files each glob matches (D31).
+ * Every save is a new version; a draft is never saved by itself (D22).
  */
 @Component({
   selector: 'app-profile-editor',
@@ -66,6 +67,11 @@ export class ProfileEditor implements OnInit {
   protected readonly saving = signal(false);
   protected readonly drafting = signal(false);
   protected readonly openQuestions = signal<string[]>([]);
+
+  /** Files per glob, from the last draft or Check patterns; a field's counts go when it is edited. */
+  protected readonly matches = signal<PatternMatch[]>([]);
+  protected readonly patternErrors = signal<string[]>([]);
+  protected readonly checking = signal(false);
 
   /** Edits since the last load or save. */
   protected readonly dirty = signal(false);
@@ -126,18 +132,7 @@ export class ProfileEditor implements OnInit {
     }
 
     this.saving.set(true);
-    const lists = this.lists();
-    const input: ProfileInput = {
-      markdown: this.markdown(),
-      integrationMappedTo: this.mapping(),
-      testGlobs: lines(lists.testGlobs),
-      controllerGlobs: lines(lists.controllerGlobs),
-      minimalApiGlobs: lines(lists.minimalApiGlobs),
-      integrationGlobs: lines(lists.integrationGlobs),
-      integrationAttributes: lines(lists.integrationAttributes),
-      integrationBaseTypes: lines(lists.integrationBaseTypes),
-      notIntegrationGlobs: lines(lists.notIntegrationGlobs),
-    };
+    const input: ProfileInput = { markdown: this.markdown(), ...this.rules() };
     this.api.saveProfile(this.id(), latest.version, input).subscribe({
       next: (saved) => {
         this.saving.set(false);
@@ -159,8 +154,12 @@ export class ProfileEditor implements OnInit {
       next: (draft) => {
         this.drafting.set(false);
         this.markdown.set(draft.markdown);
+        this.mapping.set(draft.rules.integrationMappedTo);
+        this.lists.set(this.listsOf(draft.rules));
         this.dirty.set(true);
         this.openQuestions.set(draft.openQuestions);
+        this.matches.set(draft.matches);
+        this.patternErrors.set([]);
       },
       error: (error: unknown) => {
         this.drafting.set(false);
@@ -186,7 +185,33 @@ export class ProfileEditor implements OnInit {
   protected setList(key: ListField, event: Event): void {
     const value = (event.target as HTMLTextAreaElement).value;
     this.lists.update((l) => ({ ...l, [key]: value }));
+    this.matches.update((ms) => ms.filter((m) => m.field !== key));
     this.dirty.set(true);
+  }
+
+  protected matchesFor(key: ListField): PatternMatch[] {
+    return this.matches().filter((m) => m.field === key);
+  }
+
+  /** Recounts the patterns as typed; a read, so it works read-only too. */
+  protected checkPatterns(): void {
+    this.checking.set(true);
+    this.api.profileMatches(this.id(), this.rules()).subscribe({
+      next: (check) => {
+        this.checking.set(false);
+        this.matches.set(check.matches);
+        this.patternErrors.set(check.errors);
+      },
+      error: () => this.checking.set(false),
+    });
+  }
+
+  private rules(): ProfileRules {
+    const lists = this.lists();
+    return {
+      integrationMappedTo: this.mapping(),
+      ...(Object.fromEntries(LIST_FIELDS.map((f) => [f.key, lines(lists[f.key])])) as Record<ListField, string[]>),
+    };
   }
 
   protected value(event: Event): string {
@@ -208,9 +233,11 @@ export class ProfileEditor implements OnInit {
     this.markdown.set(profile.markdown);
     this.mapping.set(profile.integrationMappedTo);
     this.lists.set(this.listsOf(profile));
+    this.matches.set([]);
+    this.patternErrors.set([]);
   }
 
-  private listsOf(profile: Profile | null): Record<ListField, string> {
+  private listsOf(profile: Record<ListField, string[]> | null): Record<ListField, string> {
     return Object.fromEntries(LIST_FIELDS.map((f) => [f.key, (profile?.[f.key] ?? []).join('\n')])) as Record<ListField, string>;
   }
 }

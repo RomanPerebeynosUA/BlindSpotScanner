@@ -124,6 +124,22 @@ public class ProfileServiceTests
         result.Errors.Should().ContainSingle().Which.Should().Contain("controller");
     }
 
+
+    [Fact]
+    public async Task SaveAsync_MalformedPattern_RejectedAndNothingSaved()
+    {
+        // Act (the v4 incident: an explanation pasted next to the glob)
+        var result = await Service.SaveAsync(_repositoryId, 1, Input(minimalApiGlobs: ["**/*Api.cs (matches TodoApi.cs)"]), CancellationToken.None);
+
+        // Assert
+        new { result.Status, result.Errors, Saved = _profiles.Profiles.Count }.Should().BeEquivalentTo(new
+        {
+            Status = SaveProfileStatus.Invalid,
+            Errors = new[] { "minimalApiGlobs: '**/*Api.cs (matches TodoApi.cs)' is not one pattern; put one pattern per line with no spaces or commas" },
+            Saved = 1,
+        });
+    }
+
     [Fact]
     public async Task SaveAsync_StaleBaseVersion_ReturnsConflict()
     {

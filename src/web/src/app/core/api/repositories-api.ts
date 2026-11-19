@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { Profile, ProfileDraft, ProfileInput, Repository, RepositorySummary, RunHistoryItem } from './api-types';
+import { PatternCheck, Profile, ProfileDraft, ProfileInput, ProfileRules, Repository, RepositorySummary, RunHistoryItem } from './api-types';
 
 /** Repository, profile and scan-start endpoints (contracts/openapi.yaml, D22). */
 @Injectable({ providedIn: 'root' })
@@ -48,5 +48,10 @@ export class RepositoriesApi {
 
   draftProfile(id: string): Observable<ProfileDraft> {
     return this.http.post<ProfileDraft>(`/api/repositories/${id}/profile/draft`, null);
+  }
+
+  /** How many default-branch files each glob matches (D31). */
+  profileMatches(id: string, rules: ProfileRules): Observable<PatternCheck> {
+    return this.http.post<PatternCheck>(`/api/repositories/${id}/profile/matches`, rules);
   }
 }

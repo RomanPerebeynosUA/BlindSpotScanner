@@ -8,8 +8,7 @@ namespace BlindSpotScanner.Infrastructure.Tests.Llm;
 /// PriceTests a unit test; P5 grades Books and Orders; P6 scores every dimension and returns one
 /// false positive and one risk. Each answer still goes through the request's rule check.
 /// </summary>
-/// <param name="forgeCitation">P6 cites a test that does not exist (the M6 citation-verifier scenario).</param>
-internal sealed class CannedLlmClient(bool forgeCitation = false) : ILlmClient
+internal sealed class CannedLlmClient : ILlmClient
 {
     private const string Books = "tests/Bookstore.IntegrationTests/BooksApiTests.cs";
     private const string Orders = "tests/Bookstore.IntegrationTests/OrdersApiTests.cs";
@@ -22,7 +21,7 @@ internal sealed class CannedLlmClient(bool forgeCitation = false) : ILlmClient
         {
             Prompts.ClassifyTests => Classify(request.InputJson),
             Prompts.MapCoverage => Map(request.InputJson),
-            Prompts.GradeQuality => forgeCitation ? Grade.Replace("Create_persists_book", "Deletes_book", StringComparison.Ordinal) : Grade,
+            Prompts.GradeQuality => Grade,
             _ => throw new InvalidOperationException($"No canned answer for {request.Prompt}."),
         };
 

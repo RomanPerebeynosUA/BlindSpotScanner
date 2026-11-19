@@ -103,6 +103,7 @@ public static class DependencyInjection
         });
         services.AddScoped<IProfileStore, EfProfileStore>();
         services.AddScoped<ProfileService>();
+        services.AddScoped<ProfilePatternChecker>();
         services.AddScoped(sp => new ProfileDrafter(
             sp.GetRequiredService<IRepositoryStore>(), sp.GetRequiredService<IGitHubClient>(), sp.GetRequiredService<ILlmClient>(),
             sp.GetRequiredService<IOptions<ScanOptions>>().Value.MaxFileBytes));

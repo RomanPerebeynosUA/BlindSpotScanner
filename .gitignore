@@ -496,3 +496,7 @@ coverage/
 .env
 *.local.json
 
+
+# Sparkathon organiser material (internal Delphi, not Green data)
+Delphi AI Sparkathon 2026.html
+Delphi-AI-Sparkathon-2026-Kickoff.pptx

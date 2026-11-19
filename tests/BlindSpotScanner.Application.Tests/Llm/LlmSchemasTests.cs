@@ -19,4 +19,15 @@ public class LlmSchemasTests
         // Assert
         Regex.IsMatch(schema, @"""type""\s*:\s*\[").Should().BeFalse();
     }
+
+
+    [Fact]
+    public void Get_DraftProfile_RequiresRules()
+    {
+        // Act
+        using var schema = System.Text.Json.JsonDocument.Parse(LlmSchemas.Get(Prompts.DraftProfile));
+
+        // Assert
+        schema.RootElement.GetProperty("required").EnumerateArray().Select(r => r.GetString()).Should().Contain(["integrationMappedTo", "minimalApiGlobs"]);
+    }
 }

@@ -317,3 +317,34 @@ scan client through the SDK's `ClientOptions.ExtraHeaders`, and by the Settings 
 empty sends no header, so workspace-scoped keys work unchanged. Compose maps the variable to
 `Llm__WorkspaceId` rather than passing `ANTHROPIC_WORKSPACE_ID` through, because the SDK reads that name
 for Workload Identity Federation.
+
+## D29 — Haiku 5.5 as the default scan model (2026-11-19)
+The user's choice: scans default to `claude-haiku-5-5` (USD 0.10 / 0.50 per million tokens, prompts
+up to 100K tokens) to keep the Sparkathon demo cheap; D20's Sonnet 5.5 stays a one-line switch.
+Compose passes `LLM_MODEL`, `LLM_INPUT_USD_PER_MTOK` and `LLM_OUTPUT_USD_PER_MTOK` to both the api
+(which queues a run with its model) and the worker (which refuses a run queued for another model).
+Haiku has no server-side refusal fallback, so `ClaudeLlmClient` sends the fallback beta and
+`fallbacks` only for non-Haiku models. Answer quality is still guarded by the schema check,
+`CitationVerifier` and `ReportValidator`; borderline covered/weak grading is the known trade-off.
+
+## D30 — Citations are checked where the LLM answers (2026-11-19)
+A first live scan (TodoApp, Haiku 5.5) failed on four citations. P6 now checks its answer the way P5
+already did: evidence in the scorecard, findings and risks must be `path::Name`, and every citation
+(including those in the evidence bullet) must name a method declared in a test or fixture file the
+model was given, so a slip is re-asked (max 2 retries) instead of failing the whole run at the end.
+If the model keeps citing something that is not there, quality is not graded and the phase note says
+why (principle 5); the bad citation never reaches the report. `CitationVerifier` stays the final gate
+(it re-reads files at the pinned commit), and a citation in text no longer swallows a sentence's
+closing period (`Tests.cs::Name.` cites `Name`).
+
+## D31 — The AI draft proposes the profile rules (2026-11-19)
+The user's choices after two empty live scans whose profile kept the template rules: "Auto-draft
+with AI" now also returns `integrationMappedTo` and the seven typed rule lists (prompt
+`draft-profile` v1.1.0; the scan prompt set stays 1.0.0 because no scan prompt changed and a bump would mark every later run "not comparable"). This reverses D22's "the AI draft fills only the
+Markdown"; D18 stands (rules are typed columns, never parsed from the Markdown) and the draft is still
+saved only by the user. Glob entries must be one pattern each (no whitespace or comma), else the
+answer is re-asked; globs that match no file of the default-branch tree (minus the fixed excludes)
+are re-asked once in a second call with `zeroMatchPatterns`, and any still matching nothing become an
+open question. The editor fills every field from the draft and shows per-pattern match counts, with a
+"Check patterns" button (`POST …/profile/matches`) to recount after edits; a save with a malformed
+pattern is refused (400).

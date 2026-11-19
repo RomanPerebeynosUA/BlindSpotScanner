@@ -107,6 +107,20 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
     if (path === `/api/repositories/${REPO_ID}/profile`) {
       return json(profile);
     }
+    if (path === `/api/repositories/${REPO_ID}/profile/draft` && method === 'POST') {
+      return json({
+        markdown: '# Repo profile — drafted',
+        openQuestions: [],
+        rules: { ...profile, minimalApiGlobs: ['**/*Api.cs'], notIntegrationGlobs: ['**/Nope.cs'] },
+        matches: [
+          { field: 'minimalApiGlobs', pattern: '**/*Api.cs', files: 4 },
+          { field: 'notIntegrationGlobs', pattern: '**/Nope.cs', files: 0 },
+        ],
+      });
+    }
+    if (path === `/api/repositories/${REPO_ID}/profile/matches` && method === 'POST') {
+      return json({ matches: [], errors: [] });
+    }
     if (path === `/api/repositories/${REPO_ID}/profile/versions`) {
       return json([1]);
     }

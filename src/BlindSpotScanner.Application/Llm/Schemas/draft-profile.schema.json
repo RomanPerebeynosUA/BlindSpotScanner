@@ -1,9 +1,17 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["markdown", "openQuestions"],
+  "required": ["markdown", "openQuestions", "integrationMappedTo", "testGlobs", "controllerGlobs", "minimalApiGlobs", "integrationGlobs", "integrationAttributes", "integrationBaseTypes", "notIntegrationGlobs"],
   "properties": {
     "markdown": { "type": "string" },
-    "openQuestions": { "type": "array", "items": { "type": "string" } }
+    "openQuestions": { "type": "array", "items": { "type": "string" } },
+    "integrationMappedTo": { "type": "string", "enum": ["real-seam", "e2e-mocked-data", "e2e-real-backend", "contract", "other"] },
+    "testGlobs": { "type": "array", "items": { "type": "string" } },
+    "controllerGlobs": { "type": "array", "items": { "type": "string" } },
+    "minimalApiGlobs": { "type": "array", "items": { "type": "string" } },
+    "integrationGlobs": { "type": "array", "items": { "type": "string" } },
+    "integrationAttributes": { "type": "array", "items": { "type": "string" } },
+    "integrationBaseTypes": { "type": "array", "items": { "type": "string" } },
+    "notIntegrationGlobs": { "type": "array", "items": { "type": "string" } }
   }
 }

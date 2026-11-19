@@ -95,6 +95,22 @@ public class CitationVerifierTests
         check.Failures.Should().Equal($"{Books}::Ghost_test: no method named Ghost_test");
     }
 
+
+    [Fact]
+    public async Task Verify_CitationEndingASentence_IgnoresThePeriod()
+    {
+        // Arrange
+        var dimension = Sample.Scorecard[0];
+        var bullets = dimension.JustificationBullets.Select((b, i) => i == 2 ? $"Evidence: see {Books}::Create_persists_book." : b).ToList();
+        var report = Sample with { Scorecard = [dimension with { JustificationBullets = bullets }, .. Sample.Scorecard.Skip(1)] };
+
+        // Act
+        var check = await Verify(report);
+
+        // Assert
+        check.Failures.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Verify_SameFileCitedTwice_FetchedOnce()
     {

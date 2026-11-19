@@ -6,7 +6,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RepositoriesApi } from '../../core/api/repositories-api';
-import { Profile } from '../../core/api/api-types';
+import { PatternMatch, Profile, ProfileDraft } from '../../core/api/api-types';
+import { Role } from '../../core/auth/auth';
 import { ProfileEditor } from './profile-editor';
 
 const profile = (overrides: Partial<Profile> = {}): Profile => ({
@@ -23,9 +24,31 @@ const profile = (overrides: Partial<Profile> = {}): Profile => ({
   ...overrides,
 });
 
+const draftOf = (overrides: Partial<ProfileDraft> = {}): ProfileDraft => ({
+  markdown: '# Drafted',
+  openQuestions: [],
+  rules: {
+    integrationMappedTo: 'e2e-mocked-data',
+    testGlobs: ['Todo.Api.Tests/**/*.cs'],
+    controllerGlobs: [],
+    minimalApiGlobs: ['**/*Api.cs'],
+    integrationGlobs: ['Todo.Api.Tests/**'],
+    integrationAttributes: [],
+    integrationBaseTypes: ['WebApplicationFactory'],
+    notIntegrationGlobs: ['**/Nope.cs'],
+  },
+  matches: [
+    { field: 'testGlobs', pattern: 'Todo.Api.Tests/**/*.cs', files: 6 },
+    { field: 'minimalApiGlobs', pattern: '**/*Api.cs', files: 4 },
+    { field: 'notIntegrationGlobs', pattern: '**/Nope.cs', files: 0 },
+  ],
+  ...overrides,
+});
+
 describe('ProfileEditor', () => {
   const saveProfile = vi.fn();
   const draftProfile = vi.fn();
+  const profileMatches = vi.fn();
   const acknowledgeLlmSharing = vi.fn(() => of(undefined));
   const dialogOpen = vi.fn(() => ({ afterClosed: () => of(true) }));
   const open = vi.fn();
@@ -34,14 +57,15 @@ describe('ProfileEditor', () => {
     latest = () => profile();
     saveProfile.mockReset();
     draftProfile.mockReset();
+    profileMatches.mockReset();
     open.mockReset();
   });
 
-  async function render() {
+  async function render(role: Role = 'Admin') {
     TestBed.configureTestingModule({
       imports: [ProfileEditor],
       providers: [
-        provideTestAuth(),
+        provideTestAuth(role),
         provideRouter([]),
         { provide: MatSnackBar, useValue: { open } },
         { provide: MatDialog, useValue: { open: dialogOpen } },
@@ -52,6 +76,7 @@ describe('ProfileEditor', () => {
             profileVersions: () => of([2, 1]),
             saveProfile,
             draftProfile,
+            profileMatches,
             acknowledgeLlmSharing,
           },
         },
@@ -145,7 +170,7 @@ describe('ProfileEditor', () => {
 
   it('auto-draft replaces markdown and shows open questions without saving', async () => {
     // Arrange
-    draftProfile.mockReturnValue(of({ markdown: '# Drafted', openQuestions: ['Is Redis a real seam?'] }));
+    draftProfile.mockReturnValue(of(draftOf({ openQuestions: ['Is Redis a real seam?'] })));
     const { el, settle } = await render();
 
     // Act
@@ -156,6 +181,91 @@ describe('ProfileEditor', () => {
     expect(field(el, 'markdown').value).toBe('# Drafted');
     expect(el.querySelector('.questions li')?.textContent?.trim()).toBe('Is Redis a real seam?');
     expect(saveProfile).not.toHaveBeenCalled();
+  });
+
+
+  const matchLines = (el: HTMLElement, name: string) =>
+    [...(field(el, name).closest('label')?.querySelectorAll('.matches li') ?? [])].map((li) => li.textContent?.trim());
+
+  async function drafted() {
+    draftProfile.mockReturnValue(of(draftOf()));
+    const rendered = await render();
+    (rendered.el.querySelector('button.draft') as HTMLButtonElement).click();
+    await rendered.settle();
+    return rendered;
+  }
+
+  it('auto-draft fills every rule field and the mapping', async () => {
+    // Act
+    const { el } = await drafted();
+
+    // Assert
+    expect([field(el, 'minimalApiGlobs').value, field(el, 'controllerGlobs').value, (el.querySelector('[name=integrationMappedTo]') as HTMLSelectElement).value])
+      .toEqual(['**/*Api.cs', '', 'e2e-mocked-data']);
+  });
+
+  it('auto-draft shows how many files each pattern matches', async () => {
+    // Act
+    const { el } = await drafted();
+
+    // Assert
+    expect(matchLines(el, 'minimalApiGlobs')).toEqual(['**/*Api.cs — 4 files']);
+  });
+
+  it('a pattern matching no file is marked as a warning', async () => {
+    // Act
+    const { el } = await drafted();
+
+    // Assert
+    expect(field(el, 'notIntegrationGlobs').closest('label')?.querySelector('.matches li.zero')?.textContent?.trim()).toBe('**/Nope.cs — 0 files');
+  });
+
+  it('editing a field hides its stale counts', async () => {
+    // Arrange
+    const { el, settle } = await drafted();
+
+    // Act
+    type(el, 'minimalApiGlobs', 'src/**/*Api.cs');
+    await settle();
+
+    // Assert
+    expect([matchLines(el, 'minimalApiGlobs'), matchLines(el, 'testGlobs')]).toEqual([[], ['Todo.Api.Tests/**/*.cs — 6 files']]);
+  });
+
+  it('check patterns sends the current lists and shows the new counts', async () => {
+    // Arrange
+    const counted: PatternMatch[] = [{ field: 'minimalApiGlobs', pattern: 'src/**/*Api.cs', files: 1 }];
+    profileMatches.mockReturnValue(of({ matches: counted, errors: [] }));
+    const { el, settle } = await render();
+    type(el, 'minimalApiGlobs', 'src/**/*Api.cs');
+
+    // Act
+    (el.querySelector('button.check') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect([profileMatches.mock.calls[0][1].minimalApiGlobs, matchLines(el, 'minimalApiGlobs')]).toEqual([['src/**/*Api.cs'], ['src/**/*Api.cs — 1 file']]);
+  });
+
+  it('check patterns lists syntax errors', async () => {
+    // Arrange
+    profileMatches.mockReturnValue(of({ matches: [], errors: ["testGlobs: 'a b' is not one pattern"] }));
+    const { el, settle } = await render();
+
+    // Act
+    (el.querySelector('button.check') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect(el.querySelector('.pattern-errors li')?.textContent?.trim()).toBe("testGlobs: 'a b' is not one pattern");
+  });
+
+  it('check patterns is available to a Viewer', async () => {
+    // Act
+    const { el } = await render('Viewer');
+
+    // Assert
+    expect((el.querySelector('button.check') as HTMLButtonElement | null)?.disabled).toBe(false);
   });
 
   it('switching versions with unsaved edits asks first and keeps them on cancel', async () => {
@@ -229,7 +339,7 @@ describe('ProfileEditor', () => {
   it('a draft refused for LLM sharing asks for consent, records it, then drafts', async () => {
     // Arrange (doc 10: drafting sends code to the LLM too)
     const refused = new HttpErrorResponse({ status: 409, error: { title: 'LLM data sharing not acknowledged' } });
-    draftProfile.mockReturnValueOnce(throwError(() => refused)).mockReturnValueOnce(of({ markdown: '# Drafted', openQuestions: [] }));
+    draftProfile.mockReturnValueOnce(throwError(() => refused)).mockReturnValueOnce(of(draftOf()));
     const { el, settle } = await render();
 
     // Act

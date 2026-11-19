@@ -14,7 +14,8 @@ namespace BlindSpotScanner.Infrastructure.Llm;
 /// <see cref="ILlmClient"/> over the official Anthropic SDK (D20). Each attempt sends the system
 /// prompt, the task prompt and the scrubbed input, and asks for structured JSON output. An answer
 /// that is cut off, refused, not JSON, off-schema or rejected by the request's rule check is re-asked
-/// with the errors, at most twice. Server-side refusal fallback is on (claude-api default).
+/// with the errors, at most twice. Server-side refusal fallback is on (claude-api default)
+/// for every model except Haiku, which has none and would reject the request.
 /// </summary>
 public sealed class ClaudeLlmClient : ILlmClient
 {
@@ -70,6 +71,7 @@ public sealed class ClaudeLlmClient : ILlmClient
             new BetaUserMessageParam { Content = $"{_prompts.Task(request.Prompt)}\n\nInput:\n{ScrubStrings(request.InputJson)}" },
         };
 
+        var fallback = HasServerFallback(_options.Model);
         var usage = LlmUsage.None;
         IReadOnlyList<string> errors = [];
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
@@ -77,18 +79,17 @@ public sealed class ClaudeLlmClient : ILlmClient
             BetaMessage response;
             try
             {
-                response = await _client.Beta.Messages.Create(
-                new MessageCreateParams
+                var parameters = new MessageCreateParams
                 {
                     Model = _options.Model,
                     MaxTokens = _options.MaxTokensPerCall,
                     System = _prompts.System,
                     Messages = messages,
                     OutputConfig = new BetaOutputConfig { Format = new BetaJsonOutputFormat { Schema = format } },
-                    Betas = [FallbackBeta],
-                    Fallbacks = new Default(),
-                },
-                ct);
+                };
+                response = await _client.Beta.Messages.Create(
+                    fallback ? parameters with { Betas = [FallbackBeta], Fallbacks = new Default() } : parameters,
+                    ct);
             }
             catch (Exception ex) when (ex is AnthropicException or HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
@@ -116,6 +117,8 @@ public sealed class ClaudeLlmClient : ILlmClient
 
         return new LlmResult(null, errors, usage, FromCache: false);
     }
+
+    private static bool HasServerFallback(string model) => !model.StartsWith("claude-haiku", StringComparison.Ordinal);
 
     private static IReadOnlyList<string> Check(BetaMessage response, string text, JsonSchema schema, Func<JsonElement, IReadOnlyList<string>>? validate, out JsonElement output)
     {
