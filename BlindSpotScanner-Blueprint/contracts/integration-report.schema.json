@@ -44,7 +44,19 @@
         "testFilesTotal": { "type": "integer" }, "integrationTestFiles": { "type": "integer" },
         "classification": { "type": "object", "additionalProperties": { "type": "integer" } },
         "readInFull": { "type": "integer" },
-        "unverifiedReasons": { "type": "array", "items": { "type": "string" } }
+        "unverifiedReasons": { "type": "array", "items": { "type": "string" } },
+        "productionSeams": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "name", "source"],
+            "properties": {
+              "kind": { "enum": ["Database", "OutboundHttp", "MessageBroker", "BlobStorage", "Cache"] },
+              "name": { "type": "string" },
+              "source": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "endpointCoverage": {

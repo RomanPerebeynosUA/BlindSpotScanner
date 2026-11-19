@@ -20,7 +20,8 @@ public sealed record QualityGrade(IReadOnlyList<ScoreDimension> Scorecard, IRead
 /// Without tests or without an answer, every dimension is unscorable (principle 5: N/A, not a guess).
 /// Uncovered-endpoint findings are derived from P5 in code. Every scorecard citation must name a
 /// method or class declared in a file the model was given, else the answer is re-asked (principle 1);
-/// finding and risk evidence that does not resolve is dropped and noted instead (D33).
+/// finding and risk evidence that does not resolve is dropped and noted instead (D33). An
+/// UncoveredSeam finding stands only for a seam detected in startup code; others are dropped (D34).
 /// </summary>
 public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs, ITestSyntaxReader reader)
 {
@@ -28,7 +29,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
     private const int MaxRisks = 5;
 
     public async Task<PhaseResult<QualityGrade>> GradeAsync(
-        RunContext run, TestClassification tests, IReadOnlyList<ControllerCoverage> coverage, RepoProfile profile, int maxFileBytes, CancellationToken ct)
+        RunContext run, TestClassification tests, IReadOnlyList<ControllerCoverage> coverage, RepoProfile profile, IReadOnlyList<ProductionSeam>? seams, int maxFileBytes, CancellationToken ct)
     {
         var notes = new List<string>();
         var uncovered = UncoveredEndpointFindings(coverage);
@@ -47,7 +48,8 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             {
                 integrationMappedTo = Kebab(profile.IntegrationMappedTo),
                 profileMarkdown = profile.Markdown,
-                productionSeams = Array.Empty<string>(),
+                productionSeams = (seams ?? []).Select(s => new { kind = s.Kind.ToString(), name = s.Name, source = s.SourcePath }),
+                productionSeamsVerified = seams is not null,
                 tests = testFiles,
                 fixtures,
                 coverageSummaryForContext = new
@@ -82,7 +84,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
             .Select(e => e.Full)
             .ToList();
 
-        var findings = uncovered.Concat(output.GetProperty("findings").EnumerateArray().Select(f => LlmFinding(f, Kept)))
+        var findings = uncovered.Concat(output.GetProperty("findings").EnumerateArray().Where(f => IsGrounded(f, seams, notes)).Select(f => LlmFinding(f, Kept)))
             .Select((f, i) => f with { Id = $"f{i + 1}" })
             .ToList();
         var risks = output.GetProperty("topRisks").EnumerateArray().Select(r => Risk(r, Kept)).ToList();
@@ -285,6 +287,24 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs,
                 Evidence = [],
             };
         }).Select((f, i) => f with { Id = $"f{i + 1}" }).ToList();
+
+    /// <summary>D34: an UncoveredSeam finding must name a detected seam; without detected seams none stands.</summary>
+    private static bool IsGrounded(JsonElement finding, IReadOnlyList<ProductionSeam>? seams, List<string> notes)
+    {
+        if (finding.GetProperty("kind").GetString() != nameof(FindingKind.UncoveredSeam))
+        {
+            return true;
+        }
+
+        var subject = finding.GetProperty("subject").GetString()!;
+        if (seams?.Any(s => s.Name == subject) == true)
+        {
+            return true;
+        }
+
+        notes.Add($"UncoveredSeam '{subject}' dropped: not a detected seam");
+        return false;
+    }
 
     private static ReportFinding LlmFinding(JsonElement f, Func<string, IEnumerable<string>, List<string>> kept)
     {

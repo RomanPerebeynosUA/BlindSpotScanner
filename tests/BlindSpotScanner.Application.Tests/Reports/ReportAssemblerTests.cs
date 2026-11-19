@@ -168,4 +168,31 @@ public class ReportAssemblerTests
             (2, "Some tests pass even when the wrong data comes back"),
             (3, "Nothing tests a real charge with the payment provider"));
     }
+
+    [Fact]
+    public void Assemble_SeamsNotDetected_UncoveredRealSeamsNull()
+    {
+        // Arrange
+        var detail = CurrentDetail;
+        detail = detail with { Inventory = detail.Inventory with { ProductionSeams = null } };
+
+        // Act
+        var summary = ReportAssembler.Assemble(detail, previous: null).Summary;
+
+        // Assert
+        summary.UncoveredRealSeams.Should().BeNull();
+    }
+
+    [Fact]
+    public void Assemble_SeamsDetected_CountsUncoveredSeamFindings()
+    {
+        // Arrange
+        var detail = CurrentDetail;
+
+        // Act
+        var summary = ReportAssembler.Assemble(detail, previous: null).Summary;
+
+        // Assert
+        summary.UncoveredRealSeams.Should().Be(1);
+    }
 }
