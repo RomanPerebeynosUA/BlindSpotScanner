@@ -331,7 +331,7 @@ closing period (`Tests.cs::Name.` cites `Name`).
 ## D29 — The AI draft proposes the profile rules (2026-11-19)
 The user's choices after two empty live scans whose profile kept the template rules: "Auto-draft
 with AI" now also returns `integrationMappedTo` and the seven typed rule lists (prompt
-`draft-profile` v1.1.0, prompt set 1.1.0). This reverses D22's "the AI draft fills only the
+`draft-profile` v1.1.0; the scan prompt set stays 1.0.0 because no scan prompt changed and a bump would mark every later run "not comparable"). This reverses D22's "the AI draft fills only the
 Markdown"; D18 stands (rules are typed columns, never parsed from the Markdown) and the draft is still
 saved only by the user. Glob entries must be one pattern each (no whitespace or comma), else the
 answer is re-asked; globs that match no file of the default-branch tree (minus the fixed excludes)
