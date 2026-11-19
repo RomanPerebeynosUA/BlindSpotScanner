@@ -74,7 +74,7 @@ public sealed class FakeClaudeServer : IDisposable
         """;
 
     public const string Draft = """
-        {"markdown":"# Repo profile — example-org/bookstore (drafted)","openQuestions":["Is the payment gateway a real seam?"]}
+        {"markdown":"# Repo profile — example-org/bookstore (drafted)","openQuestions":["Is the payment gateway a real seam?"],"integrationMappedTo":"real-seam","testGlobs":["tests/**/*.cs"],"controllerGlobs":["src/**/Controllers/*Controller.cs"],"minimalApiGlobs":["src/**/Endpoints/*.cs"],"integrationGlobs":["tests/*.IntegrationTests/**"],"integrationAttributes":[],"integrationBaseTypes":["WebApplicationFactory"],"notIntegrationGlobs":["**/*Fixture.cs"]}
         """;
 
     private const string BooksMap = $$"""

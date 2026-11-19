@@ -9,7 +9,25 @@ namespace BlindSpotScanner.Application.Tests.Repositories;
 
 public class ProfileDrafterTests
 {
-    private const string Answer = """{"markdown":"# Repo profile — drafted","openQuestions":["Is the payment client a real seam?"]}""";
+    private const string Endpoints = "src/**/Endpoints/**/*.cs";
+    private const string ZeroMatchQuestion = $"minimalApiGlobs: '{Endpoints}' matches no file in the repository; check it before saving.";
+
+    private static readonly string Answer = AnswerWith();
+
+    /// <summary>A draft whose globs match the stub tree unless <paramref name="minimalApiGlobs"/> says otherwise.</summary>
+    private static string AnswerWith(string minimalApiGlobs = "[]") => $$"""
+        {"markdown":"# Repo profile — drafted","openQuestions":["Is the payment client a real seam?"],
+         "integrationMappedTo":"real-seam","testGlobs":["tests/**/*.cs"],"controllerGlobs":["src/**/Controllers/*Controller.cs"],
+         "minimalApiGlobs":{{minimalApiGlobs}},"integrationGlobs":["tests/*.IntegrationTests/**"],"integrationAttributes":[],
+         "integrationBaseTypes":["WebApplicationFactory"],"notIntegrationGlobs":[]}
+        """;
+
+    /// <summary>Answers in order; the last one repeats.</summary>
+    private static FakeLlmClient InOrder(params LlmResult[] answers)
+    {
+        var next = 0;
+        return new FakeLlmClient(_ => answers[Math.Min(next++, answers.Length - 1)]);
+    }
 
     private readonly StubGitHubClient _github = new();
     private readonly FakeRepositoryStore _repositories = new();
@@ -58,7 +76,99 @@ public class ProfileDrafterTests
 
         // Assert
         result.Status.Should().Be(DraftProfileStatus.Drafted);
-        result.Draft.Should().BeEquivalentTo(new ProfileDraft("# Repo profile — drafted", ["Is the payment client a real seam?"]));
+        result.Draft.Should().BeEquivalentTo(new { Markdown = "# Repo profile — drafted", OpenQuestions = new[] { "Is the payment client a real seam?" } });
+    }
+
+    [Fact]
+    public async Task DraftAsync_Answer_ReturnsRulesAndMatches()
+    {
+        // Act
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        new { result.Draft!.Rules.TestGlobs, Tests = result.Draft!.Matches.Single(m => m.Field == "testGlobs") }.Should().BeEquivalentTo(new
+        {
+            TestGlobs = new[] { "tests/**/*.cs" },
+            Tests = new PatternMatch("testGlobs", "tests/**/*.cs", 2),
+        });
+    }
+
+    [Fact]
+    public async Task DraftAsync_MalformedPattern_IsReasked()
+    {
+        // Arrange
+        await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+        using var answer = JsonDocument.Parse(AnswerWith("""["**/*Api.cs (x)"]"""));
+
+        // Act
+        var errors = _llm.Requests.Single().Validate!(answer.RootElement);
+
+        // Assert
+        errors.Should().Contain("minimalApiGlobs: '**/*Api.cs (x)' is not one pattern; put one pattern per line with no spaces or commas");
+    }
+
+    [Fact]
+    public async Task DraftAsync_ZeroMatchPattern_ReasksOnceWithZeroMatchPatterns()
+    {
+        // Arrange
+        _llm = InOrder(FakeLlmClient.Json(AnswerWith($"[\"{Endpoints}\"]")), FakeLlmClient.Json(Answer));
+
+        // Act
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        using var second = JsonDocument.Parse(_llm.Requests[1].InputJson);
+        new
+        {
+            Requests = _llm.Requests.Count,
+            ZeroMatch = second.RootElement.GetProperty("zeroMatchPatterns").EnumerateArray().Select(p => p.GetString()),
+            result.Draft!.Rules.MinimalApiGlobs,
+        }.Should().BeEquivalentTo(new { Requests = 2, ZeroMatch = new[] { $"minimalApiGlobs: {Endpoints}" }, MinimalApiGlobs = Array.Empty<string>() });
+    }
+
+    [Fact]
+    public async Task DraftAsync_StillZeroAfterReask_FlagsOpenQuestion()
+    {
+        // Arrange
+        _llm = InOrder(FakeLlmClient.Json(AnswerWith($"[\"{Endpoints}\"]")));
+
+        // Act
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        result.Draft!.OpenQuestions.Should().Equal("Is the payment client a real seam?", ZeroMatchQuestion);
+    }
+
+    [Fact]
+    public async Task DraftAsync_ReaskFails_KeepsFirstAnswerAndFlags()
+    {
+        // Arrange
+        _llm = InOrder(FakeLlmClient.Json(AnswerWith($"[\"{Endpoints}\"]")), FakeLlmClient.Failure("x"));
+
+        // Act
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        new { result.Status, result.Draft!.Rules.MinimalApiGlobs, Flagged = result.Draft!.OpenQuestions.Contains(ZeroMatchQuestion) }.Should().BeEquivalentTo(new
+        {
+            Status = DraftProfileStatus.Drafted,
+            MinimalApiGlobs = new[] { Endpoints },
+            Flagged = true,
+        });
+    }
+
+    [Fact]
+    public async Task DraftAsync_EmptyRuleList_NoReaskNoQuestion()
+    {
+        // Act (the answer's minimalApiGlobs is [], every other glob matches)
+        var result = await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
+
+        // Assert
+        new { Requests = _llm.Requests.Count, result.Draft!.OpenQuestions }.Should().BeEquivalentTo(new
+        {
+            Requests = 1,
+            OpenQuestions = new[] { "Is the payment client a real seam?" },
+        });
     }
 
     [Fact]
@@ -102,13 +212,14 @@ public class ProfileDrafterTests
     public async Task DraftAsync_BlankMarkdown_IsReasked()
     {
         // Arrange
-        _llm = new FakeLlmClient(_ => FakeLlmClient.Json("""{"markdown":"  ","openQuestions":[]}"""));
+        var blank = Answer.Replace("# Repo profile — drafted", "  ", StringComparison.Ordinal);
+        _llm = new FakeLlmClient(_ => FakeLlmClient.Json(blank));
 
         // Act
         await Drafter().DraftAsync(_repositoryId, CancellationToken.None);
 
         // Assert
-        var answer = JsonDocument.Parse("""{"markdown":"  ","openQuestions":[]}""").RootElement;
+        var answer = JsonDocument.Parse(blank).RootElement;
         _llm.Requests.Single().Validate!(answer).Should().ContainSingle();
     }
 
