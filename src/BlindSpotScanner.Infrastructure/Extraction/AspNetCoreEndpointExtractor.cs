@@ -40,6 +40,8 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
     /// <summary>Receivers that are routing roots: a parameter of these types, or the static WebApplication factory.</summary>
     private static readonly HashSet<string> RootBuilders = new(StringComparer.Ordinal) { "WebApplication", "IEndpointRouteBuilder" };
 
+    public IReadOnlyList<ProductionSeam> DetectSeams(string path, string source) => CSharpSeamDetector.Detect(path, source);
+
     public ExtractionResult Extract(string path, string source)
     {
         if (!path.EndsWith(".cs", StringComparison.Ordinal))
