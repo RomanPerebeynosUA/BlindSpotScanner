@@ -44,3 +44,22 @@ test('report_filesChanged_offersRegenerate', async ({ page }) => {
   await expect(page.getByRole('alert').filter({ hasText: 'Files changed since the scan' })).toContainText('tests/Bookstore.IntegrationTests/BooksApiTests.cs');
   await expect(page.getByRole('button', { name: 'Regenerate' })).toBeVisible();
 });
+
+test.describe('long fix draft on a 1280x720 screen', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test('report_longFixDraft_editAndOpenStayReachable', async ({ page }) => {
+    // Arrange
+    const api = await mockApi(page, { registered: true, finished: true, longFix: true });
+    await page.goto(`/runs/${RUN_ID}`);
+    await page.locator('[data-kind=FalsePositive] .finding').getByRole('button', { name: 'Fix with PR' }).click();
+    await expect(page.locator('.diff')).toBeVisible();
+
+    // Act
+    await page.getByRole('button', { name: 'Edit' }).click({ timeout: 3000 });
+    await page.getByRole('button', { name: 'Open draft PR' }).click({ timeout: 3000 });
+
+    // Assert
+    expect(api.pullRequestBodies()).toHaveLength(1);
+  });
+});

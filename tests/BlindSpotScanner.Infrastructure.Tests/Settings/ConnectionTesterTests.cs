@@ -81,6 +81,49 @@ public sealed class ConnectionTesterTests : IDisposable
         result.Should().Be(new Application.Settings.ConnectionTestResult(true, "Connected to Claude."));
     }
 
+    private void RespondClaudeError(int status, string body) =>
+        _server.Given(Request.Create().WithPath("/v1/models").UsingGet()).RespondWith(Response.Create().WithStatusCode(status).WithBody(body));
+
+    [Fact]
+    public async Task TestLlm_BadRequest_ShowsClaudesReason()
+    {
+        // Arrange
+        RespondClaudeError(400, """{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}""");
+
+        // Act
+        var result = await Tester().TestAsync("llm", CancellationToken.None);
+
+        // Assert
+        result.Should().Be(new Application.Settings.ConnectionTestResult(false,
+            "Claude answered 400 (invalid_request_error: Your credit balance is too low to access the Anthropic API.); check the configured credentials."));
+    }
+
+    [Fact]
+    public async Task TestLlm_ReasonEchoingTheKey_IsDropped()
+    {
+        // Arrange
+        RespondClaudeError(401, "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key " + ClaudeKey + "\"}}");
+
+        // Act
+        var result = await Tester().TestAsync("llm", CancellationToken.None);
+
+        // Assert
+        result.Should().Be(new Application.Settings.ConnectionTestResult(false, "Claude answered 401; check the configured credentials."));
+    }
+
+    [Fact]
+    public async Task TestLlm_UnreadableErrorBody_KeepsPlainMessage()
+    {
+        // Arrange
+        RespondClaudeError(400, "<html>Bad Request</html>");
+
+        // Act
+        var result = await Tester().TestAsync("llm", CancellationToken.None);
+
+        // Assert
+        result.Should().Be(new Application.Settings.ConnectionTestResult(false, "Claude answered 400; check the configured credentials."));
+    }
+
     [Fact]
     public async Task TestLlm_WorkspaceConfigured_SendsWorkspaceHeader()
     {
