@@ -57,6 +57,75 @@ public sealed class ClaudeLlmClientTests : IDisposable
 
     private List<string> RequestBodies() => _server.LogEntries.Select(e => e.RequestMessage!.Body!).ToList();
 
+    private List<string?> WorkspaceHeaders() =>
+        _server.LogEntries.Select(e => e.RequestMessage!.Headers!.TryGetValue("anthropic-workspace-id", out var v) ? string.Join(",", v) : null).ToList();
+
+    [Fact]
+    public async Task Complete_WorkspaceConfigured_SendsWorkspaceHeader()
+    {
+        // Arrange
+        RespondInOrder(Reply("""{"answer":"x"}"""));
+        var client = new ClaudeLlmClient(new PromptLibrary(), Options.Create(new LlmOptions { ApiKey = "test-key", BaseUrl = _server.Url, WorkspaceId = "wrkspc_01abc" }));
+
+        // Act
+        await client.CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        WorkspaceHeaders().Should().Equal("wrkspc_01abc");
+    }
+
+    [Fact]
+    public async Task Complete_NoWorkspace_SendsNoWorkspaceHeader()
+    {
+        // Arrange
+        RespondInOrder(Reply("""{"answer":"x"}"""));
+
+        // Act
+        await CreateClient().CompleteAsync(Call(), CancellationToken.None);
+
+        // Assert
+        WorkspaceHeaders().Should().Equal((string?)null);
+    }
+
+    /// <summary>A schema with keywords structured outputs reject, and a property that happens to be named like one.</summary>
+    private const string ConstrainedSchema = """
+        {"type":"object","additionalProperties":false,"required":["minLength","files"],
+         "properties":{
+           "minLength":{"type":"string","minLength":1},
+           "files":{"type":"array","maxItems":2,"items":{"type":"string","maxLength":10}}}}
+        """;
+
+    private static LlmRequest ConstrainedCall() => new(Prompts.GenerateFix, """{"q":1}""", ConstrainedSchema, null);
+
+    [Fact]
+    public async Task Complete_UnsupportedSchemaKeywords_AreNotSent()
+    {
+        // Arrange
+        RespondInOrder(Reply("""{"minLength":"a","files":[]}"""));
+
+        // Act
+        await CreateClient().CompleteAsync(ConstrainedCall(), CancellationToken.None);
+
+        // Assert
+        using var body = JsonDocument.Parse(RequestBodies().Single());
+        var sent = body.RootElement.GetProperty("output_config").GetProperty("format").GetProperty("schema").GetRawText();
+        new { HasMinLength = sent.Contains("\"minLength\":1", StringComparison.Ordinal), HasMaxItems = sent.Contains("maxItems", StringComparison.Ordinal), HasMaxLength = sent.Contains("maxLength", StringComparison.Ordinal), KeepsPropertyName = sent.Contains("\"minLength\":{", StringComparison.Ordinal) }
+            .Should().BeEquivalentTo(new { HasMinLength = false, HasMaxItems = false, HasMaxLength = false, KeepsPropertyName = true });
+    }
+
+    [Fact]
+    public async Task Complete_AnswerBreakingStrippedConstraint_IsReasked()
+    {
+        // Arrange (three files break maxItems 2, which only the local check enforces)
+        RespondInOrder(Reply("""{"minLength":"a","files":["x","y","z"]}"""), Reply("""{"minLength":"a","files":["x"]}"""));
+
+        // Act
+        var result = await CreateClient().CompleteAsync(ConstrainedCall(), CancellationToken.None);
+
+        // Assert
+        new { Files = result.Output?.GetProperty("files").GetArrayLength(), Requests = RequestBodies().Count }.Should().BeEquivalentTo(new { Files = (int?)1, Requests = 2 });
+    }
+
     [Fact]
     public async Task Complete_ValidJson_ReturnsOutputAndUsage()
     {

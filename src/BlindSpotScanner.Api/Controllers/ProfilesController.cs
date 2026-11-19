@@ -24,7 +24,7 @@ public sealed record SaveProfileRequest(
 [Route("api/repositories/{repoId:guid}/profile")]
 public sealed class ProfilesController(ProfileService profiles, ProfileDrafter drafter, ProfilePatternChecker patterns) : ControllerBase
 {
-    /// <summary>An AI draft of the profile Markdown and rules, with match counts (a preview: nothing is saved, D22, D29).</summary>
+    /// <summary>An AI draft of the profile Markdown and rules, with match counts (a preview: nothing is saved, D22, D31).</summary>
     [Authorize(Policy = Roles.Member)]
     [HttpPost("draft")]
     public async Task<IActionResult> Draft(Guid repoId, CancellationToken ct)
@@ -43,7 +43,7 @@ public sealed class ProfilesController(ProfileService profiles, ProfileDrafter d
         };
     }
 
-    /// <summary>How many default-branch files each glob matches; a read, so every role may ask (D29).</summary>
+    /// <summary>How many default-branch files each glob matches; a read, so every role may ask (D31).</summary>
     [HttpPost("matches")]
     public async Task<IActionResult> Matches(Guid repoId, [FromBody] SaveProfileRequest request, CancellationToken ct)
     {

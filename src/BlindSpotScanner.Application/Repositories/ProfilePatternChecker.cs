@@ -12,7 +12,7 @@ public enum PatternCheckStatus
 /// <param name="Errors">Syntax errors; malformed patterns are still counted.</param>
 public sealed record PatternCheckResult(PatternCheckStatus Status, IReadOnlyList<PatternMatch> Matches, IReadOnlyList<string> Errors);
 
-/// <summary>Recounts edited profile patterns against the default branch head (the editor's "Check patterns", D29).</summary>
+/// <summary>Recounts edited profile patterns against the default branch head (the editor's "Check patterns", D31).</summary>
 public sealed class ProfilePatternChecker(IRepositoryStore repositories, IGitHubClient github)
 {
     public async Task<PatternCheckResult> CheckAsync(Guid repositoryId, ProfileRules rules, CancellationToken ct)

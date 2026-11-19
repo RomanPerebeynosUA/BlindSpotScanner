@@ -61,7 +61,7 @@ export interface MockApi {
  * Serves the REST API (`page.route`) and the `/hubs/scans` SignalR hub (`page.routeWebSocket`, JSON
  * protocol: records end with U+001E) in memory, per test.
  */
-export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean; readOnly?: boolean; filesChanged?: boolean; role?: 'Viewer' | 'Member' | 'Admin' | null; localMode?: boolean } = {},
+export async function mockApi(page: Page, options: { registered?: boolean; finished?: boolean; notComparable?: boolean; ticketed?: boolean; readOnly?: boolean; filesChanged?: boolean; longFix?: boolean; role?: 'Viewer' | 'Member' | 'Admin' | null; localMode?: boolean } = {},
 ): Promise<MockApi> {
   let registered = options.registered ?? false;
   let finished = options.finished ?? false;
@@ -176,10 +176,12 @@ export async function mockApi(page: Page, options: { registered?: boolean; finis
       const slug = finding.stableKey.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
       if (fix[2] === 'fix-preview') {
         return json({
-          files: [{ path: 'tests/Bookstore.IntegrationTests/BooksApiTests.cs', action: 'modify', content: 'class BooksApiTests\n{\n    // asserts the title\n}', original: 'class BooksApiTests\n{\n}' }],
+          files: [options.longFix
+            ? { path: 'tests/Bookstore.IntegrationTests/UserApiTests.cs', action: 'create', content: Array.from({ length: 90 }, (_, i) => `    // line ${i + 1} of a generated test`).join('\n'), original: null }
+            : { path: 'tests/Bookstore.IntegrationTests/BooksApiTests.cs', action: 'modify', content: 'class BooksApiTests\n{\n    // asserts the title\n}', original: 'class BooksApiTests\n{\n}' }],
           rationale: 'Asserts the returned book, not only the status.',
-          assumptions: [],
-          riskNotes: [],
+          assumptions: options.longFix ? Array.from({ length: 6 }, (_, i) => `Assumption ${i + 1}: the seeded data and the test host behave as in the sibling tests.`) : [],
+          riskNotes: options.longFix ? Array.from({ length: 6 }, (_, i) => `Risk ${i + 1}: the endpoint may need an authenticated user in this test.`) : [],
           branch: `coverage/fix-${slug}-${String(report.meta.commitSha).slice(0, 7)}`,
           title: 'test: assert the returned book',
           body: 'Strengthens the test.',

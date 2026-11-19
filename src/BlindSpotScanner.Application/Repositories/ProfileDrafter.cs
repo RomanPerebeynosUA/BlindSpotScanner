@@ -5,7 +5,7 @@ using BlindSpotScanner.Application.Scanning;
 
 namespace BlindSpotScanner.Application.Repositories;
 
-/// <param name="Matches">How many repository files each glob of <paramref name="Rules"/> matches (D29).</param>
+/// <param name="Matches">How many repository files each glob of <paramref name="Rules"/> matches (D31).</param>
 public sealed record ProfileDraft(string Markdown, IReadOnlyList<string> OpenQuestions, ProfileRules Rules, IReadOnlyList<PatternMatch> Matches);
 
 public enum DraftProfileStatus
@@ -22,7 +22,7 @@ public sealed record DraftProfileResult(DraftProfileStatus Status, ProfileDraft?
 /// <summary>
 /// Drafts a profile's Markdown and typed rules with the LLM (<c>prompts/draft-profile.md</c>) from the
 /// default branch head. Malformed globs are re-asked; globs that match no file are re-asked once in a
-/// second call, and any that still match nothing are flagged (D29). The draft is only a preview:
+/// second call, and any that still match nothing are flagged (D31). The draft is only a preview:
 /// nothing is saved until the user saves it (D22).
 /// </summary>
 public sealed class ProfileDrafter(IRepositoryStore repositories, IGitHubClient github, ILlmClient llm, int maxFileBytes)

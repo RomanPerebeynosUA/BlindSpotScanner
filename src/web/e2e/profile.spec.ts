@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mockApi, REPO_ID } from './mock-api';
 
-/** D29: Auto-draft fills the typed rules, not only the Markdown, and shows how many files each glob matches. */
+/** D31: Auto-draft fills the typed rules, not only the Markdown, and shows how many files each glob matches. */
 
 test('profile_autoDraft_fillsRulesAndShowsCounts', async ({ page }) => {
   // Arrange

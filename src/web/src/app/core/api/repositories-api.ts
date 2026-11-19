@@ -50,7 +50,7 @@ export class RepositoriesApi {
     return this.http.post<ProfileDraft>(`/api/repositories/${id}/profile/draft`, null);
   }
 
-  /** How many default-branch files each glob matches (D29). */
+  /** How many default-branch files each glob matches (D31). */
   profileMatches(id: string, rules: ProfileRules): Observable<PatternCheck> {
     return this.http.post<PatternCheck>(`/api/repositories/${id}/profile/matches`, rules);
   }

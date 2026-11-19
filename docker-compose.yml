@@ -21,6 +21,7 @@ services:
       ConnectionStrings__Postgres: "Host=db;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       GitHub__Token: ${GITHUB_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      Llm__WorkspaceId: ${ANTHROPIC_WORKSPACE_ID:-}
       Llm__Model: ${LLM_MODEL:-claude-haiku-5-5}
       Llm__InputUsdPerMTok: ${LLM_INPUT_USD_PER_MTOK:-0.10}
       Llm__OutputUsdPerMTok: ${LLM_OUTPUT_USD_PER_MTOK:-0.50}
@@ -51,6 +52,7 @@ services:
       ConnectionStrings__Postgres: "Host=db;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       GitHub__Token: ${GITHUB_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      Llm__WorkspaceId: ${ANTHROPIC_WORKSPACE_ID:-}
       Llm__Model: ${LLM_MODEL:-claude-haiku-5-5}
       Llm__InputUsdPerMTok: ${LLM_INPUT_USD_PER_MTOK:-0.10}
       Llm__OutputUsdPerMTok: ${LLM_OUTPUT_USD_PER_MTOK:-0.50}

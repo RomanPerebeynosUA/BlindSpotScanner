@@ -3,7 +3,7 @@ using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace BlindSpotScanner.Application.Repositories;
 
-/// <summary>A profile's typed classification rules (D18), as the AI draft proposes them (D29).</summary>
+/// <summary>A profile's typed classification rules (D18), as the AI draft proposes them (D31).</summary>
 public sealed record ProfileRules(
     string IntegrationMappedTo,
     IReadOnlyList<string> TestGlobs,
@@ -18,7 +18,7 @@ public sealed record ProfileRules(
 public sealed record PatternMatch(string Field, string Pattern, int Files);
 
 /// <summary>
-/// Checks a profile's glob patterns (D29): each entry must be one pattern, and its match count is
+/// Checks a profile's glob patterns (D31): each entry must be one pattern, and its match count is
 /// taken over the files a scan applies it to (tree blobs minus the fixed excludes, case-sensitive):
 /// test globs over every file, controller and minimal API globs over non-test files (the scan drops
 /// tests from the denominator), integration and never-integration globs over test files only.

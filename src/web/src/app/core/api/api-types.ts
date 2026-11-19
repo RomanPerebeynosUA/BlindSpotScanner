@@ -88,7 +88,7 @@ export interface Profile {
 
 export type ProfileInput = Omit<Profile, 'version'>;
 
-/** The typed classification rules (D18) an AI draft proposes (D29). */
+/** The typed classification rules (D18) an AI draft proposes (D31). */
 export type ProfileRules = Omit<ProfileInput, 'markdown'>;
 
 /** How many repository files one glob matches; `field` is the rule's key, e.g. `minimalApiGlobs`. */

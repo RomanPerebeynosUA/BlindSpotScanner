@@ -32,7 +32,7 @@ const lines = (text: string): string[] => text.split('\n').map((l) => l.trim()).
 
 /**
  * `/repos/:id/profile`: the typed classification rules (D18) and the Markdown, with preview, version
- * history and an AI draft that fills the rules and shows how many files each glob matches (D29).
+ * history and an AI draft that fills the rules and shows how many files each glob matches (D31).
  * Every save is a new version; a draft is never saved by itself (D22).
  */
 @Component({

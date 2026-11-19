@@ -83,7 +83,7 @@ public sealed class ProfileService(IProfileStore profiles, IRepositoryStore repo
             errors.Add("At least one controller glob or minimal API file glob is required (the endpoint denominator).");
         }
 
-        // D29: one glob per entry, so text pasted next to a pattern can't silently match nothing.
+        // D31: one glob per entry, so text pasted next to a pattern can't silently match nothing.
         errors.AddRange(ProfilePatterns.SyntaxErrors(new ProfileRules(
             input.IntegrationMappedTo, testGlobs, controllerGlobs, minimalApiGlobs, Clean(input.IntegrationGlobs), [], [], Clean(input.NotIntegrationGlobs))));
 

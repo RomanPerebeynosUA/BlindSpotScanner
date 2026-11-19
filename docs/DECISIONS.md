@@ -309,7 +309,16 @@ The user's choices for M11: sign-in is server-side OpenID Connect with an HttpOn
   127.0.0.1 and the api warns when Local mode runs outside Development; logging levels (not sinks) come
   from configuration, so nothing bypasses redaction; the failure metric's `reason` is a fixed category.
 
-## D27 — Haiku 5.5 as the default scan model (2026-11-19)
+## D28 — Claude workspace header for organization keys (2026-11-18)
+An organization API key that isn't scoped to one workspace is rejected by Claude (400: "must include
+the anthropic-workspace-id header"). `Llm:WorkspaceId` (env `Llm__WorkspaceId`, set from
+`ANTHROPIC_WORKSPACE_ID` in compose) is sent as `anthropic-workspace-id` on every Claude call: by the
+scan client through the SDK's `ClientOptions.ExtraHeaders`, and by the Settings connection test. Unset or
+empty sends no header, so workspace-scoped keys work unchanged. Compose maps the variable to
+`Llm__WorkspaceId` rather than passing `ANTHROPIC_WORKSPACE_ID` through, because the SDK reads that name
+for Workload Identity Federation.
+
+## D29 — Haiku 5.5 as the default scan model (2026-11-19)
 The user's choice: scans default to `claude-haiku-5-5` (USD 0.10 / 0.50 per million tokens, prompts
 up to 100K tokens) to keep the Sparkathon demo cheap; D20's Sonnet 5.5 stays a one-line switch.
 Compose passes `LLM_MODEL`, `LLM_INPUT_USD_PER_MTOK` and `LLM_OUTPUT_USD_PER_MTOK` to both the api
@@ -318,7 +327,7 @@ Haiku has no server-side refusal fallback, so `ClaudeLlmClient` sends the fallba
 `fallbacks` only for non-Haiku models. Answer quality is still guarded by the schema check,
 `CitationVerifier` and `ReportValidator`; borderline covered/weak grading is the known trade-off.
 
-## D28 — Citations are checked where the LLM answers (2026-11-19)
+## D30 — Citations are checked where the LLM answers (2026-11-19)
 A first live scan (TodoApp, Haiku 5.5) failed on four citations. P6 now checks its answer the way P5
 already did: evidence in the scorecard, findings and risks must be `path::Name`, and every citation
 (including those in the evidence bullet) must name a method declared in a test or fixture file the
@@ -328,7 +337,7 @@ why (principle 5); the bad citation never reaches the report. `CitationVerifier`
 (it re-reads files at the pinned commit), and a citation in text no longer swallows a sentence's
 closing period (`Tests.cs::Name.` cites `Name`).
 
-## D29 — The AI draft proposes the profile rules (2026-11-19)
+## D31 — The AI draft proposes the profile rules (2026-11-19)
 The user's choices after two empty live scans whose profile kept the template rules: "Auto-draft
 with AI" now also returns `integrationMappedTo` and the seven typed rule lists (prompt
 `draft-profile` v1.1.0; the scan prompt set stays 1.0.0 because no scan prompt changed and a bump would mark every later run "not comparable"). This reverses D22's "the AI draft fills only the
