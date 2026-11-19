@@ -58,6 +58,15 @@ async function render(
 const rows = (el: HTMLElement) => [...el.querySelectorAll('tbody tr')] as HTMLElement[];
 
 describe('RepoOverview', () => {
+  it('links back to all repositories', async () => {
+    // Act
+    const { el } = await render([run()]);
+
+    // Assert
+    const back = el.querySelector('a.back') as HTMLAnchorElement;
+    expect({ text: back.textContent?.trim(), href: back.getAttribute('href') }).toEqual({ text: 'All repositories', href: '/' });
+  });
+
   it('shows run history newest first as returned', async () => {
     // Act
     const { el } = await render([run({ runId: 'b', commitSha: 'bbbbbbbbbb' }), run({ runId: 'a', commitSha: 'aaaaaaaaaa' })]);
