@@ -13,7 +13,7 @@ const round = (n: number): number => Number(n.toFixed(1));
 
 /**
  * A tiny trend line (D23: hand-drawn SVG, as in the prototype's `spark()`). A null value is a gap,
- * never 0; the last value gets a dot. Values are drawn against 0…`max` (10 for scores, 1 for shares).
+ * never 0; the last value gets a dot, and so does a value standing alone between gaps (it has no line). Values are drawn against 0…`max` (10 for scores, 1 for shares).
  */
 @Component({
   selector: 'app-sparkline',
@@ -54,6 +54,9 @@ export class Sparkline {
   );
 
   protected readonly last = computed<Point | null>(() => this.segments().at(-1)?.at(-1) ?? null);
+
+  /** Lone values before the last segment: without a dot they would not be drawn at all. */
+  protected readonly isolated = computed<Point[]>(() => this.segments().slice(0, -1).filter((s) => s.length === 1).map((s) => s[0]));
 
   protected readonly ariaLabel = computed(() => {
     const present = this.values().filter((v): v is number => v !== null);

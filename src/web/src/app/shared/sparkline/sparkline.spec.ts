@@ -29,6 +29,14 @@ describe('Sparkline', () => {
     expect([el.querySelectorAll('path.line').length, el.querySelectorAll('circle').length]).toEqual([0, 1]);
   });
 
+  it('sparkline_isolatedPointBetweenGaps_drawsItsDot', () => {
+    // Act (your TodoApp trend: N/A, N/A, 5.6, N/A, 5.7, 5.9)
+    const el = render([null, null, 5.6, null, 5.7, 5.9]);
+
+    // Assert (the lone 5.6 and the last value each get a dot)
+    expect([...el.querySelectorAll('circle')].map((c) => c.getAttribute('cx'))).toEqual(['49.2', '114']);
+  });
+
   it('sparkline_noValues_rendersNothing', () => {
     // Act
     const el = render([null, null]);

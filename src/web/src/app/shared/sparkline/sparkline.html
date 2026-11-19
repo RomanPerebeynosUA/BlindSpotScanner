@@ -4,6 +4,9 @@
       <path class="area" [attr.d]="segment.area" fill="var(--accent-soft)" />
       <path class="line" [attr.d]="segment.line" fill="none" stroke="var(--accent)" stroke-width="2" />
     }
+    @for (point of isolated(); track $index) {
+      <circle class="isolated" [attr.cx]="point.x" [attr.cy]="point.y" r="2.4" fill="var(--accent)" />
+    }
     <circle [attr.cx]="dot.x" [attr.cy]="dot.y" r="3.2" fill="var(--accent)" />
   </svg>
 }
