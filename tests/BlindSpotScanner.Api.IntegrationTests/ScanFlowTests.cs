@@ -75,26 +75,24 @@ public class ScanFlowTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task PostScan_ForgedCitation_RunFailed()
+    public async Task PostScan_ForgedCitation_QualityNotGradedWithReason()
     {
-        // Arrange
+        // Arrange (the fake Claude cites a test that does not exist on every attempt)
         using var client = factory.CreateClient();
         var repositoryId = await factory.SeedRepositoryAsync(marker: FakeClaudeServer.ForgeMarker);
-
-        // Act
         var runId = await StartScanAsync(client, repositoryId);
         var body = await WaitForOutcomeAsync(client, runId);
 
+        // Act
+        var steps = await client.GetFromJsonAsync<JsonElement>($"/api/runs/{runId}/steps");
+
         // Assert
+        var grade = steps.EnumerateArray().Single(s => s.GetProperty("phase").GetString() == "P6");
         new
         {
-            Status = body.GetProperty("status").GetString(),
-            Reasons = body.GetProperty("failureReasons").EnumerateArray().Select(r => r.GetString()),
-        }.Should().BeEquivalentTo(new
-        {
-            Status = "Failed",
-            Reasons = new[] { "citation: tests/Bookstore.IntegrationTests/BooksApiTests.cs::Deletes_book: no method named Deletes_book" },
-        });
+            HasReport = body.TryGetProperty("meta", out _),
+            ForgeNamed = grade.GetProperty("notes").GetString()!.Contains("BooksApiTests.cs::Deletes_book is not a method", StringComparison.Ordinal),
+        }.Should().BeEquivalentTo(new { HasReport = true, ForgeNamed = true });
     }
 
     [Fact]

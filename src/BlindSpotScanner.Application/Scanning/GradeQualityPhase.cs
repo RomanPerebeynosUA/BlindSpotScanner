@@ -18,9 +18,10 @@ public sealed record QualityGrade(IReadOnlyList<ScoreDimension> Scorecard, IRead
 /// P6 (doc 05, prompts/grade-quality.md): one LLM call grades the 7 rubric dimensions from the full
 /// integration tests and their fixtures. Dimension names and weights come from <see cref="Rubric"/>.
 /// Without tests or without an answer, every dimension is unscorable (principle 5: N/A, not a guess).
-/// Uncovered-endpoint findings are derived from P5 in code.
+/// Uncovered-endpoint findings are derived from P5 in code. Every citation in the answer must name
+/// a method declared in a file the model was given, else the answer is re-asked (principle 1).
 /// </summary>
-public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
+public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs, ITestSyntaxReader reader)
 {
     private const string NotAssessed = "N/A — insufficient input";
     private const int MaxRisks = 5;
@@ -30,14 +31,15 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
     {
         var notes = new List<string>();
         var uncovered = UncoveredEndpointFindings(coverage);
-        var testFiles = await ReadAsync(run, tests.IntegrationTests, maxFileBytes, notes, ct);
+        var declared = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var testFiles = await ReadAsync(run, tests.IntegrationTests, maxFileBytes, notes, declared, ct);
         if (testFiles.Count == 0)
         {
             notes.Add("quality not graded: no integration tests could be read");
             return new PhaseResult<QualityGrade>(new QualityGrade(Unscorable(), uncovered, []), LlmUsage.None, notes);
         }
 
-        var fixtures = await ReadAsync(run, Fixtures(tests, profile), maxFileBytes, notes, ct);
+        var fixtures = await ReadAsync(run, Fixtures(tests, profile), maxFileBytes, notes, declared, ct);
         var endpoints = coverage.SelectMany(c => c.Endpoints).ToList();
         var input = JsonSerializer.Serialize(
             new
@@ -55,7 +57,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
             },
             ClassifyAmbiguousPhase.Json);
 
-        var result = await llm.CompleteAsync(new LlmRequest(Prompts.GradeQuality, input, LlmSchemas.Get(Prompts.GradeQuality), Check), ct);
+        var result = await llm.CompleteAsync(new LlmRequest(Prompts.GradeQuality, input, LlmSchemas.Get(Prompts.GradeQuality), answer => Check(answer, declared)), ct);
         if (result.Output is not { } output)
         {
             notes.Add($"quality grading failed ({result.Errors.FirstOrDefault() ?? "no answer"})");
@@ -69,7 +71,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
         return new PhaseResult<QualityGrade>(new QualityGrade(Scorecard(output), findings, risks), result.Usage, notes);
     }
 
-    private async Task<List<object>> ReadAsync(RunContext run, IEnumerable<ClassifiedTestFile> files, int maxFileBytes, List<string> notes, CancellationToken ct)
+    private async Task<List<object>> ReadAsync(RunContext run, IEnumerable<ClassifiedTestFile> files, int maxFileBytes, List<string> notes, Dictionary<string, IReadOnlyList<string>> declared, CancellationToken ct)
     {
         var read = new List<object>();
         foreach (var file in files)
@@ -88,6 +90,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
             }
 
             read.Add(new { path = file.Path, content });
+            declared[file.Path] = reader.Read(content).Methods;
         }
 
         return read;
@@ -101,7 +104,7 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
         return tests.Files.Where(f => f.Kind == TestFileKind.Other && matcher.Match(f.Path).HasMatches);
     }
 
-    private static List<string> Check(JsonElement output)
+    private static List<string> Check(JsonElement output, IReadOnlyDictionary<string, IReadOnlyList<string>> declared)
     {
         var errors = new List<string>();
         var dimensions = output.GetProperty("scorecard").EnumerateArray().ToList();
@@ -140,15 +143,14 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
                 errors.Add($"scorecard/{id}: the evidence bullet of a scored dimension needs a path::Test citation");
             }
 
-            // The report schema types scorecard evidence as citations.
-            var evidence = Strings(dimension.GetProperty("evidence"));
-            for (var k = 0; k < evidence.Count; k++)
-            {
-                if (!Citation().IsMatch(evidence[k]))
-                {
-                    errors.Add($"scorecard/{id}/evidence/{k}: malformed citation '{evidence[k]}'");
-                }
-            }
+            // The report schema types scorecard evidence as citations; the evidence bullet cites in text.
+            CheckCitations(errors, $"scorecard/{id}", Strings(dimension.GetProperty("evidence")), Strings(bullets), declared);
+        }
+
+        var findings = output.GetProperty("findings").EnumerateArray().ToList();
+        for (var i = 0; i < findings.Count; i++)
+        {
+            CheckCitations(errors, $"findings/{i}", Strings(findings[i].GetProperty("evidence")), [], declared);
         }
 
         // Report schema limits: at most 5 risks, each with 1 to 8 detail bullets.
@@ -165,9 +167,39 @@ public sealed partial class GradeQualityPhase(ILlmClient llm, IBlobReader blobs)
             {
                 errors.Add($"topRisks/{i}/detail: needs 1 to 8 bullets");
             }
+
+            CheckCitations(errors, $"topRisks/{i}", Strings(risks[i].GetProperty("evidence")), [], declared);
         }
 
         return errors;
+    }
+
+
+    /// <summary>
+    /// Evidence entries must be well-formed citations, and every citation (in evidence or in text) must
+    /// name a method declared in a test or fixture file the model was given; the final
+    /// <see cref="CitationVerifier"/> would otherwise fail the run without a chance to correct it.
+    /// </summary>
+    private static void CheckCitations(
+        List<string> errors, string where, IReadOnlyList<string> evidence, IEnumerable<string> texts, IReadOnlyDictionary<string, IReadOnlyList<string>> declared)
+    {
+        for (var k = 0; k < evidence.Count; k++)
+        {
+            if (!Citation().IsMatch(evidence[k]))
+            {
+                errors.Add($"{where}/evidence/{k}: malformed citation '{evidence[k]}'");
+            }
+        }
+
+        var cited = evidence.Where(e => Citation().IsMatch(e)).Concat(texts.SelectMany(CitationVerifier.CitationsIn)).Distinct(StringComparer.Ordinal);
+        foreach (var citation in cited)
+        {
+            var (path, name) = CitationVerifier.Split(citation);
+            if (!declared.TryGetValue(path, out var methods) || !CitationVerifier.Declares(methods, name))
+            {
+                errors.Add($"{where}: {citation} is not a method in the test or fixture files you were given");
+            }
+        }
     }
 
     private static List<ScoreDimension> Scorecard(JsonElement output)

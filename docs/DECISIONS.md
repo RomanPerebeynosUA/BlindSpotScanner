@@ -317,3 +317,13 @@ Compose passes `LLM_MODEL`, `LLM_INPUT_USD_PER_MTOK` and `LLM_OUTPUT_USD_PER_MTO
 Haiku has no server-side refusal fallback, so `ClaudeLlmClient` sends the fallback beta and
 `fallbacks` only for non-Haiku models. Answer quality is still guarded by the schema check,
 `CitationVerifier` and `ReportValidator`; borderline covered/weak grading is the known trade-off.
+
+## D28 — Citations are checked where the LLM answers (2026-11-19)
+A first live scan (TodoApp, Haiku 5.5) failed on four citations. P6 now checks its answer the way P5
+already did: evidence in the scorecard, findings and risks must be `path::Name`, and every citation
+(including those in the evidence bullet) must name a method declared in a test or fixture file the
+model was given, so a slip is re-asked (max 2 retries) instead of failing the whole run at the end.
+If the model keeps citing something that is not there, quality is not graded and the phase note says
+why (principle 5); the bad citation never reaches the report. `CitationVerifier` stays the final gate
+(it re-reads files at the pinned commit), and a citation in text no longer swallows a sentence's
+closing period (`Tests.cs::Name.` cites `Name`).

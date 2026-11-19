@@ -188,22 +188,40 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Run_ForgedCitation_FailsWithCitationListed()
+    public async Task Run_CitedTestMissingAtPinnedCommit_FailsWithCitationListed()
     {
-        // Arrange
+        // Arrange (the phases read the test, but the file the verifier re-reads no longer declares it)
         var runId = await RunningScanAsync();
 
         // Act
-        await OrchestrateAsync(runId, llm: new CannedLlmClient(forgeCitation: true));
+        await OrchestrateAsync(runId, github: new RenamedTestGitHub(FixtureRepository.Bookstore()));
 
         // Assert
         var (run, _) = await LoadAsync(runId);
-        new { run.Status, run.FailureReasons, run.ReportJson }.Should().BeEquivalentTo(new
+        new
         {
-            Status = RunStatus.Failed,
-            FailureReasons = new[] { $"citation: {Books}::Deletes_book: no method named Deletes_book" },
-            ReportJson = (string?)null,
-        });
+            run.Status,
+            NamesTest = run.FailureReasons!.Any(r => r.StartsWith($"citation: {Books}::Create_persists_book", StringComparison.Ordinal)),
+            run.ReportJson,
+        }.Should().BeEquivalentTo(new { Status = RunStatus.Failed, NamesTest = true, ReportJson = (string?)null });
+    }
+
+    /// <summary>Serves the bookstore, except that the verifier's re-read of the Books tests has Create_persists_book renamed.</summary>
+    private sealed class RenamedTestGitHub(IGitHubClient inner) : IGitHubClient
+    {
+        public async Task<string?> GetFileTextAsync(string owner, string name, string path, string commitSha, CancellationToken ct)
+        {
+            var text = await inner.GetFileTextAsync(owner, name, path, commitSha, ct);
+            return path == Books ? text?.Replace("Create_persists_book", "Create_renamed", StringComparison.Ordinal) : text;
+        }
+
+        public Task<GitHubRepository> GetRepositoryAsync(string owner, string name, CancellationToken ct) => inner.GetRepositoryAsync(owner, name, ct);
+
+        public Task<string> GetBranchHeadShaAsync(string owner, string name, string branch, CancellationToken ct) => inner.GetBranchHeadShaAsync(owner, name, branch, ct);
+
+        public Task<GitTree> GetTreeAsync(string owner, string name, string treeSha, bool recursive, CancellationToken ct) => inner.GetTreeAsync(owner, name, treeSha, recursive, ct);
+
+        public Task<string> GetBlobTextAsync(string owner, string name, string blobSha, CancellationToken ct) => inner.GetBlobTextAsync(owner, name, blobSha, ct);
     }
 
     [Fact]
@@ -433,11 +451,11 @@ public sealed class ScanOrchestratorTests(PostgresFixture db) : IAsyncLifetime
     [Fact]
     public async Task Run_FailedRun_StoresSpend()
     {
-        // Arrange (four canned LLM calls at $0.004, then the forged citation fails the run)
+        // Arrange (four canned LLM calls at $0.004, then an unresolved citation fails the run)
         var runId = await RunningScanAsync();
 
         // Act
-        await OrchestrateAsync(runId, llm: new CannedLlmClient(forgeCitation: true));
+        await OrchestrateAsync(runId, github: new RenamedTestGitHub(FixtureRepository.Bookstore()));
 
         // Assert
         var (run, _) = await LoadAsync(runId);

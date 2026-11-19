@@ -27,6 +27,11 @@ public class GradeQualityPhaseTests
 
     private static readonly FakeBlobReader Blobs = new(new Dictionary<string, string> { ["t-books"] = "public class BooksApiTests { }" });
 
+    private static readonly FakeTestSyntaxReader Reader = new(new Dictionary<string, TestFileFacts>
+    {
+        ["public class BooksApiTests { }"] = new([], [], ["BooksApiTests.List_returns_seeded_books"], ["BooksApiTests.List_returns_seeded_books"]),
+    });
+
     private static readonly TestClassification Tests = new(
     [
         new ClassifiedTestFile(BooksTests, "t-books", TestFileKind.Integration, "rule", ["BooksApiTests.List_returns_seeded_books"]),
@@ -54,7 +59,7 @@ public class GradeQualityPhaseTests
         $$"""{"scorecard":[{{string.Join(',', Enumerable.Range(1, dimensions).Select(Dimension))}}],"findings":[{{findings}}],"topRisks":[{{risks}}]}""";
 
     private static Task<PhaseResult<QualityGrade>> Grade(FakeLlmClient llm, TestClassification? tests = null) =>
-        new GradeQualityPhase(llm, Blobs).GradeAsync(Run, tests ?? Tests, Coverage, Profile, 200_000, CancellationToken.None);
+        new GradeQualityPhase(llm, Blobs, Reader).GradeAsync(Run, tests ?? Tests, Coverage, Profile, 200_000, CancellationToken.None);
 
     [Fact]
     public async Task Grade_ValidAnswer_UsesRubricNamesAndWeights()
@@ -179,6 +184,60 @@ public class GradeQualityPhaseTests
 
         // Assert
         errors.Should().Contain("scorecard/1/evidence/0: malformed citation 'tests/ApiFactory.cs'");
+    }
+
+
+    private static string Finding(string evidence) =>
+        $$"""{"kind":"FalsePositive","severity":"Medium","subject":"{{BooksTests}}::List_returns_seeded_books","headline":"Only checks the status","detail":["200 only"],"evidence":["{{evidence}}"]}""";
+
+    [Fact]
+    public async Task Grade_Validator_RejectsMalformedFindingEvidence()
+    {
+        // Act
+        var errors = await ValidateWith(Answer(findings: Finding("src/Web/AuthClient.cs")));
+
+        // Assert
+        errors.Should().Contain("findings/0/evidence/0: malformed citation 'src/Web/AuthClient.cs'");
+    }
+
+    [Fact]
+    public async Task Grade_Validator_RejectsMalformedRiskEvidence()
+    {
+        // Act
+        var errors = await ValidateWith(Answer(risks: Risk().Replace("\"evidence\":[]", "\"evidence\":[\"src/Web/AuthClient.cs\"]", StringComparison.Ordinal)));
+
+        // Assert
+        errors.Should().Contain("topRisks/0/evidence/0: malformed citation 'src/Web/AuthClient.cs'");
+    }
+
+    [Fact]
+    public async Task Grade_Validator_RejectsCitedNameNotDeclaredInGivenFile()
+    {
+        // Act
+        var errors = await ValidateWith(Answer().Replace($"\"evidence\":[\"{BooksTests}::List_returns_seeded_books\"]}}", $"\"evidence\":[\"{BooksTests}::AuthHandler\"]}}", StringComparison.Ordinal));
+
+        // Assert
+        errors.Should().Contain($"scorecard/1: {BooksTests}::AuthHandler is not a method in the test or fixture files you were given");
+    }
+
+    [Fact]
+    public async Task Grade_Validator_RejectsCitedFileNotGiven()
+    {
+        // Act
+        var errors = await ValidateWith(Answer(findings: Finding("src/Web/AuthClient.cs::SendAsync")));
+
+        // Assert
+        errors.Should().Contain("findings/0: src/Web/AuthClient.cs::SendAsync is not a method in the test or fixture files you were given");
+    }
+
+    [Fact]
+    public async Task Grade_Validator_RejectsUndeclaredNameInEvidenceBullet()
+    {
+        // Act
+        var errors = await ValidateWith(Answer().Replace($"\"Evidence: {BooksTests}::List_returns_seeded_books\"", $"\"Evidence: {BooksTests}::Ghost_test.\"", StringComparison.Ordinal));
+
+        // Assert
+        errors.Should().Contain($"scorecard/1: {BooksTests}::Ghost_test is not a method in the test or fixture files you were given");
     }
 
     [Fact]
