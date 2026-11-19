@@ -23,7 +23,7 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
             .Where(e => e.Status is CoverageStatus.Covered or CoverageStatus.Weak or CoverageStatus.Skipped)
             .SelectMany(e => e.Evidence)
             .ToHashSet(StringComparer.Ordinal);
-        var other = report.Scorecard.SelectMany(d => (d.Evidence ?? []).Concat(d.JustificationBullets.SelectMany(b => CitationInText().Matches(b).Select(m => m.Value))))
+        var other = report.Scorecard.SelectMany(d => (d.Evidence ?? []).Concat(d.JustificationBullets.SelectMany(CitationsIn)))
             .Concat(report.Findings.SelectMany(f => f.Evidence))
             .Concat(report.TopRisks.SelectMany(r => r.Evidence ?? []));
         var citations = mustBeTest.Concat(other).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
@@ -48,7 +48,7 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
             {
                 failures.Add($"{citation}: file not found at {report.Meta.CommitSha[..Math.Min(7, report.Meta.CommitSha.Length)]}");
             }
-            else if (!(test ? facts.TestMethods : facts.Methods).Any(m => m == name || m.EndsWith("." + name, StringComparison.Ordinal)))
+            else if (!Declares(test ? facts.TestMethods : facts.Methods, name))
             {
                 failures.Add($"{citation}: no {(test ? "test" : "method")} named {name}");
             }
@@ -62,13 +62,23 @@ public sealed partial class CitationVerifier(IGitHubClient github, ITestSyntaxRe
         path.Length > 0 && !path.StartsWith('/') && !path.Contains('\\', StringComparison.Ordinal)
         && path.Split('/').All(segment => segment.Length > 0 && segment is not ("." or ".."));
 
-    private static (string Path, string Name) Split(string citation)
+    /// <summary>The citations written inside a free-text bullet.</summary>
+    internal static IEnumerable<string> CitationsIn(string text) => CitationInText().Matches(text).Select(m => m.Value);
+
+    /// <summary>A cited name resolves to a declared method by its simple or (partly) qualified name.</summary>
+    internal static bool Declares(IEnumerable<string> methods, string name) =>
+        methods.Any(m => m == name || m.EndsWith("." + name, StringComparison.Ordinal));
+
+    internal static (string Path, string Name) Split(string citation)
     {
         var at = citation.IndexOf("::", StringComparison.Ordinal);
         return at < 0 ? (citation, string.Empty) : (citation[..at], citation[(at + 2)..]);
     }
 
-    /// <summary>A citation inside free text, such as "Evidence: tests/A.cs::Test, tests/B.cs::Other".</summary>
-    [GeneratedRegex(@"[^\s:,;()]+\.[A-Za-z0-9]+::[A-Za-z_][\w.]*")]
+    /// <summary>
+    /// A citation inside free text, such as "Evidence: tests/A.cs::Test, tests/B.cs::Other.". The name
+    /// ends with a word character, so a sentence's closing period is not part of it.
+    /// </summary>
+    [GeneratedRegex(@"[^\s:,;()]+\.[A-Za-z0-9]+::[A-Za-z_](?:[\w.]*\w)?")]
     private static partial Regex CitationInText();
 }
