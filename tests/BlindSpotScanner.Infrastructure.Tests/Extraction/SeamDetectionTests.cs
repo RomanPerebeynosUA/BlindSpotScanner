@@ -173,6 +173,44 @@ public class SeamDetectionTests
         seams.Select(s => s.Name).Should().Equal("bookstore-db", "payment-gateway");
     }
 
+    // Value: protects=each supported technology registration is reported as its seam kind and name; fails_when=a table entry or branch is dropped or renamed; why_new=the facts above cover one registration per kind, not every supported one; seam=none; no_claim=real startup files (synthetic one-line sources)
+    [Theory]
+    [InlineData("services.AddDbContextPool<BookstoreDbContext>(o => o.UseNpgsql(cs));", SeamKind.Database, "bookstore-db")]
+    [InlineData("services.AddDbContextFactory<BookstoreDbContext>(o => o.UseNpgsql(cs));", SeamKind.Database, "bookstore-db")]
+    [InlineData("var factory = new ConnectionFactory { HostName = host };", SeamKind.MessageBroker, "rabbitmq")]
+    [InlineData("var consumer = new ConsumerBuilder<string, string>(config).Build();", SeamKind.MessageBroker, "kafka")]
+    [InlineData("var client = new ServiceBusClient(cs);", SeamKind.MessageBroker, "azure-service-bus")]
+    [InlineData("var client = new AmazonS3Client(region);", SeamKind.BlobStorage, "s3")]
+    [InlineData("var mux = ConnectionMultiplexer.Connect(cs);", SeamKind.Cache, "redis")]
+    [InlineData("var mux = await ConnectionMultiplexer.ConnectAsync(cs);", SeamKind.Cache, "redis")]
+    [InlineData("services.AddSingleton(new Azure.Storage.Blobs.BlobServiceClient(cs));", SeamKind.BlobStorage, "azure-blob-storage")]
+    [InlineData("services.AddHttpClient<Billing.HTTPGatewayClient>();", SeamKind.OutboundHttp, "http-gateway")]
+    public void DetectSeams_SupportedRegistration_ReturnsItsSeam(string source, SeamKind kind, string name)
+    {
+        // Act
+        var seams = Detect(source);
+
+        // Assert
+        seams.Should().Equal(new ProductionSeam(kind, name, Path));
+    }
+
+    // Value: protects=a registration that names no technology (no type argument, a non-literal name, another receiver) is not reported as a seam; fails_when=the guards are loosened so any Add*/Connect call becomes a seam; why_new=only the commented-out case checks for false positives; seam=none; no_claim=every possible non-seam call
+    [Theory]
+    [InlineData("services.AddHttpClient();")]
+    [InlineData("services.AddHttpClient(name, c => c.BaseAddress = uri);")]
+    [InlineData("services.AddDbContext(o => o.UseNpgsql(cs));")]
+    [InlineData("services.AddAWSService<IAmazonSQS>();")]
+    [InlineData("var socket = Socket.Connect(host);")]
+    [InlineData("var seam = new Dictionary<string, string>();")]
+    public void DetectSeams_CallWithoutTechnology_ReturnsNone(string source)
+    {
+        // Act
+        var seams = Detect(source);
+
+        // Assert
+        seams.Should().BeEmpty();
+    }
+
     [Fact]
     public void DetectSeams_NonCSharpPath_ReturnsNone()
     {
