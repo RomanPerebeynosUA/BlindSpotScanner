@@ -7,8 +7,16 @@ internal sealed class FakeEndpointExtractor(
     IReadOnlyDictionary<string, ExtractionResult> resultByPath,
     IReadOnlyDictionary<string, IReadOnlyList<ProductionSeam>>? seamsByPath = null) : IEndpointExtractor
 {
-    public ExtractionResult Extract(string path, string source) => resultByPath[path];
-
     public IReadOnlyList<ProductionSeam> DetectSeams(string path, string source) =>
         seamsByPath?.GetValueOrDefault(path) ?? [];
+
+    public Dictionary<string, bool> KebabCaseByPath { get; } = [];
+
+    public bool UsesKebabCaseRouteTokens(string path, string source) => source.Contains("KEBAB", StringComparison.Ordinal);
+
+    public ExtractionResult Extract(string path, string source, bool kebabCaseRouteTokens)
+    {
+        KebabCaseByPath[path] = kebabCaseRouteTokens;
+        return resultByPath[path];
+    }
 }

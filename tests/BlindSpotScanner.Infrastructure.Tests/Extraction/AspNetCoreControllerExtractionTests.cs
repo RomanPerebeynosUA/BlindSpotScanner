@@ -9,7 +9,9 @@ public class AspNetCoreControllerExtractionTests
 {
     private const string Path = "src/Api/Controllers/X.cs";
 
-    private static ExtractionResult Extract(string source) => new AspNetCoreEndpointExtractor().Extract(Path, source);
+    private static ExtractionResult Extract(string source) => new AspNetCoreEndpointExtractor().Extract(Path, source, kebabCaseRouteTokens: false);
+
+    private static ExtractionResult ExtractKebab(string source) => new AspNetCoreEndpointExtractor().Extract(Path, source, kebabCaseRouteTokens: true);
 
     private static IEnumerable<string> Routes(ExtractionResult result) =>
         result.Controllers.SelectMany(c => c.Endpoints).Select(e => $"{e.Method} {e.Route}");
@@ -61,6 +63,81 @@ public class AspNetCoreControllerExtractionTests
 
         // Assert
         Routes(result).Should().Equal("Post api/Orders/{id}/cancel");
+    }
+
+
+    [Fact]
+    public void Extract_KebabCaseRouteTokens_TransformsControllerAndActionTokens()
+    {
+        // Arrange
+        const string source = """
+            [Route("[controller]/[action]")]
+            public class ManageController : Controller
+            {
+                [HttpGet] public IActionResult MyAccount() => View();
+                [HttpGet] public IActionResult Disable2faWarning() => View();
+            }
+            """;
+
+        // Act
+        var result = ExtractKebab(source);
+
+        // Assert
+        Routes(result).Should().Equal("Get manage/my-account", "Get manage/disable2fa-warning");
+    }
+
+    [Fact]
+    public void Extract_KebabCaseRouteTokens_KeepsLiteralSegments()
+    {
+        // Arrange
+        const string source = """
+            [Route("api/MyOrders/[action]")]
+            public class OrdersController : ControllerBase
+            {
+                [HttpPost("{id}")] public IActionResult CancelOrder(int id) => Ok();
+            }
+            """;
+
+        // Act
+        var result = ExtractKebab(source);
+
+        // Assert
+        Routes(result).Should().Equal("Post api/MyOrders/cancel-order/{id}");
+    }
+
+    [Fact]
+    public void UsesKebabCaseRouteTokens_SlugifyTokenTransformerConvention_ReturnsTrue()
+    {
+        // Arrange
+        const string source = """
+            builder.Services.AddMvc(options =>
+            {
+                options.Conventions.Add(new RouteTokenTransformerConvention(
+                         new SlugifyParameterTransformer()));
+            });
+            """;
+
+        // Act
+        var uses = new AspNetCoreEndpointExtractor().UsesKebabCaseRouteTokens("src/Web/Program.cs", source);
+
+        // Assert
+        uses.Should().BeTrue();
+    }
+
+    [Fact]
+    public void UsesKebabCaseRouteTokens_NoTokenTransformerConvention_ReturnsFalse()
+    {
+        // Arrange
+        const string source = """
+            builder.Services.AddControllers();
+            var slugify = "not a convention";
+            """;
+
+        // Act
+        var uses = new AspNetCoreEndpointExtractor().UsesKebabCaseRouteTokens("src/Web/Program.cs", source);
+
+        // Assert
+        uses.Should().BeFalse();
     }
 
     [Fact]
@@ -335,7 +412,7 @@ public class AspNetCoreControllerExtractionTests
     public void Extract_NonCSharpFile_IsWarned()
     {
         // Act
-        var result = new AspNetCoreEndpointExtractor().Extract("src/routes/books.ts", "router.get('/books', list);");
+        var result = new AspNetCoreEndpointExtractor().Extract("src/routes/books.ts", "router.get('/books', list);", kebabCaseRouteTokens: false);
 
         // Assert
         new { result.Controllers, result.Warnings }.Should().BeEquivalentTo(new

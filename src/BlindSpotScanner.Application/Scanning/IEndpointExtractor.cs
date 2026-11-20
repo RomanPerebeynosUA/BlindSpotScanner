@@ -5,7 +5,11 @@ namespace BlindSpotScanner.Application.Scanning;
 /// <summary>P3's language strategy (doc 03): reads one production source file for its endpoints or its seams.</summary>
 public interface IEndpointExtractor
 {
-    ExtractionResult Extract(string path, string source);
+    /// <summary>Whether a startup file (<c>Program.cs</c>, <c>Startup.cs</c>) makes route tokens kebab-case (D35).</summary>
+    bool UsesKebabCaseRouteTokens(string path, string source);
+
+    /// <param name="kebabCaseRouteTokens">Write [controller], [action] and [area] values in kebab-case, as a slugify token transformer does.</param>
+    ExtractionResult Extract(string path, string source, bool kebabCaseRouteTokens);
 
     /// <summary>The seams a startup file registers, distinct by kind and name, in ordinal name order (D34).</summary>
     IReadOnlyList<ProductionSeam> DetectSeams(string path, string source);
