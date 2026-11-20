@@ -39,7 +39,8 @@ public static class ReportAssembler
             IntegrationMappedTo = mappedTo,
             FalsePositiveCount = falsePositives,
             SkippedTestCount = detail.Findings.Count(f => f.Kind == FindingKind.SkippedTest),
-            UncoveredRealSeams = detail.Findings.Count(f => f.Kind == FindingKind.UncoveredSeam),
+            // D34: without detected seams the count is unknown, not 0.
+            UncoveredRealSeams = detail.Inventory.ProductionSeams is null ? null : detail.Findings.Count(f => f.Kind == FindingKind.UncoveredSeam),
             Verdict = verdict,
             Bullets =
             [

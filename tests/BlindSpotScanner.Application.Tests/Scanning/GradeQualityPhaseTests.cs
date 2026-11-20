@@ -58,8 +58,17 @@ public class GradeQualityPhaseTests
     private static string Answer(string? risks = null, string? findings = null, int dimensions = 7) =>
         $$"""{"scorecard":[{{string.Join(',', Enumerable.Range(1, dimensions).Select(Dimension))}}],"findings":[{{findings}}],"topRisks":[{{risks}}]}""";
 
+    private static readonly ProductionSeam Payments = new(SeamKind.OutboundHttp, "payment-gateway", "src/Api/Program.cs");
+
+    private static string SeamFinding(string subject) =>
+        $$"""{"kind":"UncoveredSeam","severity":"High","subject":"{{subject}}","headline":"The payment provider is never called for real","detail":["All tests use a fake."],"evidence":[]}""";
+
     private static Task<PhaseResult<QualityGrade>> Grade(FakeLlmClient llm, TestClassification? tests = null) =>
-        new GradeQualityPhase(llm, Blobs, Reader).GradeAsync(Run, tests ?? Tests, Coverage, Profile, 200_000, CancellationToken.None);
+        new GradeQualityPhase(llm, Blobs, Reader).GradeAsync(Run, tests ?? Tests, Coverage, Profile, [Payments], 200_000, CancellationToken.None);
+
+    /// <summary>A repository without startup files: seams were not detected (D34).</summary>
+    private static Task<PhaseResult<QualityGrade>> GradeWithoutSeams(FakeLlmClient llm) =>
+        new GradeQualityPhase(llm, Blobs, Reader).GradeAsync(Run, Tests, Coverage, Profile, null, 200_000, CancellationToken.None);
 
     [Fact]
     public async Task Grade_ValidAnswer_UsesRubricNamesAndWeights()
@@ -300,5 +309,95 @@ public class GradeQualityPhaseTests
 
         // Assert
         errors.Should().Equal("topRisks/0/detail: needs 1 to 8 bullets");
+    }
+
+    [Fact]
+    public async Task Grade_Seams_SentInInput()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer()));
+
+        // Act
+        await Grade(llm);
+
+        // Assert
+        using var input = JsonDocument.Parse(llm.Requests.Single().InputJson);
+        new
+        {
+            Name = input.RootElement.GetProperty("productionSeams")[0].GetProperty("name").GetString(),
+            Kind = input.RootElement.GetProperty("productionSeams")[0].GetProperty("kind").GetString(),
+            Source = input.RootElement.GetProperty("productionSeams")[0].GetProperty("source").GetString(),
+            Verified = input.RootElement.GetProperty("productionSeamsVerified").GetBoolean(),
+        }.Should().BeEquivalentTo(new { Name = "payment-gateway", Kind = "OutboundHttp", Source = "src/Api/Program.cs", Verified = true });
+    }
+
+    [Fact]
+    public async Task Grade_SeamsNotDetected_SentAsUnverified()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer()));
+
+        // Act
+        await GradeWithoutSeams(llm);
+
+        // Assert
+        using var input = JsonDocument.Parse(llm.Requests.Single().InputJson);
+        new
+        {
+            Seams = input.RootElement.GetProperty("productionSeams").GetArrayLength(),
+            Verified = input.RootElement.GetProperty("productionSeamsVerified").GetBoolean(),
+        }.Should().BeEquivalentTo(new { Seams = 0, Verified = false });
+    }
+
+    [Fact]
+    public async Task Grade_UncoveredSeamForDetectedSeam_IsKept()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(findings: SeamFinding("payment-gateway"))));
+
+        // Act
+        var result = await Grade(llm);
+
+        // Assert
+        result.Value.Findings.Single(f => f.Kind == FindingKind.UncoveredSeam).StableKey.Should().Be("uncovered-seam:payment-gateway");
+    }
+
+    [Fact]
+    public async Task Grade_UncoveredSeamWithUnknownSubject_IsDropped()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(findings: SeamFinding("PaymentGatewayClient"))));
+
+        // Act
+        var result = await Grade(llm);
+
+        // Assert
+        result.Value.Findings.Should().NotContain(f => f.Kind == FindingKind.UncoveredSeam);
+    }
+
+    [Fact]
+    public async Task Grade_UncoveredSeamWithUnknownSubject_AddsNote()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(findings: SeamFinding("PaymentGatewayClient"))));
+
+        // Act
+        var result = await Grade(llm);
+
+        // Assert
+        result.Notes.Should().Contain("UncoveredSeam 'PaymentGatewayClient' dropped: not a detected seam");
+    }
+
+    [Fact]
+    public async Task Grade_SeamsNotDetected_AllUncoveredSeamFindingsDropped()
+    {
+        // Arrange
+        var llm = new FakeLlmClient(_ => FakeLlmClient.Json(Answer(findings: SeamFinding("payment-gateway"))));
+
+        // Act
+        var result = await GradeWithoutSeams(llm);
+
+        // Assert
+        result.Value.Findings.Should().NotContain(f => f.Kind == FindingKind.UncoveredSeam);
     }
 }

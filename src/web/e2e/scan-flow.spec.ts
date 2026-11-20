@@ -46,6 +46,25 @@ test('liveProgress_thenCompletion_showsReport', async ({ page }) => {
   await expect(page.locator('.kpi').filter({ hasText: 'Quality score' }).locator('.val')).toHaveText(/5\.1\s*\/10/);
 });
 
+test('report_scanAgain_startsBranchScanAndOpensLivePage', async ({ page }) => {
+  // Arrange: the new scan gets its own run, still running (the mock's run is the finished report).
+  const newRun = '33333333-3333-4333-8333-333333333333';
+  await mockApi(page, { registered: true, finished: true });
+  await page.route(`**/api/repositories/${REPO_ID}/scans`, (route) => route.fulfill({ status: 202, json: { runId: newRun } }));
+  await page.route(`**/api/runs/${newRun}`, (route) => route.fulfill({ json: { runId: newRun, status: 'Running', failureReasons: [] } }));
+  await page.route(`**/api/runs/${newRun}/steps`, (route) => route.fulfill({ json: [] }));
+  await page.goto(`/runs/${RUN_ID}`);
+  const scan = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/api/repositories/${REPO_ID}/scans`));
+
+  // Act
+  await page.getByRole('button', { name: 'Scan again' }).click();
+
+  // Assert
+  expect((await scan).postDataJSON()).toEqual({ branch: 'main' });
+  await expect(page).toHaveURL(`/runs/${newRun}/live`);
+  await expect(page.getByRole('heading', { name: 'Scan in progress' })).toBeVisible();
+});
+
 test('report_filterWeak_showsOnlyWeakEndpoint', async ({ page }) => {
   // Arrange
   await mockApi(page, { registered: true, finished: true });

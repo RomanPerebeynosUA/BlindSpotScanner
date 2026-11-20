@@ -2,10 +2,13 @@ using BlindSpotScanner.Domain.Enums;
 
 namespace BlindSpotScanner.Application.Scanning;
 
-/// <summary>P3's language strategy (doc 03): reads one production source file and returns its endpoints.</summary>
+/// <summary>P3's language strategy (doc 03): reads one production source file for its endpoints or its seams.</summary>
 public interface IEndpointExtractor
 {
     ExtractionResult Extract(string path, string source);
+
+    /// <summary>The seams a startup file registers, distinct by kind and name, in ordinal name order (D34).</summary>
+    IReadOnlyList<ProductionSeam> DetectSeams(string path, string source);
 }
 
 /// <param name="Warnings">Endpoints that could not be read; each becomes an unverified reason (principle 1).</param>

@@ -28,6 +28,9 @@
       }
       <a class="btn export" [href]="'/api/runs/' + runId() + '/export?format=json'" download>Export JSON</a>
       <a class="btn export" [href]="'/api/runs/' + runId() + '/export?format=html'" target="_blank" rel="noopener">Print / HTML</a>
+      @if (auth.can('Member') && repositoryId(); as repoId) {
+        <button type="button" class="btn primary scan-again" [disabled]="starting()" (click)="scanAgain(repoId, meta.branch)">{{ starting() ? 'Starting…' : 'Scan again' }}</button>
+      }
     </div>
   </div>
 

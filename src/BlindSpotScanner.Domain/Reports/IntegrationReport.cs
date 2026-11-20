@@ -58,6 +58,15 @@ public sealed record ReportInventory
     }
     public int? ReadInFull { get; init; }
     public IReadOnlyList<string>? UnverifiedReasons { get; init; }
+    /// <summary>The seams detected in startup code (D34); null when they could not be detected.</summary>
+    public IReadOnlyList<ReportSeam>? ProductionSeams { get; init; }
+}
+
+public sealed record ReportSeam
+{
+    public required SeamKind Kind { get; init; }
+    public required string Name { get; init; }
+    public required string Source { get; init; }
 }
 
 public sealed record ReportValidation

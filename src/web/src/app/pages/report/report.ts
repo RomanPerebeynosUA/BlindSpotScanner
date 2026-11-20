@@ -16,6 +16,7 @@ import { EndpointCoverage } from './endpoint-coverage/endpoint-coverage';
 import { Scorecard } from './scorecard/scorecard';
 import { Findings } from './findings/findings';
 import { ActionsLog } from './actions-log/actions-log';
+import { AuthService } from '../../core/auth/auth';
 
 /**
  * `/runs/:runId`: the report (doc 04 sections 1–6) with the delta against the previous scan, the
@@ -34,6 +35,7 @@ export class Report {
   private readonly remediation = inject(RemediationApi);
   private readonly router = inject(Router);
   protected readonly store = inject(ReportStore);
+  protected readonly auth = inject(AuthService);
 
   readonly runId = input.required<string>();
 
@@ -42,6 +44,8 @@ export class Report {
   /** The run's repository, for the link back to its scans. */
   protected readonly repositoryId = signal<string | null>(null);
   protected readonly commitUrl = commitUrl;
+  /** A "Scan again" request is on its way; blocks a second click. */
+  protected readonly starting = signal(false);
 
   /** The repository's succeeded runs, newest first (for the run picker). */
   protected readonly siblings = signal<RunHistoryItem[]>([]);
@@ -129,5 +133,15 @@ export class Report {
     } else {
       this.outcome.set(body);
     }
+  }
+
+  /** Re-scans the report's branch at its latest commit and opens the new run's live progress. */
+  protected scanAgain(repositoryId: string, branch: string): void {
+    this.starting.set(true);
+    this.repositories.startScan(repositoryId, branch).subscribe({
+      next: ({ runId }) => void this.router.navigate(['/runs', runId, 'live']),
+      // The interceptor says why the start was refused.
+      error: () => this.starting.set(false),
+    });
   }
 }

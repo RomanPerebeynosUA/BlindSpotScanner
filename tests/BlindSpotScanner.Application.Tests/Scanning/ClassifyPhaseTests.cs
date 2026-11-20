@@ -32,7 +32,7 @@ public class ClassifyPhaseTests
         var phase = new ClassifyPhase(
             new FakeBlobReader(new Dictionary<string, string> { ["sha"] = "source" }),
             new FakeTestSyntaxReader(new Dictionary<string, TestFileFacts> { ["source"] = facts }));
-        var inventory = new RepositoryInventory([], [new RepoFile(path, "sha", 10)], []);
+        var inventory = new RepositoryInventory([], [new RepoFile(path, "sha", 10)], [], []);
         var classification = await phase.ClassifyAsync(Run, inventory, Profile, CancellationToken.None);
         return classification.Files.Single();
     }

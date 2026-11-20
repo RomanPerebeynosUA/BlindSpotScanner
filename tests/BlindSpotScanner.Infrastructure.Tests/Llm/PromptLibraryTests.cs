@@ -11,7 +11,7 @@ public class PromptLibraryTests
     [Theory]
     [InlineData(Prompts.ClassifyTests, "1.0.0")]
     [InlineData(Prompts.MapCoverage, "1.0.0")]
-    [InlineData(Prompts.GradeQuality, "1.0.0")]
+    [InlineData(Prompts.GradeQuality, "1.1.0")]
     [InlineData(Prompts.DraftProfile, "1.1.0")]
     public void Task_KnownPrompts_LoadWithVersion(string name, string version)
     {

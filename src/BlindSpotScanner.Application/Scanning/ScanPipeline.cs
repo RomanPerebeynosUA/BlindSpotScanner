@@ -57,7 +57,7 @@ public sealed class ScanPipeline(
         var rules = await Phase(ScanPhases.Classify, () => new ClassifyPhase(blobs, reader).ClassifyAsync(run, inventory, profile, ct), _ => Plain(ScanPhases.Classify, inventory.TestFileCount));
         var classified = await Phase(ScanPhases.ClassifyWithLlm, () => new ClassifyAmbiguousPhase(llm, blobs).ClassifyAsync(run, rules, profile, options.MaxFileBytes, ct), r => new PhaseReport(ScanPhases.ClassifyWithLlm, r.Usage, r.Notes, 0));
         var mapped = await Phase(ScanPhases.Map, () => new MapCoveragePhase(llm, blobs).MapAsync(run, endpoints, classified.Value, inventory, profile, options.MaxFileBytes, ct), r => new PhaseReport(ScanPhases.Map, r.Usage, r.Notes, 0));
-        var graded = await Phase(ScanPhases.Grade, () => new GradeQualityPhase(llm, blobs, reader).GradeAsync(run, classified.Value, mapped.Value, profile, options.MaxFileBytes, ct), r => new PhaseReport(ScanPhases.Grade, r.Usage, r.Notes, 0));
+        var graded = await Phase(ScanPhases.Grade, () => new GradeQualityPhase(llm, blobs, reader).GradeAsync(run, classified.Value, mapped.Value, profile, endpoints.Seams, options.MaxFileBytes, ct), r => new PhaseReport(ScanPhases.Grade, r.Usage, r.Notes, 0));
         var usage = classified.Usage.Add(mapped.Usage).Add(graded.Usage);
 
         var detail = Detail(runId, run, profile, inventory, endpoints, classified, mapped.Value, graded.Value, usage, [.. endpoints.UnverifiedReasons, .. classified.Notes, .. mapped.Notes, .. graded.Notes]);
@@ -109,6 +109,7 @@ public sealed class ScanPipeline(
                 // P4's rules parse every test file in full; nothing is sampled.
                 ReadInFull = inventory.TestFileCount,
                 UnverifiedReasons = unverifiedReasons,
+                ProductionSeams = endpoints.Seams?.Select(s => new ReportSeam { Kind = s.Kind, Name = s.Name, Source = s.SourcePath }).ToList(),
             },
             EndpointCoverage = coverage,
             Scorecard = grade.Scorecard,

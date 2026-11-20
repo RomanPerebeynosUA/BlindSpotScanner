@@ -1,9 +1,10 @@
-# Task: grade integration-test quality — v1.0.0
+# Task: grade integration-test quality — v1.1.0
 
 **Input:**
 ```json
 { "integrationMappedTo": "…", "profileMarkdown": "…",
-  "productionSeams": ["PostgreSQL", "…"],
+  "productionSeams": [ { "kind": "OutboundHttp", "name": "payment-gateway", "source": "src/Api/Program.cs" } ],
+  "productionSeamsVerified": true,
   "tests": [ { "path": "…", "content": "…" } ],
   "fixtures": [ { "path": "…", "content": "…" } ],
   "coverageSummaryForContext": { "endpointsTotal": 0, "none": ["POST api/orders/{id}/cancel"] } }
@@ -12,6 +13,10 @@
 Score each of the 7 dimensions (1–10, or `scorable:false` with `score:null` when the input is
 insufficient). **Do not guess a number.** Use the rubric and band anchors in doc 06 (they are
 embedded at runtime).
+
+`productionSeams` are the real dependencies registered in the repository's startup code, detected by
+the host. `productionSeamsVerified` is false when no startup file was found. Count dimension #1's
+breadth against `productionSeams` plus the HTTP pipeline (the pipeline is never listed).
 
 Use `integrationMappedTo` to decide how honestly to score dimension #1. If the value is not
 `real-seam`, dimension #1 is near zero for mocked backends.
@@ -25,13 +30,17 @@ Each dimension has exactly 4 `justificationBullets`:
 Also return the findings and the top risks.
 - **falsePositives:** every status-only test.
 - **skippedTests**
-- **uncoveredSeams:** production seams that no test crosses for real.
+- **uncoveredSeams:** only seams listed in `productionSeams` that no test crosses for real. Set
+  `subject` to the seam's `name` exactly and put its `source` path in `detail`. If
+  `productionSeamsVerified` is false, report no `UncoveredSeam`. Any other `UncoveredSeam` is
+  discarded by the host.
 - **topRisks** (≤5), in plain language:
   - `headline` ≤25 words and `whyItMatters` ≤35 words, with no file paths, no `::` and no jargon
     (say "tests that only check the request succeeded" instead of "status-only assertions")
   - the specifics go in `detail[]` (1–8 bullets)
   - the evidence goes in `evidence[]`
-  - put the most important uncovered real seam first
+  - put the most important `UncoveredSeam` you reported first; never raise a risk about a seam you
+    did not report as an `UncoveredSeam`
 
 **Output schema:**
 ```json
