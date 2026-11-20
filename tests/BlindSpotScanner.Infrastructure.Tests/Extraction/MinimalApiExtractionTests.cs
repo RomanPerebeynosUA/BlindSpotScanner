@@ -9,7 +9,7 @@ public class MinimalApiExtractionTests
 {
     private const string Path = "src/Api/Endpoints/HealthEndpoints.cs";
 
-    private static ExtractionResult Extract(string source) => new AspNetCoreEndpointExtractor().Extract(Path, source);
+    private static ExtractionResult Extract(string source) => new AspNetCoreEndpointExtractor().Extract(Path, source, kebabCaseRouteTokens: false);
 
     private static IEnumerable<string> Routes(ExtractionResult result) =>
         result.Controllers.SelectMany(c => c.Endpoints).Select(e => $"{e.Method} {e.Route}");

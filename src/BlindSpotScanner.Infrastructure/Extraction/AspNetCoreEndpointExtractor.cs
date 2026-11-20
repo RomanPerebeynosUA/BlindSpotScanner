@@ -3,6 +3,7 @@ using BlindSpotScanner.Domain.Enums;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Text.RegularExpressions;
 
 namespace BlindSpotScanner.Infrastructure.Extraction;
 
@@ -12,7 +13,7 @@ namespace BlindSpotScanner.Infrastructure.Extraction;
 /// Comments are trivia, so commented-out attributes never count. A route that is not a string
 /// literal can't be read syntactically and is reported as a warning, never dropped silently.
 /// </summary>
-public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
+public sealed partial class AspNetCoreEndpointExtractor : IEndpointExtractor
 {
     private static readonly Dictionary<string, EndpointMethod> Verbs = new(StringComparer.Ordinal)
     {
@@ -42,7 +43,17 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
 
     public IReadOnlyList<ProductionSeam> DetectSeams(string path, string source) => CSharpSeamDetector.Detect(path, source);
 
-    public ExtractionResult Extract(string path, string source)
+    /// <summary>
+    /// True when the file adds a <c>RouteTokenTransformerConvention</c> whose transformer is a slugify or
+    /// kebab-case one (D35), e.g. eShopOnWeb's <c>SlugifyParameterTransformer</c>.
+    /// </summary>
+    public bool UsesKebabCaseRouteTokens(string path, string source) =>
+        path.EndsWith(".cs", StringComparison.Ordinal)
+        && CSharpSyntaxTree.ParseText(source, path: path).GetRoot().DescendantNodes().OfType<ObjectCreationExpressionSyntax>()
+            .Any(c => SimpleName(c.Type) == "RouteTokenTransformerConvention"
+                && c.ArgumentList?.Arguments.Any(a => KebabTransformer().IsMatch(a.ToString())) == true);
+
+    public ExtractionResult Extract(string path, string source, bool kebabCaseRouteTokens)
     {
         if (!path.EndsWith(".cs", StringComparison.Ordinal))
         {
@@ -54,7 +65,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         var warnings = new List<string>();
         foreach (var type in root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(IsController))
         {
-            ExtractController(path, type, controllers, warnings);
+            ExtractController(path, type, kebabCaseRouteTokens, controllers, warnings);
         }
 
         var minimal = ExtractMinimalApis(path, root, warnings);
@@ -79,7 +90,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
             || type.BaseList?.Types.Any(t => SimpleName(t.Type) is "Controller" or "ControllerBase") == true
             || type.Identifier.ValueText.EndsWith("Controller", StringComparison.Ordinal));
 
-    private static void ExtractController(string path, ClassDeclarationSyntax type, List<ExtractedController> controllers, List<string> warnings)
+    private static void ExtractController(string path, ClassDeclarationSyntax type, bool kebabCase, List<ExtractedController> controllers, List<string> warnings)
     {
         var name = type.Identifier.ValueText;
         var areaAttribute = Attributes(type.AttributeLists).FirstOrDefault(a => Name(a) == "Area");
@@ -105,7 +116,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
                 return;
             }
 
-            prefixes.Add(Clean(ReplaceTokens(classTemplate, name, action: null, area)));
+            prefixes.Add(Clean(ReplaceTokens(classTemplate, name, action: null, area, kebabCase)));
         }
 
         if (prefixes.Count == 0)
@@ -129,7 +140,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         var warningsBefore = warnings.Count;
         foreach (var method in type.Members.OfType<MethodDeclarationSyntax>().Where(IsAction))
         {
-            ExtractAction(path, name, area, method, prefixes, endpoints, warnings);
+            ExtractAction(path, name, area, kebabCase, method, prefixes, endpoints, warnings);
         }
 
         if (endpoints.Count > 0)
@@ -143,7 +154,7 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
     }
 
     /// <summary>One endpoint per class route × verb template (a verb without a template takes each method [Route]).</summary>
-    private static void ExtractAction(string path, string controller, string? area, MethodDeclarationSyntax method, List<string?> prefixes, List<ExtractedEndpoint> endpoints, List<string> warnings)
+    private static void ExtractAction(string path, string controller, string? area, bool kebabCase, MethodDeclarationSyntax method, List<string?> prefixes, List<ExtractedEndpoint> endpoints, List<string> warnings)
     {
         var action = method.Identifier.ValueText;
         var attributes = Attributes(method.AttributeLists).ToList();
@@ -172,13 +183,13 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
                     return;
                 }
 
-                templates.Add(ReplaceTokens(template, controller, actionName, area));
+                templates.Add(ReplaceTokens(template, controller, actionName, area, kebabCase));
             }
 
             endpoints.AddRange(
                 from prefix in prefixes
                 from template in templates
-                select new ExtractedEndpoint(Verbs[Name(verb)], Combine(prefix, template).Replace("[action]", actionName, StringComparison.OrdinalIgnoreCase)));
+                select new ExtractedEndpoint(Verbs[Name(verb)], Combine(prefix, template).Replace("[action]", Token(actionName, kebabCase), StringComparison.OrdinalIgnoreCase)));
         }
     }
 
@@ -340,13 +351,23 @@ public sealed class AspNetCoreEndpointExtractor : IEndpointExtractor
         return route.Trim('/');
     }
 
-    private static string ReplaceTokens(string template, string controller, string? action, string? area)
+    private static string ReplaceTokens(string template, string controller, string? action, string? area, bool kebabCase)
     {
         var name = controller.EndsWith("Controller", StringComparison.Ordinal) ? controller[..^"Controller".Length] : controller;
-        var result = template.Replace("[controller]", name, StringComparison.OrdinalIgnoreCase);
-        result = area is null ? result : result.Replace("[area]", area, StringComparison.OrdinalIgnoreCase);
-        return action is null ? result : result.Replace("[action]", action, StringComparison.OrdinalIgnoreCase);
+        var result = template.Replace("[controller]", Token(name, kebabCase), StringComparison.OrdinalIgnoreCase);
+        result = area is null ? result : result.Replace("[area]", Token(area, kebabCase), StringComparison.OrdinalIgnoreCase);
+        return action is null ? result : result.Replace("[action]", Token(action, kebabCase), StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>A token value as a slugify transformer writes it: <c>MyAccount</c> becomes <c>my-account</c> (D35).</summary>
+    private static string Token(string value, bool kebabCase) =>
+        kebabCase ? WordBoundary().Replace(value, "$1-$2").ToLowerInvariant() : value;
+
+    [GeneratedRegex("([a-z])([A-Z])")]
+    private static partial Regex WordBoundary();
+
+    [GeneratedRegex("slug|kebab", RegexOptions.IgnoreCase)]
+    private static partial Regex KebabTransformer();
 
     /// <summary>The first positional argument (or <c>template:</c>), if any.</summary>
     private static AttributeArgumentSyntax? TemplateArgument(AttributeSyntax attribute) =>

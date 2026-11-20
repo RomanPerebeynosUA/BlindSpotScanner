@@ -398,3 +398,15 @@ reading every production file was rejected for its GitHub rate-limit cost):
   a top-level `Program.cs` declares no class or method to cite; the source path goes in `detail`.
 - The prompt set is 1.1.0, so runs before and after are marked not comparable (the seam measurement
   changed).
+
+## D35 — Kebab-case route tokens from a slugify convention (2026-11-20)
+An eShopOnWeb Haiku scan left 22 of 32 endpoints `unverified`: its `Program.cs` adds
+`RouteTokenTransformerConvention(new SlugifyParameterTransformer())`, so `ManageController.MyAccount`
+is served at `manage/my-account`, but P3 reported `Manage/MyAccount` and the model rightly refused to
+map the tests' kebab-case URLs to it. P3 now reads D34's startup files once, for seams and for this
+convention: when one adds a `RouteTokenTransformerConvention` whose transformer argument names "slug"
+or "kebab", the `[controller]`, `[action]` and `[area]` values of controllers under that file's
+folder are written in kebab-case (`([a-z])([A-Z])` → `$1-$2`, lower-cased, as the ASP.NET docs'
+slugify does). Literal segments are kept as written, as ASP.NET does. Other transformers are not
+interpreted. Runs before D35 used the untransformed routes; endpoint keys are lower-cased, so only
+multi-word names (`myaccount` vs `my-account`) show as removed and added in a comparison across D35.

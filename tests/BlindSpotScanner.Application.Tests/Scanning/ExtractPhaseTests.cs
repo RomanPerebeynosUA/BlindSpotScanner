@@ -167,4 +167,34 @@ public class ExtractPhaseTests
         // Assert
         new { endpoints.Seams, endpoints.UnverifiedReasons }.Should().BeEquivalentTo(new { Seams = Array.Empty<ProductionSeam>(), UnverifiedReasons = Array.Empty<string>() });
     }
+
+    [Fact]
+    public async Task Extract_StartupFileWithKebabCaseConvention_AppliesToControllersInItsProject()
+    {
+        // Arrange
+        var blobs = new FakeBlobReader(new Dictionary<string, string> { ["sha-books"] = "b", ["sha-orders"] = "o", ["sha-program"] = "KEBAB" });
+        var extractor = Extractor();
+        var inventory = Inventory(startup: [ProgramFile]);
+
+        // Act
+        await new ExtractPhase(blobs, extractor).ExtractAsync(Run, inventory, CancellationToken.None);
+
+        // Assert
+        extractor.KebabCaseByPath.Should().BeEquivalentTo(new Dictionary<string, bool> { [Books] = true, [Orders] = true });
+    }
+
+    [Fact]
+    public async Task Extract_StartupFileWithKebabCaseConvention_DoesNotApplyToOtherProjects()
+    {
+        // Arrange
+        var blobs = new FakeBlobReader(new Dictionary<string, string> { ["sha-books"] = "b", ["sha-orders"] = "o", ["sha-program"] = "KEBAB" });
+        var extractor = Extractor();
+        var inventory = Inventory(startup: [new RepoFile("src/Web/Program.cs", "sha-program", 10)]);
+
+        // Act
+        await new ExtractPhase(blobs, extractor).ExtractAsync(Run, inventory, CancellationToken.None);
+
+        // Assert
+        extractor.KebabCaseByPath.Should().BeEquivalentTo(new Dictionary<string, bool> { [Books] = false, [Orders] = false });
+    }
 }
