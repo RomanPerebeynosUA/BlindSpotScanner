@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
-import { Observable, of, Subject, throwError } from 'rxjs';
+import { NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { RunsApi } from '../../core/api/runs-api';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { RemediationApi } from '../../core/api/remediation-api';
@@ -11,6 +11,7 @@ import { sampleReport } from '../../../testing/sample-report';
 import { Report } from './report';
 import { ReportStore } from './report-store';
 import { provideTestAuth } from '../../../testing/auth';
+import { Role } from '../../core/auth/auth';
 
 const PREVIOUS = '11111111-1111-4111-8111-111111111111';
 
@@ -29,21 +30,24 @@ const defaultHistory = [
 describe('Report', () => {
   let navigate: ReturnType<typeof vi.fn>;
   let get: ReturnType<typeof vi.fn>;
+  let startScan: ReturnType<typeof vi.fn>;
 
   async function render(
     body: Observable<RunBody>,
     history: RunHistoryItem[] = defaultHistory,
     getFor?: (runId: string) => Observable<RunBody>,
     actions: RemediationAction[] | Observable<RemediationAction[]> = [],
+    scan: { role?: Role | null; reply?: () => Observable<{ runId: string }> } = {},
   ) {
     get = vi.fn((runId: string) => getFor?.(runId) ?? body);
+    startScan = vi.fn(scan.reply ?? (() => of({ runId: 'run2' })));
     TestBed.configureTestingModule({
       imports: [Report],
       providers: [
         provideRouter([]),
         { provide: RunsApi, useValue: { get, repository: () => of({ id: 'repo1' }) } },
-        { provide: RepositoriesApi, useValue: { runs: () => of(history) } },
-        provideTestAuth(),
+        { provide: RepositoriesApi, useValue: { runs: () => of(history), startScan } },
+        provideTestAuth(scan.role === undefined ? 'Admin' : scan.role),
         { provide: RemediationApi, useValue: { actions: () => (Array.isArray(actions) ? of(actions) : actions), features: () => of({ pullRequests: true, jira: true }) } },
       ],
     });
@@ -408,5 +412,62 @@ describe('Report', () => {
     // Assert
     const links = [...el.querySelectorAll('a.export')].map((a) => a.getAttribute('href'));
     expect(links).toEqual(['/api/runs/run1/export?format=json', '/api/runs/run1/export?format=html']);
+  });
+
+  it('scans the report branch again', async () => {
+    // Arrange
+    const { el, settle } = await render(withReport((r) => (r.meta.branch = 'release/1.2')));
+
+    // Act
+    (el.querySelector('button.scan-again') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect(startScan).toHaveBeenCalledWith('repo1', 'release/1.2');
+  });
+
+  it('opens the live progress of the new scan', async () => {
+    // Arrange
+    const { el, settle } = await render(withReport());
+
+    // Act
+    (el.querySelector('button.scan-again') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect(navigate).toHaveBeenCalledWith(['/runs', 'run2', 'live']);
+  });
+
+  it('disables Scan again while the scan is starting', async () => {
+    // Arrange
+    const { el, settle } = await render(withReport(), defaultHistory, undefined, [], { reply: () => NEVER });
+
+    // Act
+    (el.querySelector('button.scan-again') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    const button = el.querySelector('button.scan-again') as HTMLButtonElement;
+    expect([button.disabled, button.textContent?.trim()]).toEqual([true, 'Starting…']);
+  });
+
+  it('enables Scan again after a refused start', async () => {
+    // Arrange
+    const { el, settle } = await render(withReport(), defaultHistory, undefined, [], { reply: () => throwError(() => new Error('refused')) });
+
+    // Act
+    (el.querySelector('button.scan-again') as HTMLButtonElement).click();
+    await settle();
+
+    // Assert
+    expect((el.querySelector('button.scan-again') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('hides Scan again from viewers', async () => {
+    // Act
+    const { el } = await render(withReport(), defaultHistory, undefined, [], { role: 'Viewer' });
+
+    // Assert
+    expect(el.querySelector('button.scan-again')).toBeNull();
   });
 });
