@@ -185,4 +185,43 @@ public class RepositoryServiceTests
             NotIntegrationGlobs = new[] { "**/*Fixture.cs" },
         });
     }
+
+    [Fact]
+    public async Task DeleteAsync_RegisteredRepository_RemovesIt()
+    {
+        // Arrange
+        var repository = Existing();
+        _store.Repositories.Add(repository);
+
+        // Act
+        var status = await Service.DeleteAsync(repository.Id, CancellationToken.None);
+
+        // Assert
+        new { status, _store.Repositories }.Should().BeEquivalentTo(new { status = DeleteRepositoryStatus.Deleted, Repositories = Array.Empty<Repository>() });
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UnknownRepository_ReturnsNotFound()
+    {
+        // Act
+        var status = await Service.DeleteAsync(Guid.NewGuid(), CancellationToken.None);
+
+        // Assert
+        status.Should().Be(DeleteRepositoryStatus.NotFound);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ScanQueuedOrRunning_KeepsRepository()
+    {
+        // Arrange
+        var repository = Existing();
+        _store.Repositories.Add(repository);
+        _store.ActiveRepositoryIds.Add(repository.Id);
+
+        // Act
+        var status = await Service.DeleteAsync(repository.Id, CancellationToken.None);
+
+        // Assert
+        new { status, _store.Repositories }.Should().BeEquivalentTo(new { status = DeleteRepositoryStatus.ScanActive, Repositories = new[] { repository } });
+    }
 }

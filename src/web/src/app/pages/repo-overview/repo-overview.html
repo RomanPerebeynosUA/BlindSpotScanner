@@ -10,9 +10,14 @@
       <a [routerLink]="['/repos', id(), 'profile']">Profile</a>
     </nav>
   </div>
-  @if (auth.can('Member')) {
-    <button type="button" class="btn primary" [disabled]="starting() || consenting() || !repository()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
-  }
+  <div class="row">
+    @if (auth.can('Admin')) {
+      <button type="button" class="btn delete-repo" [disabled]="deleting() || !repository()" (click)="remove()">{{ deleting() ? 'Deleting…' : 'Delete repository' }}</button>
+    }
+    @if (auth.can('Member')) {
+      <button type="button" class="btn primary" [disabled]="starting() || consenting() || !repository()" (click)="scanNow()">{{ starting() ? 'Starting…' : 'Scan now' }}</button>
+    }
+  </div>
 </div>
 
 @if (scoreTrend().length >= 2) {

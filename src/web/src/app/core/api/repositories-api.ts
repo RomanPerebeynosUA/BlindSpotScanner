@@ -24,6 +24,11 @@ export class RepositoriesApi {
     return this.http.get<RunHistoryItem[]>(`/api/repositories/${id}/runs`);
   }
 
+  /** Admin only; 409 while a scan is queued or running. */
+  remove(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/repositories/${id}`);
+  }
+
   /** Doc 10: accept that code excerpts go to the LLM; needed once before the first scan. */
   acknowledgeLlmSharing(id: string): Observable<void> {
     return this.http.post<void>(`/api/repositories/${id}/llm-sharing`, null);

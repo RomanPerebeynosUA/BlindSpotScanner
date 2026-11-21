@@ -88,6 +88,18 @@ public sealed class EfRepositoryStore(BlindSpotScannerDbContext db) : IRepositor
             .ToList();
     }
 
+    public Task<bool> HasActiveRunAsync(Guid id, CancellationToken ct) =>
+        db.ScanRuns.AnyAsync(r => r.RepositoryId == id && (r.Status == RunStatus.Queued || r.Status == RunStatus.Running), ct);
+
+    public async Task DeleteAsync(Guid id, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        // Actions restrict their finding's deletion (doc 03), so they go first; runs, steps, findings and profiles cascade from the repository.
+        await db.RemediationActions.Where(a => a.RepositoryId == id).ExecuteDeleteAsync(ct);
+        await db.Repositories.Where(r => r.Id == id).ExecuteDeleteAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
     public async Task<IReadOnlyList<ScanRun>> RunsAsync(Guid repositoryId, CancellationToken ct) =>
         await db.ScanRuns.AsNoTracking()
             .Where(r => r.RepositoryId == repositoryId)

@@ -55,6 +55,17 @@ public sealed class RepositoriesController(RepositoryService repositories, Appli
     public async Task<IActionResult> Get(Guid id, CancellationToken ct) =>
         await repositories.GetAsync(id, ct) is { } repository ? Ok(RepositoryResponse.From(repository)) : NotFound();
 
+    /// <summary>Removes the repository with its scans and recorded actions; refused while a scan is queued or running.</summary>
+    [Authorize(Policy = Roles.Admin)]
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct) =>
+        await repositories.DeleteAsync(id, ct) switch
+        {
+            DeleteRepositoryStatus.Deleted => NoContent(),
+            DeleteRepositoryStatus.ScanActive => Problem("Cancel or wait for the running scan first.", statusCode: StatusCodes.Status409Conflict, title: "A scan is in progress"),
+            _ => NotFound(),
+        };
+
     [HttpGet("{id:guid}/runs")]
     public async Task<IActionResult> Runs(Guid id, CancellationToken ct) =>
         await repositories.RunsAsync(id, ct) is { } runs ? Ok(runs.Select(RunHistoryItemResponse.From)) : NotFound();

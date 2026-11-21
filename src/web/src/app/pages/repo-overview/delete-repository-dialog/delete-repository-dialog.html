@@ -1,0 +1,12 @@
+<div class="dialog">
+  <h2 id="delete-title">Delete {{ data.fullName }}?</h2>
+  <p>
+    This removes the repository, its profile and every scan with its report, and the record of the Jira tickets and pull requests created from it.
+    It cannot be undone.
+  </p>
+  <p class="muted">Jira tickets and pull requests that already exist stay where they are; nothing is closed or deleted in Jira or GitHub.</p>
+  <div class="row actions">
+    <button type="button" class="btn cancel" (click)="cancel()">Cancel</button>
+    <button type="button" class="btn danger" (click)="confirm()">Delete repository</button>
+  </div>
+</div>

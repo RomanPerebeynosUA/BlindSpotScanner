@@ -457,6 +457,10 @@ public class FixPullRequestsTests
         public Task<Repository?> FindByRunAsync(Guid runId, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<ScanRun>> RunsAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<bool> HasActiveRunAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task DeleteAsync(Guid repositoryId, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private RemediationAction Action(ActionType type, string key, string url) => new()

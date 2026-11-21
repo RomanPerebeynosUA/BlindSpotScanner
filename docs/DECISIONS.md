@@ -410,3 +410,19 @@ folder are written in kebab-case (`([a-z])([A-Z])` → `$1-$2`, lower-cased, as 
 slugify does). Literal segments are kept as written, as ASP.NET does. Other transformers are not
 interpreted. Runs before D35 used the untransformed routes; endpoint keys are lower-cased, so only
 multi-word names (`myaccount` vs `my-account`) show as removed and added in a comparison across D35.
+
+## D36 — Admins can delete a repository (2026-11-21)
+
+The blueprint has no delete. `DELETE /api/repositories/{id}` (Admin only) removes the repository with
+its profiles, runs, steps, findings and recorded Jira/PR actions in one transaction (actions go
+first: they restrict their finding's deletion, doc 03). Principle 7 holds: no report is ever
+edited; a deleted repository takes its whole history with it, and the DB trigger still blocks
+updates of succeeded runs.
+
+- Refused with 409 while a scan is queued or running; the user cancels or waits.
+- What was created in Jira or GitHub is left alone (nothing is closed or deleted there); the
+  confirmation dialog says so.
+- Deleting single scans is not built: a lone missing run would break "previous scan" deltas and
+  the trend. Revisit with a real need.
+- A scan queued in the instant between the check and the delete can still fail its worker; that
+  window is accepted rather than locked (no speculative complexity).
