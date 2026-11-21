@@ -30,6 +30,18 @@ internal sealed class FakeRepositoryStore : IRepositoryStore
         return Task.FromResult(true);
     }
 
+    /// <summary>Repositories with a queued or running scan.</summary>
+    public HashSet<Guid> ActiveRepositoryIds { get; } = [];
+
+    public Task<bool> HasActiveRunAsync(Guid id, CancellationToken ct) => Task.FromResult(ActiveRepositoryIds.Contains(id));
+
+    public Task DeleteAsync(Guid id, CancellationToken ct)
+    {
+        Repositories.RemoveAll(r => r.Id == id);
+        Profiles.RemoveAll(p => p.RepositoryId == id);
+        return Task.CompletedTask;
+    }
+
     public Task<Repository?> FindByRunAsync(Guid runId, CancellationToken ct) => throw new NotSupportedException();
 
     public Task<IReadOnlyList<RepositorySummary>> ListAsync(CancellationToken ct) => throw new NotSupportedException();

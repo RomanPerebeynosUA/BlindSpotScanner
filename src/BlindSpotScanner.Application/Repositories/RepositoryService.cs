@@ -15,6 +15,15 @@ public enum AddRepositoryStatus
     GitHubUnavailable,
 }
 
+public enum DeleteRepositoryStatus
+{
+    Deleted,
+    NotFound,
+
+    /// <summary>A scan is queued or running; deleting under it would fail the worker.</summary>
+    ScanActive,
+}
+
 /// <param name="Repository">The new repository, or the registered one for <see cref="AddRepositoryStatus.AlreadyRegistered"/>.</param>
 public sealed record AddRepositoryResult(AddRepositoryStatus Status, Repository? Repository = null, string? Error = null);
 
@@ -33,6 +42,12 @@ public interface IRepositoryStore
 
     /// <summary>The repository a run belongs to; null when the run doesn't exist.</summary>
     Task<Repository?> FindByRunAsync(Guid runId, CancellationToken ct);
+
+    /// <summary>Whether a run of the repository is queued or running.</summary>
+    Task<bool> HasActiveRunAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Removes the repository with its profiles, runs, findings and recorded Jira/PR actions (what was created in Jira or GitHub stays).</summary>
+    Task DeleteAsync(Guid id, CancellationToken ct);
 
     /// <summary>The repository's runs, newest first (by generation, else queue time).</summary>
     Task<IReadOnlyList<ScanRun>> RunsAsync(Guid repositoryId, CancellationToken ct);
@@ -69,6 +84,22 @@ public sealed class RepositoryService(IRepositoryStore store, IGitHubClient gith
     /// <summary>Null when the repository doesn't exist.</summary>
     public async Task<IReadOnlyList<ScanRun>?> RunsAsync(Guid id, CancellationToken ct) =>
         await store.FindAsync(id, ct) is null ? null : await store.RunsAsync(id, ct);
+
+    public async Task<DeleteRepositoryStatus> DeleteAsync(Guid id, CancellationToken ct)
+    {
+        if (await store.FindAsync(id, ct) is null)
+        {
+            return DeleteRepositoryStatus.NotFound;
+        }
+
+        if (await store.HasActiveRunAsync(id, ct))
+        {
+            return DeleteRepositoryStatus.ScanActive;
+        }
+
+        await store.DeleteAsync(id, ct);
+        return DeleteRepositoryStatus.Deleted;
+    }
 
     public async Task<AddRepositoryResult> AddAsync(string url, string? defaultBranch, CancellationToken ct)
     {

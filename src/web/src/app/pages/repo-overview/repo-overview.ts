@@ -2,8 +2,9 @@ import { Component, computed, inject, input, OnInit, signal } from '@angular/cor
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { filter, switchMap } from 'rxjs';
+import { filter, switchMap, tap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth';
+import { DeleteRepositoryDialog } from './delete-repository-dialog/delete-repository-dialog';
 import { LlmSharingDialog } from './llm-sharing-dialog/llm-sharing-dialog';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { Repository, RunHistoryItem } from '../../core/api/api-types';
@@ -30,6 +31,7 @@ export class RepoOverview implements OnInit {
   protected readonly repository = signal<Repository | null>(null);
   protected readonly runs = signal<RunHistoryItem[] | null>(null);
   protected readonly starting = signal(false);
+  protected readonly deleting = signal(false);
   /** The consent dialog or its acknowledgement is in progress, so Scan now waits. */
   protected readonly consenting = signal(false);
 
@@ -76,6 +78,32 @@ export class RepoOverview implements OnInit {
     }
 
     this.start();
+  }
+
+  /** Admin only: confirms, removes the repository with its scans and returns to the list. */
+  protected remove(): void {
+    const repository = this.repository();
+    if (this.deleting() || !repository) {
+      return;
+    }
+
+    this.dialog
+      .open<DeleteRepositoryDialog, { fullName: string }, boolean>(DeleteRepositoryDialog, {
+        data: { fullName: repository.fullName },
+        maxWidth: 'calc(100vw - 32px)',
+        ariaLabelledBy: 'delete-title',
+      })
+      .afterClosed()
+      .pipe(
+        filter((confirmed) => confirmed === true),
+        tap(() => this.deleting.set(true)),
+        switchMap(() => this.api.remove(this.id())),
+      )
+      .subscribe({
+        next: () => void this.router.navigate(['/']),
+        // The interceptor says why it was refused (for example a scan in progress).
+        error: () => this.deleting.set(false),
+      });
   }
 
   private start(): void {

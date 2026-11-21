@@ -5,6 +5,7 @@ using BlindSpotScanner.Infrastructure.Repositories;
 using BlindSpotScanner.Infrastructure.Scanning;
 using BlindSpotScanner.Infrastructure.Tests.Persistence;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 
 namespace BlindSpotScanner.Infrastructure.Tests.Repositories;
 
@@ -261,5 +262,115 @@ public class EfRepositoryStoreTests(PostgresFixture db)
 
         // Assert
         runs.Select(r => r.Id).Should().Equal(high, low);
+    }
+
+    /// <summary>A succeeded run with a step, a finding and a Jira action pointing at that finding.</summary>
+    private async Task<(Guid RunId, Guid FindingId, Guid ActionId)> AddRunWithChildrenAsync(Guid repositoryId)
+    {
+        var run = await db.AddRunWithReportAsync("sample-report.json", succeed: true, repositoryId);
+        var finding = new Finding
+        {
+            Id = Guid.NewGuid(),
+            ScanRunId = run.Id,
+            ReportFindingId = "f1",
+            Kind = FindingKind.UncoveredSeam,
+            Severity = Severity.High,
+            StableKey = "uncovered-seam:payment-gateway",
+            Headline = "Never called for real",
+            Detail = [],
+            Evidence = [],
+        };
+        var step = new ScanStep { Id = Guid.NewGuid(), ScanRunId = run.Id, Phase = "P1", Status = RunStatus.Succeeded, StartedAt = DateTimeOffset.UtcNow };
+        var action = new RemediationAction
+        {
+            Id = Guid.NewGuid(),
+            RepositoryId = repositoryId,
+            StableKey = finding.StableKey,
+            CreatedFromFindingId = finding.Id,
+            Type = ActionType.JiraTicket,
+            ExternalKey = "BSS-1",
+            Url = "https://example.atlassian.net/browse/BSS-1",
+            Status = "Open",
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = "dev@example.com",
+        };
+        await using var context = db.CreateContext();
+        context.Findings.Add(finding);
+        context.ScanSteps.Add(step);
+        context.RemediationActions.Add(action);
+        await context.SaveChangesAsync();
+        return (run.Id, finding.Id, action.Id);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RepositoryWithRunsFindingsAndActions_RemovesAllOfIt()
+    {
+        // Arrange
+        var repository = await AddAsync(UniqueName());
+        var (runId, findingId, actionId) = await AddRunWithChildrenAsync(repository.Id);
+        await using var context = db.CreateContext();
+
+        // Act
+        await new EfRepositoryStore(context).DeleteAsync(repository.Id, CancellationToken.None);
+
+        // Assert
+        await using var read = db.CreateContext();
+        new
+        {
+            Repositories = await read.Repositories.CountAsync(r => r.Id == repository.Id),
+            Profiles = await read.RepoProfiles.CountAsync(p => p.RepositoryId == repository.Id),
+            Runs = await read.ScanRuns.CountAsync(r => r.Id == runId),
+            Steps = await read.ScanSteps.CountAsync(s => s.ScanRunId == runId),
+            Findings = await read.Findings.CountAsync(f => f.Id == findingId),
+            Actions = await read.RemediationActions.CountAsync(a => a.Id == actionId),
+        }.Should().BeEquivalentTo(new { Repositories = 0, Profiles = 0, Runs = 0, Steps = 0, Findings = 0, Actions = 0 });
+    }
+
+    [Fact]
+    public async Task DeleteAsync_OneRepository_KeepsAnotherRepositorysRuns()
+    {
+        // Arrange
+        var deleted = await AddAsync(UniqueName());
+        var kept = await AddAsync(UniqueName());
+        var (keptRunId, _, keptActionId) = await AddRunWithChildrenAsync(kept.Id);
+        await using var context = db.CreateContext();
+
+        // Act
+        await new EfRepositoryStore(context).DeleteAsync(deleted.Id, CancellationToken.None);
+
+        // Assert
+        await using var read = db.CreateContext();
+        new { Run = await read.ScanRuns.CountAsync(r => r.Id == keptRunId), Action = await read.RemediationActions.CountAsync(a => a.Id == keptActionId) }
+            .Should().BeEquivalentTo(new { Run = 1, Action = 1 });
+    }
+
+    [Fact]
+    public async Task HasActiveRunAsync_QueuedRun_ReturnsTrue()
+    {
+        // Arrange
+        var repository = await AddAsync(UniqueName());
+        await EnqueueAsync(repository.Id, DateTimeOffset.UtcNow);
+        await using var context = db.CreateContext();
+
+        // Act
+        var active = await new EfRepositoryStore(context).HasActiveRunAsync(repository.Id, CancellationToken.None);
+
+        // Assert
+        active.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HasActiveRunAsync_OnlySucceededRuns_ReturnsFalse()
+    {
+        // Arrange
+        var repository = await AddAsync(UniqueName());
+        await db.AddRunWithReportAsync("sample-report.json", succeed: true, repository.Id);
+        await using var context = db.CreateContext();
+
+        // Act
+        var active = await new EfRepositoryStore(context).HasActiveRunAsync(repository.Id, CancellationToken.None);
+
+        // Assert
+        active.Should().BeFalse();
     }
 }

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { NEVER, of, Observable } from 'rxjs';
+import { NEVER, of, throwError, Observable } from 'rxjs';
 import { RepositoriesApi } from '../../core/api/repositories-api';
 import { RunHistoryItem } from '../../core/api/api-types';
 import { RepoOverview } from './repo-overview';
@@ -30,12 +30,14 @@ const repository = { id: 'r1', owner: 'example-org', name: 'bookstore', fullName
 
 const dialogOpen = vi.fn();
 const acknowledgeLlmSharing = vi.fn(() => of(undefined));
+const remove = vi.fn((): Observable<void> => of(undefined));
 
 async function render(
   runs: RunHistoryItem[],
   startScan: () => Observable<{ runId: string }> = () => of({ runId: 'new' }),
-  options: { role?: 'Viewer' | 'Member'; acknowledged?: boolean; consent?: boolean | 'pending'; loadRepository?: boolean } = {},
+  options: { role?: 'Viewer' | 'Member' | 'Admin'; acknowledged?: boolean; consent?: boolean | 'pending'; loadRepository?: boolean } = {},
 ) {
+  remove.mockClear();
   dialogOpen.mockReset().mockReturnValue({ afterClosed: () => (options.consent === 'pending' ? NEVER : of(options.consent ?? false)) });
   const repo = { ...repository, llmSharingAcknowledged: options.acknowledged ?? true };
   TestBed.configureTestingModule({
@@ -44,7 +46,7 @@ async function render(
       provideRouter([]),
       provideTestAuth(options.role ?? 'Member'),
       { provide: MatDialog, useValue: { open: dialogOpen } },
-      { provide: RepositoriesApi, useValue: { get: () => (options.loadRepository === false ? NEVER : of(repo)), runs: () => of(runs), startScan, acknowledgeLlmSharing } },
+      { provide: RepositoriesApi, useValue: { get: () => (options.loadRepository === false ? NEVER : of(repo)), runs: () => of(runs), startScan, acknowledgeLlmSharing, remove } },
     ],
   });
   vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
@@ -54,6 +56,8 @@ async function render(
   fixture.detectChanges();
   return { fixture, el: fixture.nativeElement as HTMLElement };
 }
+
+const deleteButton = (el: HTMLElement) => el.querySelector('button.delete-repo') as HTMLButtonElement | null;
 
 const rows = (el: HTMLElement) => [...el.querySelectorAll('tbody tr')] as HTMLElement[];
 
@@ -217,5 +221,51 @@ describe('RepoOverview', () => {
     // Assert
     const scan = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Scan now')) as HTMLButtonElement;
     expect(scan.disabled).toBe(true);
+  });
+
+  it('hides Delete repository from members', async () => {
+    // Act
+    const { el } = await render([run()], undefined, { role: 'Member' });
+
+    // Assert
+    expect(deleteButton(el)).toBeNull();
+  });
+
+  it('deletes the repository once confirmed and returns to the list', async () => {
+    // Arrange
+    const { fixture, el } = await render([run()], undefined, { role: 'Admin', consent: true });
+
+    // Act
+    deleteButton(el)!.click();
+    await fixture.whenStable();
+
+    // Assert
+    expect({ removed: remove.mock.calls, to: vi.mocked(TestBed.inject(Router).navigate).mock.calls.at(-1) }).toEqual({ removed: [['r1']], to: [['/']] });
+  });
+
+  it('keeps the repository when the confirmation is declined', async () => {
+    // Arrange
+    const { fixture, el } = await render([run()], undefined, { role: 'Admin', consent: false });
+
+    // Act
+    deleteButton(el)!.click();
+    await fixture.whenStable();
+
+    // Assert
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('stays on the page and re-enables Delete when the server refuses', async () => {
+    // Arrange
+    const { fixture, el } = await render([run()], undefined, { role: 'Admin', consent: true });
+    remove.mockReturnValueOnce(throwError(() => new Error('refused')));
+
+    // Act
+    deleteButton(el)!.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Assert
+    expect({ disabled: deleteButton(el)!.disabled, navigated: vi.mocked(TestBed.inject(Router).navigate).mock.calls.length }).toEqual({ disabled: false, navigated: 0 });
   });
 });

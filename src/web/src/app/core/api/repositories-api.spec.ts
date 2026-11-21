@@ -26,6 +26,15 @@ describe('RepositoriesApi', () => {
     expect(request.request.body).toEqual({ url: 'https://github.com/a/b', defaultBranch: 'dev' });
   });
 
+  it('remove sends DELETE to the repository', () => {
+    // Act
+    api.remove('r1').subscribe();
+
+    // Assert
+    const request = http.expectOne('/api/repositories/r1');
+    expect(request.request.method).toBe('DELETE');
+  });
+
   it('saveProfile puts baseVersion with the fields', () => {
     // Arrange
     const input = { markdown: '# P', integrationMappedTo: 'real-seam', testGlobs: ['t'] } as ProfileInput;

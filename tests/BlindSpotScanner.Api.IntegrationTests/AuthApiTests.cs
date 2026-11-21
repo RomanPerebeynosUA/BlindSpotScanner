@@ -78,6 +78,64 @@ public class AuthApiTests(QueueOnlyApiFactory factory) : IClassFixture<QueueOnly
     }
 
     [Fact]
+    public async Task DeleteRepository_Member_Returns403()
+    {
+        // Arrange
+        var repositoryId = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient(Roles.Member);
+
+        // Act
+        using var response = await client.DeleteAsync($"/api/repositories/{repositoryId}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task DeleteRepository_Admin_Returns204AndRepositoryIsGone()
+    {
+        // Arrange
+        var repositoryId = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient(Roles.Admin);
+
+        // Act
+        using var response = await client.DeleteAsync($"/api/repositories/{repositoryId}");
+
+        // Assert
+        using var after = await client.GetAsync($"/api/repositories/{repositoryId}");
+        new { Delete = response.StatusCode, After = after.StatusCode }.Should().Be(new { Delete = HttpStatusCode.NoContent, After = HttpStatusCode.NotFound });
+    }
+
+    [Fact]
+    public async Task DeleteRepository_Unknown_Returns404()
+    {
+        // Arrange
+        using var client = factory.CreateClient(Roles.Admin);
+
+        // Act
+        using var response = await client.DeleteAsync($"/api/repositories/{Guid.NewGuid()}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task DeleteRepository_ScanQueued_Returns409AndKeepsRepository()
+    {
+        // Arrange
+        var repositoryId = await factory.SeedRepositoryAsync();
+        using var client = factory.CreateClient(Roles.Admin);
+        (await client.PostAsync($"/api/repositories/{repositoryId}/scans", null)).EnsureSuccessStatusCode();
+
+        // Act
+        using var response = await client.DeleteAsync($"/api/repositories/{repositoryId}");
+
+        // Assert
+        using var after = await client.GetAsync($"/api/repositories/{repositoryId}");
+        new { Delete = response.StatusCode, After = after.StatusCode }.Should().Be(new { Delete = HttpStatusCode.Conflict, After = HttpStatusCode.OK });
+    }
+
+    [Fact]
     public async Task StartScan_CrossSiteBrowserRequest_Returns403()
     {
         // Arrange (a form on another site can POST without a body; browsers label it Sec-Fetch-Site)
